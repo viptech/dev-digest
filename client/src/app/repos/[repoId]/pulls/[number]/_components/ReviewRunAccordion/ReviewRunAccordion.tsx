@@ -7,7 +7,7 @@
 
 import React from "react";
 import { Icon, Badge } from "@devdigest/ui";
-import type { ReviewRecord, Verdict } from "@devdigest/shared";
+import type { ReviewRecord, RunSummary, Verdict } from "@devdigest/shared";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
@@ -31,6 +31,7 @@ export function ReviewRunAccordion({
   headSha,
   targetRunId = null,
   targetNonce = 0,
+  prRuns,
 }: {
   review: ReviewRecord;
   prId: string;
@@ -41,6 +42,9 @@ export function ReviewRunAccordion({
    *  (driven from the Timeline: clicking an agent name navigates here). */
   targetRunId?: string | null;
   targetNonce?: number;
+  /** The PR's run history (timeline) — matched by run_id to surface this run's
+   *  cost/tokens on the VerdictBanner. Absent → no match → no cost line. */
+  prRuns?: RunSummary[];
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
@@ -55,6 +59,8 @@ export function ReviewRunAccordion({
   const findings = review.findings;
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
   const verdictColor = review.verdict ? VERDICT_COLOR[review.verdict] ?? "var(--text-muted)" : "var(--text-muted)";
+  // No match (run predates the timeline, or prRuns wasn't passed) → no cost line.
+  const runSummary = review.run_id ? prRuns?.find((r) => r.run_id === review.run_id) : undefined;
 
   return (
     <div
@@ -144,6 +150,11 @@ export function ReviewRunAccordion({
                 findingsCount={findings.length}
                 blockers={blockers}
                 agentName={review.agent_name}
+                cost={
+                  runSummary
+                    ? { costUsd: runSummary.cost_usd, tokensIn: runSummary.tokens_in, tokensOut: runSummary.tokens_out }
+                    : undefined
+                }
               />
             </div>
           )}

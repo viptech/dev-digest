@@ -155,6 +155,9 @@ describe('AI contracts parse fixtures', () => {
   });
 
   it('RunTrace (data2.jsx TRACE single-document)', () => {
+    // stats.cost_usd is deliberately OMITTED here: this fixture stands in for a
+    // trace persisted before cost_usd existed. RunStats.cost_usd is nullish
+    // (not nullable) precisely so old jsonb documents like this still parse.
     const trace = RunTrace.parse({
       config: { agent: 'Security Reviewer', version: 'v7', model: 'gpt-4.1', pr: 482, source: 'local' },
       stats: { duration_ms: 8200, tokens_in: 14820, tokens_out: 1240, findings: 3, grounding: '3/3 passed' },
@@ -166,6 +169,7 @@ describe('AI contracts parse fixtures', () => {
       log: [{ t: '00.00', kind: 'info', msg: 'started' }],
     });
     expect(trace.tool_calls).toHaveLength(1);
+    expect(trace.stats.cost_usd).toBeUndefined();
   });
 });
 
