@@ -16,6 +16,13 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [typescript-expert](typescript-expert/SKILL.md) | Full-stack | Type-level programming, performance, tooling, migrations |
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
+| [engineering-insights](engineering-insights/SKILL.md) | Workflow † | Capture session findings into each module's `INSIGHTS.md`, with `file:line` evidence |
+
+† **Locally authored.** Every other skill in this catalog is vendored from GitHub
+and tracked in [`skills-lock.json`](../../skills-lock.json) with a source and a
+content hash. `engineering-insights` has no upstream, so it is deliberately absent
+from that lockfile — adding it with a synthetic source would break the integrity
+check. It is also the only *workflow* skill here; the rest supply domain knowledge.
 
 ## What Are Skills?
 
