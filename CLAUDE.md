@@ -1,10 +1,3 @@
-# CLAUDE.md
-
-Map, not documentation — this loads into **every** session, so every line has
-to earn its tokens. Depth lives in the linked docs below; read them when the
-condition matches your task, not preemptively. Anything you can get by reading
-the code is deliberately left out.
-
 ## Session protocol
 
 Before touching a module, read its `INSIGHTS.md` (+ root `INSIGHTS.md`) —
@@ -59,13 +52,41 @@ route boundary. Contracts live in `server/src/vendor/shared/contracts/`.
 
 ## Commands
 
+### Boot from zero
+
 ```sh
-./scripts/dev.sh          # boot from zero — flags/troubleshooting in README.md
+./scripts/dev.sh          # Postgres + .env files + deps + migrate + seed + API + web
 ```
 
-**Migrations do not run on boot** — `relation ... does not exist` means you
-skipped `pnpm db:migrate`. Per-package dev/build/test commands live in each
-README; the full unit/integration split is in `TESTING.md`.
+Flags: `--no-seed` · `--no-client` · `--db-only` · `--help`.
+
+Manual equivalent:
+
+```sh
+docker compose up -d                                   # Postgres + pgvector
+cd server && pnpm install && pnpm db:migrate && pnpm dev
+cd client && pnpm install && pnpm dev
+```
+
+**Migrations are not applied on boot.** `relation ... does not exist` on first
+run means you skipped `pnpm db:migrate`.
+
+### Per package
+
+```sh
+# server (pnpm)
+pnpm dev · pnpm build · pnpm typecheck · pnpm test
+pnpm db:migrate · pnpm db:seed · pnpm db:generate
+
+# client (pnpm)
+pnpm dev · pnpm build · pnpm typecheck · pnpm test
+
+# reviewer-core (npm) — build IS the typecheck
+npm test · npm run typecheck
+```
+
+The full unit/integration test split (per-package suites, CI path filters) is
+in `TESTING.md`.
 
 ## Do not touch
 
