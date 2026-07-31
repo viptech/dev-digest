@@ -218,7 +218,17 @@ export function RunHistory({
                         {SEVERITY_DISPLAY_ORDER.filter((sev) => (counts[sev] ?? 0) > 0).map((sev) => {
                           const SevIcon = Icon[SEV[sev].icon];
                           return (
-                            <span key={sev} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: SEV[sev].c }}>
+                            <span
+                              key={sev}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                                color: SEV[sev].c,
+                                borderBottom: `1px dotted ${SEV[sev].c}`,
+                                paddingBottom: 2,
+                              }}
+                            >
                               <SevIcon size={12} />
                               {counts[sev]}
                             </span>
