@@ -4,6 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, SEV, type Severity, type IconName } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/run-cost-badge";
+import { FindingsTooltip } from "@/components/findings-tooltip";
 import { severityCounts } from "@/lib/findings";
 import type { RunSummary, PrCommit, ReviewRecord } from "@devdigest/shared";
 
@@ -217,21 +218,24 @@ export function RunHistory({
                       <>
                         {SEVERITY_DISPLAY_ORDER.map((sev) => {
                           const SevIcon = Icon[SEV[sev].icon];
+                          const sevFindings = findings.filter((f) => f.severity === sev);
                           return (
-                            <span
-                              key={sev}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 3,
-                                color: SEV[sev].c,
-                                borderBottom: `1px dotted ${SEV[sev].c}`,
-                                paddingBottom: 2,
-                              }}
-                            >
-                              <SevIcon size={12} />
-                              {counts[sev] ?? 0}
-                            </span>
+                            <FindingsTooltip key={sev} findings={sevFindings}>
+                              <span
+                                data-testid={`severity-badge-${sev}`}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 3,
+                                  color: SEV[sev].c,
+                                  borderBottom: `1px dotted ${SEV[sev].c}`,
+                                  paddingBottom: 2,
+                                }}
+                              >
+                                <SevIcon size={12} />
+                                {counts[sev] ?? 0}
+                              </span>
+                            </FindingsTooltip>
                           );
                         })}
                         {(r.blockers ?? 0) > 0 && <span>{t("runStatus.blockers", { count: r.blockers ?? 0 })}</span>}

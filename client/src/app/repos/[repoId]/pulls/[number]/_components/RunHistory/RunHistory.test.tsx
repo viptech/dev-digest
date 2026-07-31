@@ -5,7 +5,7 @@
  * and shows the review score ring.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { RunSummary, ReviewRecord, FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
@@ -156,5 +156,25 @@ describe("RunHistory — outcome badge", () => {
   it("a running run reads 'running'", () => {
     renderRuns([run({ status: "running", score: null, blockers: null })]);
     expect(screen.getByText("running")).toBeInTheDocument();
+  });
+
+  it("shows a tooltip with that severity's findings on hovering its badge", () => {
+    renderRuns(
+      [run({ run_id: "run-1", status: "done", findings_count: 2, blockers: 0, score: 64 })],
+      [
+        review({
+          run_id: "run-1",
+          findings: [
+            finding({ id: "f1", severity: "WARNING", title: "N+1 query in user list endpoint" }),
+            finding({ id: "f2", severity: "SUGGESTION", title: "Extract magic number 3600" }),
+          ],
+        }),
+      ],
+    );
+    const warningBadge = screen.getByTestId("severity-badge-WARNING");
+    expect(screen.queryByText("N+1 query in user list endpoint")).not.toBeInTheDocument();
+    fireEvent.mouseEnter(warningBadge);
+    expect(screen.getByText("N+1 query in user list endpoint")).toBeInTheDocument();
+    expect(screen.queryByText("Extract magic number 3600")).not.toBeInTheDocument(); // different severity
   });
 });
