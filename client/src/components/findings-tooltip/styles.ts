@@ -3,10 +3,7 @@ import type { CSSProperties } from "react";
 export const s = {
   anchor: { position: "relative", display: "inline-flex" } satisfies CSSProperties,
   card: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    marginTop: 6,
+    position: "fixed",
     zIndex: 50,
     minWidth: 260,
     maxWidth: 360,
