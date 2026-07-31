@@ -125,6 +125,24 @@ describe("RunHistory — outcome badge", () => {
     expect(screen.queryByText("3 finding(s)")).not.toBeInTheDocument();
   });
 
+  it("shows all three severity badges, including zero counts, when a matching review has findings", () => {
+    renderRuns(
+      [run({ run_id: "run-1", status: "done", findings_count: 1, blockers: 0, score: 90 })],
+      [review({ run_id: "run-1", findings: [finding({ id: "f1", severity: "CRITICAL" })] })],
+    );
+    expect(screen.getByText("1")).toBeInTheDocument(); // CRITICAL
+    expect(screen.getAllByText("0")).toHaveLength(2); // WARNING + SUGGESTION
+  });
+
+  it("shows all three severity badges as zero for a matching review with no findings", () => {
+    renderRuns(
+      [run({ run_id: "run-1", status: "done", findings_count: 0, blockers: 0, score: 100 })],
+      [review({ run_id: "run-1", findings: [] })],
+    );
+    expect(screen.getAllByText("0")).toHaveLength(3);
+    expect(screen.queryByText("0 finding(s)")).not.toBeInTheDocument();
+  });
+
   it("falls back to the plain findings/blockers text when no matching review is provided", () => {
     renderRuns([run({ run_id: "run-1", status: "done", findings_count: 3, blockers: 1, score: 38 })]);
     expect(screen.getByText(/3 finding\(s\).*1 blockers/)).toBeInTheDocument();

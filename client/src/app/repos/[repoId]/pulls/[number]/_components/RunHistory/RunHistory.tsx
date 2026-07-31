@@ -204,7 +204,7 @@ export function RunHistory({
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)" }}>
                   {(() => {
                     const findings = findingsByRunId.get(r.run_id);
-                    if (!findings || findings.length === 0) {
+                    if (!findings) {
                       return (
                         <span>
                           {t("runStatus.findings", { count: r.findings_count ?? 0 })}
@@ -215,7 +215,7 @@ export function RunHistory({
                     const counts = severityCounts(findings);
                     return (
                       <>
-                        {SEVERITY_DISPLAY_ORDER.filter((sev) => (counts[sev] ?? 0) > 0).map((sev) => {
+                        {SEVERITY_DISPLAY_ORDER.map((sev) => {
                           const SevIcon = Icon[SEV[sev].icon];
                           return (
                             <span
@@ -230,7 +230,7 @@ export function RunHistory({
                               }}
                             >
                               <SevIcon size={12} />
-                              {counts[sev]}
+                              {counts[sev] ?? 0}
                             </span>
                           );
                         })}
