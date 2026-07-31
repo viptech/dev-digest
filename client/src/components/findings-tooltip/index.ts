@@ -1,1 +1,1 @@
-export { FindingsTooltip, type TooltipFinding } from "./FindingsTooltip";
+export { FindingsTooltip, SEVERITY_DISPLAY_ORDER, type TooltipFinding } from "./FindingsTooltip";

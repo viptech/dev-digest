@@ -2,13 +2,11 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Icon, CircularScore, SEV, type Severity, type IconName } from "@devdigest/ui";
+import { Badge, Icon, CircularScore, SEV, type IconName } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/run-cost-badge";
-import { FindingsTooltip } from "@/components/findings-tooltip";
+import { FindingsTooltip, SEVERITY_DISPLAY_ORDER } from "@/components/findings-tooltip";
 import { severityCounts } from "@/lib/findings";
 import type { RunSummary, PrCommit, ReviewRecord } from "@devdigest/shared";
-
-const SEVERITY_DISPLAY_ORDER: Severity[] = ["CRITICAL", "WARNING", "SUGGESTION"];
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first

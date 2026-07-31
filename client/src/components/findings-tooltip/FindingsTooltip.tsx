@@ -12,7 +12,13 @@ export interface TooltipFinding {
   start_line: number;
   end_line: number;
   confidence: number;
+  rationale: string;
 }
+
+// Typed as a literal tuple (not `Severity[]`, which also allows "INFO" via
+// @devdigest/ui's wider Severity) so it stays assignable to the narrower
+// 3-key `FindingsSummary.counts` object PRRow indexes with it.
+export const SEVERITY_DISPLAY_ORDER = ["CRITICAL", "WARNING", "SUGGESTION"] as const satisfies readonly Severity[];
 
 function locationLabel(f: TooltipFinding): string {
   return f.end_line !== f.start_line ? `${f.file}:${f.start_line}-${f.end_line}` : `${f.file}:${f.start_line}`;
@@ -51,6 +57,7 @@ export function FindingsTooltip({
                   </span>
                   <ConfidenceNum value={f.confidence} />
                 </div>
+                <div style={s.itemDescription}>{f.rationale}</div>
               </div>
             );
           })}

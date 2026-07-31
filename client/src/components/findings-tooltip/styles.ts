@@ -38,4 +38,11 @@ export const s = {
   itemTitle: { fontSize: 12.5, fontWeight: 600, color: "var(--text-primary)" } satisfies CSSProperties,
   itemMeta: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
   itemLoc: { fontSize: 11, color: "var(--text-secondary)" } satisfies CSSProperties,
+  itemDescription: {
+    fontSize: 11.5,
+    color: "var(--text-secondary)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  } satisfies CSSProperties,
 };

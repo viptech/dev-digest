@@ -62,6 +62,7 @@ describe("PRRow — findings column", () => {
               start_line: 45,
               end_line: 52,
               confidence: 0.86,
+              rationale: "The loop calls db.posts.findMany once per user.",
             },
             {
               id: "f2",
@@ -72,6 +73,7 @@ describe("PRRow — findings column", () => {
               start_line: 28,
               end_line: 28,
               confidence: 0.62,
+              rationale: "The number 3600 appears twice without explanation.",
             },
           ],
         },

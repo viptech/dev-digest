@@ -165,6 +165,7 @@ export const FindingsSummaryItem = z.object({
   start_line: z.number().int(),
   end_line: z.number().int(),
   confidence: z.number().min(0).max(1),
+  rationale: z.string(),
 });
 export type FindingsSummaryItem = z.infer<typeof FindingsSummaryItem>;
 

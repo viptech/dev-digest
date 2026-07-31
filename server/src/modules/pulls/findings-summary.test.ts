@@ -41,6 +41,7 @@ describe('buildFindingsSummary', () => {
       start_line: 45,
       end_line: 52,
       confidence: 0.86,
+      rationale: 'The loop calls db.posts.findMany once per user.',
     });
   });
 

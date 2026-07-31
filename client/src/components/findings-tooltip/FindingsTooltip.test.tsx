@@ -13,6 +13,7 @@ function finding(overrides: Partial<TooltipFinding> = {}): TooltipFinding {
     start_line: 45,
     end_line: 52,
     confidence: 0.86,
+    rationale: "The loop calls db.posts.findMany once per user.",
     ...overrides,
   };
 }
@@ -41,7 +42,14 @@ describe("FindingsTooltip", () => {
       <FindingsTooltip
         findings={[
           finding({ id: "f1", title: "N+1 query in user list endpoint" }),
-          finding({ id: "f2", title: "Extract magic number 3600", file: "src/middleware/ratelimit.ts", start_line: 28, end_line: 28 }),
+          finding({
+            id: "f2",
+            title: "Extract magic number 3600",
+            file: "src/middleware/ratelimit.ts",
+            start_line: 28,
+            end_line: 28,
+            rationale: "The number 3600 appears twice without explanation.",
+          }),
         ]}
       >
         <span>2</span>
@@ -53,6 +61,7 @@ describe("FindingsTooltip", () => {
     expect(screen.getByText("Extract magic number 3600")).toBeInTheDocument();
     expect(screen.getByText("src/api/users.ts:45-52")).toBeInTheDocument();
     expect(screen.getByText("src/middleware/ratelimit.ts:28")).toBeInTheDocument();
+    expect(screen.getByText("The loop calls db.posts.findMany once per user.")).toBeInTheDocument();
 
     fireEvent.mouseLeave(anchor);
     expect(screen.queryByText("N+1 query in user list endpoint")).not.toBeInTheDocument();
