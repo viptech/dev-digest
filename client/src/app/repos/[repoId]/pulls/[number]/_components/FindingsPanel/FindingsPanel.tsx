@@ -4,13 +4,17 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Toggle, EmptyState } from "@devdigest/ui";
+import { Toggle, Chip, EmptyState, SEV, type Severity } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
-import { KEY_TO_ACTION } from "./constants";
-import { visibleFindings } from "./helpers";
+import { KEY_TO_ACTION, SEVERITY_ORDER } from "./constants";
+import { visibleFindings, severityCounts } from "./helpers";
 import { s } from "./styles";
+
+const SEVERITY_CHIPS: Severity[] = (["CRITICAL", "WARNING", "SUGGESTION"] as const)
+  .slice()
+  .sort((a, b) => SEVERITY_ORDER[a]! - SEVERITY_ORDER[b]!);
 
 export function FindingsPanel({
   findings,
@@ -27,8 +31,22 @@ export function FindingsPanel({
   const action = useFindingAction();
   const [hideLow, setHideLow] = React.useState(false);
   const [focusIdx, setFocusIdx] = React.useState(0);
+  const [activeSeverities, setActiveSeverities] = React.useState<Set<Severity>>(new Set());
 
-  const shown = React.useMemo(() => visibleFindings(findings, hideLow), [findings, hideLow]);
+  const counts = React.useMemo(() => severityCounts(findings), [findings]);
+  const shown = React.useMemo(
+    () => visibleFindings(findings, hideLow, activeSeverities),
+    [findings, hideLow, activeSeverities],
+  );
+
+  const toggleSeverity = (sev: Severity) => {
+    setActiveSeverities((prev) => {
+      const next = new Set(prev);
+      if (next.has(sev)) next.delete(sev);
+      else next.add(sev);
+      return next;
+    });
+  };
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -48,6 +66,20 @@ export function FindingsPanel({
   return (
     <div>
       <div style={s.toolbar}>
+        <div style={s.severityChips}>
+          {SEVERITY_CHIPS.map((sev) => (
+            <Chip
+              key={sev}
+              active={activeSeverities.has(sev)}
+              count={counts[sev] ?? 0}
+              color={SEV[sev].c}
+              icon={SEV[sev].icon}
+              onClick={() => toggleSeverity(sev)}
+            >
+              {sev}
+            </Chip>
+          ))}
+        </div>
         <div style={s.toggleGroup}>
           {t("panel.hideLowConfidence")}
           <Toggle on={hideLow} onChange={setHideLow} size={16} />

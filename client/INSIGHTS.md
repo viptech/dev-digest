@@ -27,3 +27,21 @@
 Доказ: client/src/components/run-cost-badge/RunCostBadge.test.tsx (тест
 "detailed/total shows...") та @testing-library/dom/dist/matches.js:31-40
 (`matches()` нормалізує лише `textToMatch`, не `matcher`)
+
+## 2026-07-31 · gotcha
+**`Chip`'s `color` prop робить видиму зміну лише разом з `icon`**
+`Chip` (client/src/vendor/ui/primitives/Chip.tsx:40) застосовує `color` тільки
+до іконки (`I && <I style={{color}}>`), не до тексту/фону. Передати `color` без
+`icon` — код компілюється, але колір ніде не проявляється. Якщо потрібен
+кольоровий чіп (напр. по критичності), обов'язково передавай і `icon`.
+Доказ: client/src/vendor/ui/primitives/Chip.tsx:40-41
+
+## 2026-07-31 · decision
+**Для severity-кольору/іконки використовуй `SEV` з `primitives/tokens.ts`, а не `SEV_COLOR` з `FindingCard/constants.ts`**
+`FindingCard/constants.ts:4-9` дублює лише кольори severity локально для картки;
+канонічне джерело — `SEV` у `client/src/vendor/ui/primitives/tokens.ts:6-14`,
+яке експортується з `@devdigest/ui` і містить і колір (`c`), і іконку (`icon`)
+на рівень (WCAG-нота в Badge.tsx: "never color alone"). Нові UI-елементи, що
+показують severity (чіпи, бейджі), мають брати дані звідти, а не заводити
+власну мапу кольорів.
+Доказ: client/src/vendor/ui/primitives/tokens.ts:6-14
