@@ -14,10 +14,3 @@ export function visibleFindings(
     (a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9),
   );
 }
-
-/** Count findings per severity level. */
-export function severityCounts(findings: FindingRecord[]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const f of findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1;
-  return counts;
-}

@@ -8,8 +8,9 @@ import { Toggle, Chip, EmptyState, SEV, type Severity } from "@devdigest/ui";
 import type { FindingRecord } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
+import { severityCounts } from "@/lib/findings";
 import { KEY_TO_ACTION, SEVERITY_ORDER } from "./constants";
-import { visibleFindings, severityCounts } from "./helpers";
+import { visibleFindings } from "./helpers";
 import { s } from "./styles";
 
 const SEVERITY_CHIPS: Severity[] = (["CRITICAL", "WARNING", "SUGGESTION"] as const)
