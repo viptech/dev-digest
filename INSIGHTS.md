@@ -41,3 +41,21 @@ README каталогу скілів обіцяє `.cursor/skills/ → ../.claud
 на таймауті замість очікуваного skip/pass — спробуй прогін з вимкненим
 пісочним обмеженням інструменту Bash, перш ніж робити висновок про поламаний код.
 Доказ: server/test/helpers/pg.ts:23,36
+
+## 2026-07-31 · gotcha
+**`server/src/vendor/shared` і `client/src/vendor/shared` — дві фізично окремі, git-tracked копії контрактів `@devdigest/shared`, без симлінка чи sync-скрипта**
+`client/tsconfig.json` мапить аліас `@devdigest/shared` на
+`./src/vendor/shared/index.ts` — власну копію клієнта, а не на серверний пакет.
+Коміт `5ce9475` ("feat(pulls-api): add per-PR findings_summary...") додав
+`findings_summary`/`FindingsSummary`/`FindingsSummaryItem` лише в
+`server/src/vendor/shared/contracts/platform.ts`, не торкнувшись клієнтської
+копії — хоча план (task-4-brief) стверджував, що тип уже "flows through" до
+клієнта. Реально `pnpm typecheck` у client валився з
+`Property 'findings_summary' does not exist` доки я вручну не портував той
+самий diff у `client/src/vendor/shared/contracts/platform.ts`. Попередній
+коміт `91263c0` ("feat(reviews): show run cost...") оновлював ОБИДВІ копії
+разом — тобто дублювання навмисне й відоме, але однопакетний таск-бриф це
+легко проґавлює. Перевіряй обидві копії при будь-якій зміні контракту.
+Доказ: server/src/vendor/shared/contracts/platform.ts:158-201 vs
+client/src/vendor/shared/contracts/platform.ts (до фіксу цього ж дня не мав
+`findings_summary` взагалі)
