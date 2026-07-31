@@ -2,8 +2,12 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import { Badge, Icon, CircularScore, SEV, type Severity, type IconName } from "@devdigest/ui";
+import { RunCostBadge } from "@/components/run-cost-badge";
+import { severityCounts } from "@/lib/findings";
+import type { RunSummary, PrCommit, ReviewRecord } from "@devdigest/shared";
+
+const SEVERITY_DISPLAY_ORDER: Severity[] = ["CRITICAL", "WARNING", "SUGGESTION"];
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -86,12 +90,16 @@ function tsOf(s: string | null | undefined): number {
 
 export function RunHistory({
   runs,
+  reviews = [],
   commits = [],
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
+  /** Reviews (with their kept findings) already loaded for this PR — matched by
+   *  run_id to render a per-severity count breakdown on each row, no extra fetch. */
+  reviews?: ReviewRecord[];
   commits?: PrCommit[];
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
@@ -101,6 +109,10 @@ export function RunHistory({
 }) {
   const t = useTranslations("prReview");
   if (runs.length === 0 && commits.length === 0) return null;
+
+  const findingsByRunId = new Map(
+    reviews.filter((r) => r.run_id).map((r) => [r.run_id as string, r.findings]),
+  );
 
   const items: TimelineItem[] = [
     ...runs.map((run) => ({ kind: "run" as const, ts: tsOf(run.ran_at), run })),
@@ -189,13 +201,56 @@ export function RunHistory({
                 </div>
               )}
               {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
-                  {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                  {(() => {
+                    const findings = findingsByRunId.get(r.run_id);
+                    if (!findings) {
+                      return (
+                        <span>
+                          {t("runStatus.findings", { count: r.findings_count ?? 0 })}
+                          {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
+                        </span>
+                      );
+                    }
+                    const counts = severityCounts(findings);
+                    return (
+                      <>
+                        {SEVERITY_DISPLAY_ORDER.map((sev) => {
+                          const SevIcon = Icon[SEV[sev].icon];
+                          return (
+                            <span
+                              key={sev}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                                color: SEV[sev].c,
+                                borderBottom: `1px dotted ${SEV[sev].c}`,
+                                paddingBottom: 2,
+                              }}
+                            >
+                              <SevIcon size={12} />
+                              {counts[sev] ?? 0}
+                            </span>
+                          );
+                        })}
+                        {(r.blockers ?? 0) > 0 && <span>{t("runStatus.blockers", { count: r.blockers ?? 0 })}</span>}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
+              {settled && (
+                <RunCostBadge
+                  costUsd={r.cost_usd}
+                  tokensIn={r.tokens_in}
+                  tokensOut={r.tokens_out}
+                  variant="detailed"
+                  tokenFormat="total"
+                />
+              )}
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}
             </div>
             <button

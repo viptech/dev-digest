@@ -1,6 +1,8 @@
 import type { LogLine } from "@devdigest/ui";
 import type { RunTrace } from "@devdigest/shared";
 
+export { formatUsd } from "@/components/run-cost-badge";
+
 interface RawEvent {
   t: string;
   kind: string;
