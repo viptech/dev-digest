@@ -4,8 +4,9 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
+import { Icon, Avatar, Badge, CircularScore, SEV } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/run-cost-badge";
+import { FindingsTooltip } from "@/components/findings-tooltip";
 import type { PrMeta } from "@/lib/types";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
@@ -53,6 +54,24 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
         ) : (
           <span style={s.muted}>—</span>
         )}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+        {(["CRITICAL", "WARNING", "SUGGESTION"] as const).map((sev) => {
+          const items = pr.findings_summary?.items.filter((f) => f.severity === sev) ?? [];
+          const count = pr.findings_summary?.counts[sev] ?? 0;
+          const SevIcon = Icon[SEV[sev].icon];
+          return (
+            <FindingsTooltip key={sev} findings={items}>
+              <span
+                data-testid={`pr-findings-badge-${sev}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 3, color: SEV[sev].c }}
+              >
+                <SevIcon size={12} />
+                {count}
+              </span>
+            </FindingsTooltip>
+          );
+        })}
       </div>
       <div>
         <Badge dot color={st.c} bg="transparent">
