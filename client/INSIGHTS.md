@@ -45,3 +45,34 @@
 показують severity (чіпи, бейджі), мають брати дані звідти, а не заводити
 власну мапу кольорів.
 Доказ: client/src/vendor/ui/primitives/tokens.ts:6-14
+
+## 2026-07-31 · gotcha
+**`Severity` з `@devdigest/ui` ширший (4 значення) за `Severity` з wire-контракту (3 значення) — типізація `Severity[]` ламає індексацію у вузькі об'єкти**
+`client/src/vendor/ui/primitives/tokens.ts:3` визначає
+`"CRITICAL" | "WARNING" | "SUGGESTION" | "INFO"`, тоді як
+`client/src/vendor/shared/contracts/findings.ts:11`
+(`z.enum(['CRITICAL','WARNING','SUGGESTION'])`) — лише 3 значення. Якщо спільну
+константу порядку відображення типізувати як `Severity[]` з `@devdigest/ui`
+(широкий тип), а потім індексувати нею об'єкт, похідний від контракту (напр.
+`FindingsSummary.counts`, який має рівно 3 явні ключі без index signature) —
+TypeScript падає з TS7053 ("Property 'INFO' does not exist"), навіть якщо
+рантайм-значення завжди коректні. Фікс: типізувати такі константи як
+літеральний tuple (`as const satisfies readonly Severity[]`), а не як широкий
+`Severity[]` — це звужує тип до фактичних 3 літералів і лишається
+індекс-безпечним для вузьких контрактних форм.
+Доказ: client/src/components/findings-tooltip/FindingsTooltip.tsx (константа
+`SEVERITY_DISPLAY_ORDER`) та client/src/app/repos/[repoId]/pulls/_components/PRRow/PRRow.tsx
+(`pr.findings_summary?.counts[sev]`)
+
+## 2026-07-31 · gotcha
+**У тестах з кількома однаковими fixture-об'єктами додавання нового дефолтного поля може створити дублікат тексту, який ламає `getByText`**
+`FindingsTooltip.test.tsx`'s multi-finding hover-тест рендерить два `finding()`
+з різними override для `title`/`file`/`start_line`/`end_line`, але без
+override для нового поля `rationale` — обидва тоді успадковують однаковий
+дефолт і рендерять ідентичний текст. Будь-яка нова асерція `getByText(...)` на
+це поле падає з "multiple elements found", поки для кожного елемента
+fixture-виклику не задати унікальне значення (або не перейти на
+`getAllByText`).
+Доказ: client/src/components/findings-tooltip/FindingsTooltip.test.tsx
+(тест "shows each finding's title and file:line on hover..." — другий
+`finding({ id: "f2", ... })` виклик тепер явно передає власний `rationale`)
