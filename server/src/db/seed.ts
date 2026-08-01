@@ -6,6 +6,7 @@ import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
+  TEST_QUALITY_REVIEWER_PROMPT,
 } from './seed-prompts.js';
 
 /** Default provider/model for the built-in reviewer agents. */
@@ -18,11 +19,13 @@ const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
  *
  * Seeds: default workspace + system user + membership, default settings,
  * demo repo (acme/payments-api), PR #482 with files/commits, a sample review
- * with a few findings, and the three built-in agents (General + Security +
- * Performance), all on the default openrouter/deepseek-v4-flash provider+model.
+ * with a few findings, and the four built-in agents (General + Security +
+ * Performance + Test Quality), all on the default openrouter/deepseek-v4-flash
+ * provider+model, plus two demo skills (test-quality-corner-cases, linked to
+ * Test Quality Reviewer; api-contract-change, linked to Security Reviewer).
  *
- * Course lessons populate the other tables (skills, conventions, memory, eval,
- * …) once their features are built — they start empty here.
+ * Course lessons populate the other tables (conventions, memory, eval, …)
+ * once their features are built — they start empty here.
  */
 
 export const DEFAULT_WORKSPACE_NAME = 'default';
@@ -211,6 +214,17 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       version: 1,
       createdBy: userId,
     },
+    {
+      workspaceId,
+      name: 'Test Quality Reviewer',
+      description: 'Flags uncovered branches, missing corner cases, over-mocking, and flaky patterns.',
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
+      systemPrompt: TEST_QUALITY_REVIEWER_PROMPT,
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
   ];
   for (const a of seedAgents) {
     const [existing] = await db
@@ -218,6 +232,86 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .from(t.agents)
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, a.name)));
     if (!existing) await db.insert(t.agents).values(a);
+  }
+
+  // ---- demo skills (idempotent by name) + agent links ----
+  const [testQualityAgent] = await db
+    .select()
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, 'Test Quality Reviewer')));
+  const [securityAgent] = await db
+    .select()
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, 'Security Reviewer')));
+
+  async function upsertSkill(values: {
+    name: string;
+    description: string;
+    type: 'rubric' | 'convention' | 'security' | 'custom';
+    body: string;
+  }): Promise<string> {
+    const [existing] = await db
+      .select()
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, values.name)));
+    if (existing) return existing.id;
+    const [row] = await db
+      .insert(t.skills)
+      .values({
+        workspaceId,
+        name: values.name,
+        description: values.description,
+        type: values.type,
+        source: 'manual',
+        body: values.body,
+        enabled: true,
+        version: 1,
+      })
+      .returning();
+    await db.insert(t.skillVersions).values({ skillId: row!.id, version: 1, body: row!.body }).onConflictDoNothing();
+    return row!.id;
+  }
+
+  const testQualitySkillId = await upsertSkill({
+    name: 'test-quality-corner-cases',
+    description: 'Flag test files that only cover the happy path — missing corner cases and branch coverage.',
+    type: 'rubric',
+    body: `# Test Quality — Corner Cases
+
+For every test file changed in the diff, check that it exercises:
+- At least one non-happy-path branch (error, empty, or boundary case) for
+  each function it tests.
+- No test that mocks the exact unit under test.
+
+If a test file only asserts the happy path, flag it as a WARNING finding
+citing the test file and the untested branch in the production code it
+covers.`,
+  });
+
+  const apiContractSkillId = await upsertSkill({
+    name: 'api-contract-change',
+    description: 'Flag any exported route handler signature change without a version bump.',
+    type: 'convention',
+    body: `# API Contract Change
+
+If the diff changes the parameters, return type, or path of an exported
+route handler (Fastify route, REST endpoint) without also changing a version
+identifier (route path version segment, or an explicit schema version field),
+flag it as a WARNING finding: "breaking API contract change without a
+version bump", citing the changed handler's file:line.`,
+  });
+
+  if (testQualityAgent) {
+    await db
+      .insert(t.agentSkills)
+      .values({ agentId: testQualityAgent.id, skillId: testQualitySkillId, order: 0 })
+      .onConflictDoUpdate({ target: [t.agentSkills.agentId, t.agentSkills.skillId], set: { order: 0 } });
+  }
+  if (securityAgent) {
+    await db
+      .insert(t.agentSkills)
+      .values({ agentId: securityAgent.id, skillId: apiContractSkillId, order: 0 })
+      .onConflictDoUpdate({ target: [t.agentSkills.agentId, t.agentSkills.skillId], set: { order: 0 } });
   }
 
   return { workspaceId, userId };
