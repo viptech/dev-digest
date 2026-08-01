@@ -48,13 +48,16 @@
 7. Evals tab в Agent Editor (eval-кейси: diff + expected output, "Run case",
    pass/fail + recall/precision/citation_accuracy) — механізм контрольного
    експерименту.
-8. Новий агент **Test Quality Reviewer** + два нові скіли
+8. Stats tab в Agent Editor (runs/cost/duration/accept-rate за 30D,
+   most-used skills, findings by severity/category, run history) — п.7.
+9. Новий агент **Test Quality Reviewer** + два нові скіли
    (`test-quality-corner-cases`, `api-contract-change`), прив'язані до
    агентів для демонстрації контрольного експерименту.
 
-Явно поза скоупом (інші лесони курсу): Stats/CI-таби агента, Agent
-Performance dashboard, community-скіли з GitHub, автоматична інʼєкція
-прийнятих conventions назад у промпт агента, імпорт з архівів (zip).
+Явно поза скоупом (інші лесони курсу): CI-таб агента, Agent Performance
+dashboard (крос-агентний dashboard — Stats тут лише per-agent), community-
+скіли з GitHub, автоматична інʼєкція прийнятих conventions назад у промпт
+агента, імпорт з архівів (zip).
 
 ## 1. Сервер — модуль `skills` (A1)
 
@@ -98,6 +101,14 @@ const enabledBodies = await this.skillsService.resolveBodies(
 - вимкнений (на рівні скіла або відв'язаний) скіл ніколи не потрапляє в
   промпт — включно з fallback-трасою (`traceFromBuffer`), де поле
   лишається `null`, бо це шлях помилки ще до резолву скілів.
+
+Додатково: `agent_runs` отримує нову колонку `skill_ids jsonb` (нова
+міграція, `pnpm db:generate`), яку `run-executor` заповнює ID-шками
+резолвлених скілів (ті самі, що пішли в `enabledBodies`) при
+`completeAgentRun`. Це єдине персистентне джерело "які скіли реально
+використав цей ран" — потрібне для Stats tab (п.7, "Most-used skills") і
+дешевше/точніше, ніж парсити `run_traces.trace.prompt_assembly.skills`
+заднім числом.
 
 ## 3. Клієнт — Skills Lab
 
@@ -169,7 +180,44 @@ const enabledBodies = await this.skillsService.resolveBodies(
   `expected_output` JSON-редактор справа з валідацією, «Run case»/«Save»,
   бейдж останнього прогону — за макетом).
 
-## 7. Seed-дані
+## 7. Stats tab в Agent Editor
+
+Per-agent аналітика на наявних даних (`agent_runs`, `findings`, `skills` +
+нова `agent_runs.skill_ids` із п.2). Без окремого крос-агентного дашборду
+(Agent Performance — інший лесон); тут лише вкладка Stats конкретного
+агента.
+
+- `server/src/modules/agents` отримує `GET /agents/:id/stats?window=30d`:
+  - **Totals**: `total_runs`, `avg_cost_usd`, `avg_duration_ms`,
+    `accept_rate` (`SUM(findings.accepted_at IS NOT NULL) / COUNT(*)` по
+    findings ревʼю цього агента за вікно, де є хоч якийсь accept/dismiss
+    вердикт — findings без жодного з двох не враховуються в знаменник).
+  - **Most-used skills**: групування `agent_runs.skill_ids` (unnest) за
+    вікно → `% ранів, де скіл використовувався`, джойн на `skills.name`
+    для підпису; топ-5.
+  - **Findings by severity**: `findings`, згруповані по
+    `date_trunc('week', reviews.created_at)` × `severity` — стековий бар-
+    чарт по тижнях вікна.
+  - **Findings by category**: кількість findings за `category` (донат).
+    *Свідоме спрощення від макета*: макет показує суму `$` на категорію,
+    але вартість рахується на ран, а не на знахідку — атрибуція
+    $/категорія була б довільною. Використовуємо count, не $.
+  - **Run history**: останні N `agent_runs` (timestamp, PR number, tokens,
+    cost, findings_count, source `local|ci`) з посиланням "View trace" на
+    вже наявний run-trace drawer (`RunTraceDrawer`, той самий компонент,
+    що й на сторінці PR).
+- Клієнт: `_components/StatsTab` — 4 stat-тайли зверху (Total Runs / Avg
+  Cost per Run / Avg Duration / Accept Rate), два бар-чарти (Most-used
+  skills, Most-pulled memory — **виключено**, бо Memory-фіча ще не
+  збудована; замінюємо другий бар-чарт на "Findings by category" в
+  компактному вигляді або лишаємо тільки Most-used skills на всю ширину),
+  стековий бар-чарт Findings by severity, донат Findings by category, і
+  таблиця Run history. Для чартів — паттерни/палітра з `dataviz`-скіла.
+- `AgentEditor/constants.ts`: додається `{ key: 'stats', labelKey:
+  'editor.tabs.stats', icon: 'BarChart' }` до `TABS` (разом зі `skills` і
+  `evals` із пп. 4/6).
+
+## 8. Seed-дані
 
 `server/src/db/seed.ts` додає:
 - Агент **Test Quality Reviewer** — перевіряє непокриті гілки, пропущені
@@ -195,7 +243,11 @@ const enabledBodies = await this.skillsService.resolveBodies(
   сервісів/репозиторіїв (workspace scoping, версіонування, matching-логіка
   eval-кейсів) + integration-тест на реальний Postgres для CRUD.
 - `run-executor` — оновити/додати тест, що перевіряє: скіл лінкований і
-  enabled → потрапляє в `prompt_assembly.skills`; лінкований, але
-  `enabled: false` → не потрапляє; не лінкований → не потрапляє.
+  enabled → потрапляє в `prompt_assembly.skills` і в `agent_runs.skill_ids`;
+  лінкований, але `enabled: false` → не потрапляє нікуди; не лінкований →
+  не потрапляє.
+- `agents`-модуль (`GET /agents/:id/stats`) — unit-тест на агрегацію
+  (accept_rate, most-used skills %, severity/category групування) на
+  фікстурних `agent_runs`/`findings`.
 - Клієнтські компоненти (`SkillsListView`, `SkillEditor`, `SkillsTab`,
-  `EvalsTab`) — RTL-тести за `TESTING.md`.
+  `EvalsTab`, `StatsTab`) — RTL-тести за `TESTING.md`.
