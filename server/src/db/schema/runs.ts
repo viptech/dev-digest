@@ -29,6 +29,10 @@ export const agentRuns = pgTable('agent_runs', {
   score: integer('score'),
   /** Findings that tripped the agent's gate (severity ≥ ciFailOn). */
   blockers: integer('blockers'),
+  /** IDs of the enabled, linked skills actually resolved into this run's
+   *  prompt (order not preserved here — see run_traces.prompt_assembly.skills
+   *  for the ordered rendered blocks). Null on failed/cancelled runs. */
+  skillIds: jsonb('skill_ids').$type<string[]>(),
 });
 
 /** Whole trace of one run as a SINGLE jsonb document. */
