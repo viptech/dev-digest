@@ -5,12 +5,13 @@ import messages from "../../../../../messages/en/skills.json";
 import { SkillDrawer } from "./SkillDrawer";
 
 const createMutate = vi.fn().mockResolvedValue({ id: "new" });
+const importPreviewMutate = vi.fn();
 vi.mock("../../../../lib/hooks/skills", () => ({
   useSkill: () => ({ data: undefined }),
   useCreateSkill: () => ({ mutateAsync: createMutate, isPending: false }),
   useUpdateSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useImportPreview: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useImportPreview: () => ({ mutateAsync: importPreviewMutate, isPending: false }),
   useImportSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -50,5 +51,16 @@ describe("SkillDrawer", () => {
     fireEvent.click(screen.getByText("Save"));
     await Promise.resolve();
     expect(createMutate).toHaveBeenCalled();
+  });
+
+  it("import mode: a failed preview shows an error instead of hanging silently", async () => {
+    importPreviewMutate.mockRejectedValueOnce(new Error("network error"));
+    renderWithIntl(<SkillDrawer mode="import" onClose={vi.fn()} />);
+    const file = new File(["# Hello\nBody."], "hello.md", { type: "text/markdown" });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(await screen.findByText("Import failed")).toBeInTheDocument();
+    // The dropzone stays put so the user can pick a different file.
+    expect(input).toBeInTheDocument();
   });
 });

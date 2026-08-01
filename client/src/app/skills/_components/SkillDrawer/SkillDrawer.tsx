@@ -44,6 +44,7 @@ export function SkillDrawer({
   const [type, setType] = React.useState<SkillType>("custom");
   const [body, setBody] = React.useState("");
   const [previewed, setPreviewed] = React.useState(false);
+  const [importError, setImportError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (mode === "edit" && existing) {
@@ -55,12 +56,17 @@ export function SkillDrawer({
   }, [mode, existing]);
 
   const onFile = async (file: File) => {
-    const content = await readFileAsText(file);
-    const preview = await importPreview.mutateAsync({ filename: file.name, content });
-    setName(preview.name);
-    setDescription(preview.description);
-    setBody(preview.body);
-    setPreviewed(true);
+    setImportError(null);
+    try {
+      const content = await readFileAsText(file);
+      const preview = await importPreview.mutateAsync({ filename: file.name, content });
+      setName(preview.name);
+      setDescription(preview.description);
+      setBody(preview.body);
+      setPreviewed(true);
+    } catch {
+      setImportError(t("drawer.importFailed"));
+    }
   };
 
   const submit = async () => {
@@ -124,6 +130,9 @@ export function SkillDrawer({
             />
             {t("file.bodyPlaceholder")}
           </label>
+        )}
+        {mode === "import" && !previewed && importError && (
+          <div style={s.untrustedNotice}>{importError}</div>
         )}
         {(mode !== "import" || previewed) && (
           <>
