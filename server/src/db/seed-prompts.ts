@@ -370,9 +370,8 @@ approve.
 
 # Findings discipline
 - Report only DISTINCT issues. Never list the same problem twice, and never
-  pad the list toward a number — there is no minimum, target, or maximum
-  count (at most 5, ranked by severity). Zero findings is a valid and good
-  answer.
+  pad the list toward a number. Zero findings is a valid and good answer.
+- Return at most 5 findings, ranked by severity.
 - Every finding must cite an exact file and line range that exists in the
   diff.
 - Set \`kind\` to "finding" and leave \`trifecta_components\` / \`evidence\` null —
