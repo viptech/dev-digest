@@ -5,9 +5,9 @@
  * and shows the review score ring.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { RunSummary } from "@devdigest/shared";
+import type { RunSummary, ReviewRecord, FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
 import { RunHistory } from "./RunHistory";
 
@@ -25,6 +25,7 @@ function run(o: Partial<RunSummary>): RunSummary {
     duration_ms: 1000,
     tokens_in: 100,
     tokens_out: 50,
+    cost_usd: null,
     findings_count: 0,
     grounding: "0/0 passed",
     ran_at: "2026-06-11T18:44:34.000Z",
@@ -34,12 +35,53 @@ function run(o: Partial<RunSummary>): RunSummary {
   };
 }
 
-function renderRuns(runs: RunSummary[]) {
+function renderRuns(runs: RunSummary[], reviews: ReviewRecord[] = []) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-      <RunHistory runs={runs} onOpenTrace={() => {}} />
+      <RunHistory runs={runs} reviews={reviews} onOpenTrace={() => {}} />
     </NextIntlClientProvider>,
   );
+}
+
+function finding(overrides: Partial<FindingRecord>): FindingRecord {
+  return {
+    id: "f1",
+    severity: "CRITICAL",
+    category: "security",
+    title: "finding",
+    file: "src/x.ts",
+    start_line: 1,
+    end_line: 1,
+    rationale: "r",
+    suggestion: null,
+    confidence: 0.9,
+    kind: "finding",
+    trifecta_components: null,
+    evidence: null,
+    review_id: "r1",
+    accepted_at: null,
+    dismissed_at: null,
+    ...overrides,
+  };
+}
+
+function review(overrides: Partial<ReviewRecord>): ReviewRecord {
+  return {
+    id: "r1",
+    pr_id: "pr1",
+    agent_id: "a1",
+    run_id: "run-1",
+    agent_name: "Security Reviewer",
+    kind: "review",
+    verdict: "request_changes",
+    summary: null,
+    score: 38,
+    model: "deepseek/deepseek-v4-flash",
+    grounding: null,
+    created_at: "2026-06-11T18:44:34.000Z",
+    findings: [],
+    ...overrides,
+  };
 }
 
 describe("RunHistory — outcome badge", () => {
@@ -63,6 +105,49 @@ describe("RunHistory — outcome badge", () => {
     expect(screen.queryByText(/blockers/)).not.toBeInTheDocument();
   });
 
+  it("shows a per-severity count breakdown when the matching review's findings are provided", () => {
+    renderRuns(
+      [run({ run_id: "run-1", status: "done", findings_count: 3, blockers: 1, score: 38 })],
+      [
+        review({
+          run_id: "run-1",
+          findings: [
+            finding({ id: "f1", severity: "CRITICAL" }),
+            finding({ id: "f2", severity: "WARNING" }),
+            finding({ id: "f3", severity: "WARNING" }),
+          ],
+        }),
+      ],
+    );
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText(/1 blockers/)).toBeInTheDocument();
+    expect(screen.queryByText("3 finding(s)")).not.toBeInTheDocument();
+  });
+
+  it("shows all three severity badges, including zero counts, when a matching review has findings", () => {
+    renderRuns(
+      [run({ run_id: "run-1", status: "done", findings_count: 1, blockers: 0, score: 90 })],
+      [review({ run_id: "run-1", findings: [finding({ id: "f1", severity: "CRITICAL" })] })],
+    );
+    expect(screen.getByText("1")).toBeInTheDocument(); // CRITICAL
+    expect(screen.getAllByText("0")).toHaveLength(2); // WARNING + SUGGESTION
+  });
+
+  it("shows all three severity badges as zero for a matching review with no findings", () => {
+    renderRuns(
+      [run({ run_id: "run-1", status: "done", findings_count: 0, blockers: 0, score: 100 })],
+      [review({ run_id: "run-1", findings: [] })],
+    );
+    expect(screen.getAllByText("0")).toHaveLength(3);
+    expect(screen.queryByText("0 finding(s)")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the plain findings/blockers text when no matching review is provided", () => {
+    renderRuns([run({ run_id: "run-1", status: "done", findings_count: 3, blockers: 1, score: 38 })]);
+    expect(screen.getByText(/3 finding\(s\).*1 blockers/)).toBeInTheDocument();
+  });
+
   it("a failed run reads 'error'", () => {
     renderRuns([run({ status: "failed", error: "boom", score: null, blockers: null })]);
     expect(screen.getByText("error")).toBeInTheDocument();
@@ -71,5 +156,25 @@ describe("RunHistory — outcome badge", () => {
   it("a running run reads 'running'", () => {
     renderRuns([run({ status: "running", score: null, blockers: null })]);
     expect(screen.getByText("running")).toBeInTheDocument();
+  });
+
+  it("shows a tooltip with that severity's findings on hovering its badge", () => {
+    renderRuns(
+      [run({ run_id: "run-1", status: "done", findings_count: 2, blockers: 0, score: 64 })],
+      [
+        review({
+          run_id: "run-1",
+          findings: [
+            finding({ id: "f1", severity: "WARNING", title: "N+1 query in user list endpoint" }),
+            finding({ id: "f2", severity: "SUGGESTION", title: "Extract magic number 3600" }),
+          ],
+        }),
+      ],
+    );
+    const warningBadge = screen.getByTestId("severity-badge-WARNING");
+    expect(screen.queryByText("N+1 query in user list endpoint")).not.toBeInTheDocument();
+    fireEvent.mouseEnter(warningBadge);
+    expect(screen.getByText("N+1 query in user list endpoint")).toBeInTheDocument();
+    expect(screen.queryByText("Extract magic number 3600")).not.toBeInTheDocument(); // different severity
   });
 });

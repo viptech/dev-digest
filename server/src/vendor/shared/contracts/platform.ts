@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
+import { Severity, FindingCategory } from './findings.js';
 
 /**
  * Platform / scaffolding DTOs owned by F1:
@@ -154,6 +155,30 @@ export type Repo = z.infer<typeof Repo>;
 export const PrStatus = z.enum(['needs_review', 'reviewed', 'stale', 'open', 'closed', 'merged']);
 export type PrStatus = z.infer<typeof PrStatus>;
 
+// ---- Findings summary (list endpoint's per-PR severity breakdown) ----
+export const FindingsSummaryItem = z.object({
+  id: z.string(),
+  severity: Severity,
+  category: FindingCategory,
+  title: z.string(),
+  file: z.string(),
+  start_line: z.number().int(),
+  end_line: z.number().int(),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+});
+export type FindingsSummaryItem = z.infer<typeof FindingsSummaryItem>;
+
+export const FindingsSummary = z.object({
+  counts: z.object({
+    CRITICAL: z.number().int(),
+    WARNING: z.number().int(),
+    SUGGESTION: z.number().int(),
+  }),
+  items: z.array(FindingsSummaryItem),
+});
+export type FindingsSummary = z.infer<typeof FindingsSummary>;
+
 export const PrMeta = z.object({
   id: z.string().nullish(),
   number: z.number().int(),
@@ -170,6 +195,11 @@ export const PrMeta = z.object({
   updated_at: z.string().nullish(),
   // Latest-review score (list endpoint only; null/absent until reviewed).
   score: z.number().int().nullish(),
+  // Sum of cost_usd across all this PR's agent_runs (list endpoint only).
+  cost_usd: z.number().nullish(),
+  // Latest-review per-severity findings breakdown (list endpoint only; null
+  // until reviewed). Powers the FINDINGS column's hover tooltip.
+  findings_summary: FindingsSummary.nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 
