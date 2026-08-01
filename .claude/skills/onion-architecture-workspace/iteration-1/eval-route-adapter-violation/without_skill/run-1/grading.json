@@ -1,0 +1,9 @@
+{
+  "summary": { "pass_rate": 0.5, "passed": 2, "failed": 2, "total": 4 },
+  "expectations": [
+    { "text": "Explicitly identifies importing/instantiating the adapter directly inside routes.ts as a layering/architecture problem, not just a style nit", "passed": true, "evidence": "Point 2: \"це ще й порушення шару: роут не повинен імпортувати конкретний адаптер напряму\"" },
+    { "text": "Proposes moving the GitHub call into a service method (e.g. on PullsService) instead of the route", "passed": false, "evidence": "The rewritten handler keeps the DB lookup and container.github() call inline inside app.get(...) in routes.ts — no service.ts / PullsService is introduced or suggested" },
+    { "text": "Suggests obtaining the client via container.github() (or an equivalent container-resolved interface) instead of `new OctokitGitHubClient(...)`", "passed": true, "evidence": "\"Правильний спосіб дістати клієнта — через контейнер: await container.github()\"" },
+    { "text": "Describes or shows the resulting route reduced to param handling + service call + response mapping, with no adapter import left in routes.ts", "passed": false, "evidence": "No adapter import remains, but the route still contains the DB query and the container.github() call itself rather than delegating to a single service call" }
+  ]
+}

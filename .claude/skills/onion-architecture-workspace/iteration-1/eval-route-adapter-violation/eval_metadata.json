@@ -1,0 +1,11 @@
+{
+  "eval_id": 2,
+  "eval_name": "eval-route-adapter-violation",
+  "prompt": "Can you review this route handler I just wrote in server/src/modules/pulls/routes.ts?\n\n```ts\nimport { OctokitGitHubClient } from '../../adapters/github/octokit.js';\n\napp.get('/pulls/:id/status', async (req, reply) => {\n  const client = new OctokitGitHubClient(container.secrets);\n  const status = await client.getStatus(req.params.id);\n  return reply.send({ status });\n});\n```",
+  "assertions": [
+    { "id": "flags_violation", "text": "Explicitly identifies importing/instantiating the adapter directly inside routes.ts as a layering/architecture problem, not just a style nit" },
+    { "id": "proposes_service_method", "text": "Proposes moving the GitHub call into a service method (e.g. on PullsService) instead of the route" },
+    { "id": "uses_container_github", "text": "Suggests obtaining the client via container.github (or an equivalent container-resolved interface) instead of `new OctokitGitHubClient(...)`" },
+    { "id": "route_stays_thin", "text": "Describes or shows the resulting route reduced to param handling + service call + response mapping, with no adapter import left in routes.ts" }
+  ]
+}

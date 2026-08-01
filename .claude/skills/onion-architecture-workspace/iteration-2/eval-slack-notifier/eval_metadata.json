@@ -1,0 +1,12 @@
+{
+  "eval_id": 1,
+  "eval_name": "eval-slack-notifier",
+  "prompt": "We want to post a Slack message whenever a review run finishes (server/src/modules/reviews). Where does the Slack integration code go, and can you sketch out the files I need?",
+  "assertions": [
+    { "id": "defines_port", "text": "Proposes defining a port/interface (e.g. Notifier) rather than referring to the Slack SDK type directly in service code" },
+    { "id": "adapter_under_adapters_dir", "text": "Places the concrete Slack implementation under adapters/<kind>/ (e.g. adapters/slack/*.ts)" },
+    { "id": "mentions_mock", "text": "Mentions adding a mock implementation (adapters/mocks.ts or module-local) so tests don't hit the real Slack API" },
+    { "id": "wires_into_container", "text": "Mentions wiring the new adapter into platform/container.ts (lazy getter / ContainerOverrides pattern)" },
+    { "id": "no_direct_adapter_import_in_service", "text": "Does not tell the user to import the Slack adapter class directly into service.ts instead of going through the container" }
+  ]
+}
