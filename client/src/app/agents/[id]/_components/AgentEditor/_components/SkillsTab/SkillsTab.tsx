@@ -64,7 +64,7 @@ export function SkillsTab({ agentId }: { agentId: string }) {
         return (
           <div
             key={sk.id}
-            style={s.row}
+            style={s.row(sk.enabled)}
             draggable={isLinked}
             onDragStart={() => setDragIdx(idx)}
             onDragOver={(e) => isLinked && e.preventDefault()}
@@ -74,6 +74,7 @@ export function SkillsTab({ agentId }: { agentId: string }) {
             <Checkbox checked={isLinked} onChange={(on) => toggle(sk.id, on)} />
             <span style={s.name}>{sk.name}</span>
             <Badge color="var(--text-muted)">{sk.type}</Badge>
+            {!sk.enabled && <Badge color="var(--warn)">{t("skills.disabledBadge")}</Badge>}
           </div>
         );
       })}

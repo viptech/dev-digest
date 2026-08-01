@@ -6,7 +6,7 @@ export const s = {
   headerRow: { display: "flex", alignItems: "center", gap: 12, marginBottom: 8 } satisfies CSSProperties,
   count: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
   hint: { fontSize: 12, color: "var(--text-muted)", marginBottom: 16 } satisfies CSSProperties,
-  row: {
+  row: (enabled: boolean): CSSProperties => ({
     display: "flex",
     alignItems: "center",
     gap: 10,
@@ -15,6 +15,7 @@ export const s = {
     borderRadius: 8,
     marginBottom: 6,
     background: "var(--bg-elevated)",
-  } satisfies CSSProperties,
+    opacity: enabled ? 1 : 0.6,
+  }),
   name: { fontSize: 13, fontWeight: 600, flex: 1 } satisfies CSSProperties,
 } as const;

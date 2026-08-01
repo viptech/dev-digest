@@ -5,12 +5,24 @@ import messages from "../../../../../messages/en/skills.json";
 import { SkillDrawer } from "./SkillDrawer";
 
 const createMutate = vi.fn().mockResolvedValue({ id: "new" });
+const deleteMutate = vi.fn();
 const importPreviewMutate = vi.fn();
 vi.mock("../../../../lib/hooks/skills", () => ({
-  useSkill: () => ({ data: undefined }),
+  useSkill: () => ({
+    data: {
+      id: "s1",
+      name: "Existing",
+      description: "d",
+      type: "custom",
+      body: "b",
+      source: "manual",
+      enabled: true,
+      version: 1,
+    },
+  }),
   useCreateSkill: () => ({ mutateAsync: createMutate, isPending: false }),
   useUpdateSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useDeleteSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteSkill: () => ({ mutateAsync: deleteMutate, isPending: false }),
   useImportPreview: () => ({ mutateAsync: importPreviewMutate, isPending: false }),
   useImportSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -62,5 +74,28 @@ describe("SkillDrawer", () => {
     expect(await screen.findByText("Import failed")).toBeInTheDocument();
     // The dropzone stays put so the user can pick a different file.
     expect(input).toBeInTheDocument();
+  });
+
+  it("create mode: a failed save shows an error instead of failing silently", async () => {
+    createMutate.mockRejectedValueOnce(new Error("server error"));
+    const onClose = vi.fn();
+    renderWithIntl(<SkillDrawer mode="create" onClose={onClose} />);
+    fireEvent.change(screen.getByPlaceholderText("pr-quality-rubric"), {
+      target: { value: "My Skill" },
+    });
+    const textareas = screen.getAllByRole("textbox");
+    fireEvent.change(textareas[textareas.length - 1]!, { target: { value: "# My Skill\nBody." } });
+    fireEvent.click(screen.getByText("Save"));
+    expect(await screen.findByText("Could not save this skill. Please try again.")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("edit mode: a failed delete shows an error instead of failing silently", async () => {
+    deleteMutate.mockRejectedValueOnce(new Error("server error"));
+    const onClose = vi.fn();
+    renderWithIntl(<SkillDrawer mode="edit" skillId="s1" onClose={onClose} />);
+    fireEvent.click(screen.getByText("Delete"));
+    expect(await screen.findByText("Could not delete this skill. Please try again.")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

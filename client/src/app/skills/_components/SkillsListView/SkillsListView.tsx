@@ -35,7 +35,7 @@ export function SkillsListView() {
     <AppShell crumb={[{ label: t("page.crumbLab") }, { label: t("page.crumbSkills") }]}>
       {mode !== "none" && <SkillDrawer mode={mode} onClose={closeDrawer} />}
       {mode === "none" && selectedId && (
-        <SkillDrawer mode="edit" skillId={selectedId} onClose={closeDrawer} />
+        <SkillDrawer key={selectedId} mode="edit" skillId={selectedId} onClose={closeDrawer} />
       )}
       <div style={s.page}>
         <div style={s.header}>
@@ -60,6 +60,7 @@ export function SkillsListView() {
               </Button>
             }
             items={[
+              { label: t("page.menu.createFromScratch"), icon: "Edit", onClick: () => setMode("create") },
               { label: t("page.menu.fromFile"), icon: "Upload", onClick: () => setMode("import") },
               { label: t("page.menu.fromUrl"), icon: "Globe", muted: true },
               { label: t("page.menu.community"), icon: "Search", muted: true },

@@ -70,14 +70,30 @@ export function SkillDrawer({
   };
 
   const submit = async () => {
-    if (mode === "create") {
-      await create.mutateAsync({ name, description, type, body });
-    } else if (mode === "edit" && skillId) {
-      await update.mutateAsync({ id: skillId, patch: { name, description, type, body } });
-    } else if (mode === "import") {
-      await importSave.mutateAsync({ name, description, type, body });
+    setImportError(null);
+    try {
+      if (mode === "create") {
+        await create.mutateAsync({ name, description, type, body });
+      } else if (mode === "edit" && skillId) {
+        await update.mutateAsync({ id: skillId, patch: { name, description, type, body } });
+      } else if (mode === "import") {
+        await importSave.mutateAsync({ name, description, type, body });
+      }
+      onClose();
+    } catch {
+      setImportError(t("drawer.saveFailed"));
     }
-    onClose();
+  };
+
+  const onDelete = async () => {
+    if (!skillId) return;
+    setImportError(null);
+    try {
+      await del.mutateAsync(skillId);
+      onClose();
+    } catch {
+      setImportError(t("drawer.deleteFailed"));
+    }
   };
 
   const isUntrusted = mode === "edit" && existing && existing.source !== "manual";
@@ -92,23 +108,24 @@ export function SkillDrawer({
       subtitle={mode === "import" ? t("drawer.subtitle") : undefined}
       onClose={onClose}
       footer={
-        <div style={s.footer}>
-          {mode === "edit" && skillId && (
-            <Button
-              kind="ghost"
-              onClick={() => del.mutateAsync(skillId).then(onClose)}
-              disabled={del.isPending}
-            >
-              {t("preview.delete")}
-            </Button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {importError && !(mode === "import" && !previewed) && (
+            <div style={s.untrustedNotice}>{importError}</div>
           )}
-          <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
-            <Button kind="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button kind="primary" onClick={submit} disabled={!canSave || saving}>
-              {saving ? t("file.importing") : t("preview.save")}
-            </Button>
+          <div style={s.footer}>
+            {mode === "edit" && skillId && (
+              <Button kind="ghost" onClick={onDelete} disabled={del.isPending}>
+                {t("preview.delete")}
+              </Button>
+            )}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
+              <Button kind="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button kind="primary" onClick={submit} disabled={!canSave || saving}>
+                {saving ? t("file.importing") : t("preview.save")}
+              </Button>
+            </div>
           </div>
         </div>
       }

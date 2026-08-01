@@ -7,7 +7,7 @@ const setMutate = vi.fn();
 vi.mock("../../../../../../../lib/hooks/skills", () => ({
   useSkills: () => ({
     data: [
-      { id: "a", name: "Skill A", description: "d", type: "rubric", source: "manual", body: "b", enabled: true, version: 1 },
+      { id: "a", name: "Skill A", description: "d", type: "rubric", source: "manual", body: "b", enabled: false, version: 1 },
       { id: "b", name: "Skill B", description: "d", type: "security", source: "manual", body: "b", enabled: true, version: 1 },
     ],
   }),
@@ -34,7 +34,12 @@ describe("SkillsTab", () => {
     renderWithIntl(<SkillsTab agentId="ag1" />);
     expect(screen.getByText("Skill A")).toBeInTheDocument();
     expect(screen.getByText("Skill B")).toBeInTheDocument();
-    expect(screen.getByText("1 of 2 enabled")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 linked")).toBeInTheDocument();
+  });
+
+  it("shows a disabled badge and dims the row for a linked-but-disabled skill", () => {
+    renderWithIntl(<SkillsTab agentId="ag1" />);
+    expect(screen.getByText("disabled")).toBeInTheDocument();
   });
 
   it("checking an unlinked skill calls setSkills with it appended", () => {
