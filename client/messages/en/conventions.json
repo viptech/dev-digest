@@ -15,13 +15,24 @@
       "body": "Scan the repo to surface house-rules — naming, error handling, structure — each backed by evidence you can turn into a Skill.",
       "cta": "Run extraction"
     },
-    "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files"
+    "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files",
+    "samplingModeLabel": "Sampling",
+    "samplingModeCode": "Code-only (deterministic)",
+    "samplingModeLlm": "LLM picks files"
   },
   "card": {
     "confidence": "Confidence",
     "accepted": "Accepted",
     "accepting": "Accepting…",
     "acceptAsSkill": "Accept as Skill",
-    "acceptFailed": "Couldn't accept — try again."
+    "acceptFailed": "Couldn't accept — try again.",
+    "reject": "Reject",
+    "rejecting": "Rejecting…",
+    "rejected": "Rejected",
+    "editRule": "Edit",
+    "saveRule": "Save",
+    "cancelEdit": "Cancel",
+    "viewOnGithub": "View on GitHub",
+    "category": "Category"
   }
 }
