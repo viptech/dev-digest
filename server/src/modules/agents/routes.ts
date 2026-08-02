@@ -48,7 +48,7 @@ const UpdateAgentBody = z.object({
   description: z.string().optional(),
   provider: Provider.optional(),
   model: z.string().min(1).optional(),
-  system_prompt: z.string().min(1).optional(),
+  system_prompt: z.string().min(1),
   output_schema: z.unknown().optional(),
   strategy: ReviewStrategy.optional(),
   ci_fail_on: CiFailOn.optional(),
