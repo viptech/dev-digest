@@ -76,3 +76,20 @@ fixture-виклику не задати унікальне значення (а
 Доказ: client/src/components/findings-tooltip/FindingsTooltip.test.tsx
 (тест "shows each finding's title and file:line on hover..." — другий
 `finding({ id: "f2", ... })` виклик тепер явно передає власний `rationale`)
+
+## 2026-08-02 · gotcha
+**План/бриф з готовим кодом рахує глибину `../` відносних імпортів для нової
+папки на око — і помиляється на один рівень**
+Для `EvalsTab/EvalsTab.tsx` (сьомий рівень вкладеності від `src`, як і
+`SkillsTab/SkillsTab.tsx`) бриф пропонував `"../../../../../../lib/hooks/evals"`
+(6 рівнів) — правильно 7, що видно порівнянням з реальним
+`SkillsTab.tsx`. Для вкладеної `EvalsTab/_components/EvalCaseModal/
+EvalCaseModal.tsx` (9 рівнів) бриф давав 8. TypeScript це не ловить
+(модуль просто не резолвиться до `noUnusedLocals`-подібної перевірки — тут
+взагалі падає з чіткою помилкою резолву), але `vi.mock(...)` з неправильним
+шляхом тихо НЕ мокає хук (модуль з іншим resolved-шляхом не збігається), і
+тест падає пізніше на мережевому виклику, а не на помилці мокання. Рахуй
+глибину `node -e "path.relative(...)"` або порівнянням з існуючим файлом
+на тому самому рівні вкладеності, а не копіюванням з брифу.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.tsx:6
+(7 рівнів `../`, було виправлено з 6 як у брифі задачі Task 5 Evals Tab)
