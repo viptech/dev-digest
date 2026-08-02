@@ -1,7 +1,7 @@
 /* AgentEditor — agent config editor (model + system prompt) + Skills tab
    (link/unlink/reorder the skills fed into this agent's prompt) + Evals tab
-   (eval cases + Run case). Later lessons add Stats/CI tabs. Tab state lives
-   in ?tab=. */
+   (eval cases + Run case) + Stats tab (per-agent quality/cost aggregates).
+   Later lessons add a CI tab. Tab state lives in ?tab=. */
 "use client";
 
 import React from "react";
@@ -11,6 +11,7 @@ import type { Agent } from "@devdigest/shared";
 import { ConfigTab } from "./_components/ConfigTab";
 import { SkillsTab } from "./_components/SkillsTab";
 import { EvalsTab } from "./_components/EvalsTab";
+import { StatsTab } from "./_components/StatsTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
 
@@ -27,6 +28,8 @@ export function AgentEditor({ agent, tab, onTab }: { agent: Agent; tab: string; 
           <SkillsTab agentId={agent.id} />
         ) : tab === "evals" ? (
           <EvalsTab agentId={agent.id} />
+        ) : tab === "stats" ? (
+          <StatsTab agentId={agent.id} />
         ) : (
           <ConfigTab agent={agent} />
         )}

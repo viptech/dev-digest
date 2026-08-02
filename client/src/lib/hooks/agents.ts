@@ -3,7 +3,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Agent, AgentSkillLink, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
+import type { Agent, AgentSkillLink, AgentStats, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
 
 export function useAgents() {
   return useQuery({
@@ -108,5 +108,13 @@ export function useSetAgentSkills(agentId: string) {
       qc.setQueryData(["agent-skills", agentId], data);
       qc.invalidateQueries({ queryKey: ["agents"] }); // refresh skillCount on the AgentCard
     },
+  });
+}
+
+export function useAgentStats(agentId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["agent-stats", agentId],
+    queryFn: () => api.get<AgentStats>(`/agents/${agentId}/stats`),
+    enabled: !!agentId,
   });
 }
