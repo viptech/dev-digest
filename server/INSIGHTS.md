@@ -55,3 +55,30 @@ AppError → its status." Тож роут/тест, що кидає `ValidationE
 `migrate.ts` (див. запис від 2026-07-28). Для `seed.ts` перевіряй
 результат прямим SQL-запитом, а не кодом виходу процесу.
 Доказ: server/src/db/seed.ts:321
+
+## 2026-08-02 · gotcha
+**`RepoIntel`-інтерфейс не встигав за конкретним класом: `readFiles` був у `RepoIntelService`, але не в інтерфейсі**
+`container.repoIntel` типізований через інтерфейс `RepoIntel`, а не через
+конкретний клас — тож будь-який новий метод, доданий лише в
+`RepoIntelService`, не типчекнеться для інших модулів, поки не додати
+сигнатуру і в інтерфейс. `readFiles` (Task 1 плану conventions-extractor)
+якраз так і залишився — реалізація була, а в `RepoIntel` — ні. Перевіряй
+`grep -n "implements RepoIntel"` перед тим, як довіряти, що метод класу
+доступний через `container.repoIntel`.
+Доказ: server/src/modules/repo-intel/types.ts:163 (сигнатура додана поруч
+з `getConventionSamples`), реалізація — server/src/modules/repo-intel/service.ts:638
+
+## 2026-08-02 · gotcha
+**`readClone()` мовчки повертає `[]`, якщо шлях фікстури на диску не збігається з repo-relative шляхом у даних — виглядає як "LLM нічого не витягнув"**
+`readClone(clonePath, file)` робить `readFile(join(clonePath, file))` і
+ковтає помилку в `null` (server/src/modules/repo-intel/service.ts:779-780)
+— це навмисний best-effort контракт для `readFiles()`. Але в
+інтеграційному тесті це означає: якщо `file_rank.filePath` /
+LLM-selection / `evidence_path` всі кажуть `src/service.ts`, а фікстура
+фізично лежить у `clonePath/service.ts` (без `src/`), `readFiles()` тихо
+поверне `[]`, і `ConventionsService.extract()` деградує до порожнього
+списку без жодної помилки — симптом виглядає як "модель нічого не
+вибрала", хоча насправді файл просто не знайшли на диску.
+Доказ: server/test/conventions.it.test.ts (фікстура пишеться в
+`join(clonePath, 'src', 'service.ts')`, щоб збігтись з usages по всьому
+тесту); readClone — server/src/modules/repo-intel/service.ts:779
