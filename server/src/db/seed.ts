@@ -314,6 +314,45 @@ version bump", citing the changed handler's file:line.`,
       .onConflictDoUpdate({ target: [t.agentSkills.agentId, t.agentSkills.skillId], set: { order: 0 } });
   }
 
+  // ---- demo eval cases (idempotent by name) — one per control-experiment scenario ----
+  async function upsertEvalCase(values: {
+    ownerId: string;
+    name: string;
+    inputDiff: string;
+    expectedOutput: unknown;
+  }): Promise<void> {
+    const [existing] = await db
+      .select()
+      .from(t.evalCases)
+      .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalCases.name, values.name)));
+    if (existing) return;
+    await db.insert(t.evalCases).values({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: values.ownerId,
+      name: values.name,
+      inputDiff: values.inputDiff,
+      expectedOutput: values.expectedOutput,
+    });
+  }
+
+  if (testQualityAgent) {
+    await upsertEvalCase({
+      ownerId: testQualityAgent.id,
+      name: 'happy-path-only-test',
+      inputDiff: `diff --git a/test/add.test.ts b/test/add.test.ts\n--- a/test/add.test.ts\n+++ b/test/add.test.ts\n@@ -1,2 +1,5 @@\n test('happy path', () => {\n+  expect(add(1, 2)).toBe(3);\n });`,
+      expectedOutput: [{ severity: 'WARNING', file: 'test/add.test.ts', category: 'test' }],
+    });
+  }
+  if (securityAgent) {
+    await upsertEvalCase({
+      ownerId: securityAgent.id,
+      name: 'route-signature-change',
+      inputDiff: `diff --git a/src/routes/users.ts b/src/routes/users.ts\n--- a/src/routes/users.ts\n+++ b/src/routes/users.ts\n@@ -1,3 +1,3 @@\n-export async function getUser(id: string): Promise<User> {\n+export async function getUser(id: string, opts: { includeDeleted: boolean }): Promise<User> {`,
+      expectedOutput: [{ severity: 'WARNING', file: 'src/routes/users.ts', category: 'bug' }],
+    });
+  }
+
   return { workspaceId, userId };
 }
 
