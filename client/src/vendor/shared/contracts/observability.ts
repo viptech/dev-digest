@@ -93,6 +93,32 @@ export type MultiAgentRun = z.infer<typeof MultiAgentRun>;
 export const StatPoint = z.object({ label: z.string(), value: z.number() });
 export type StatPoint = z.infer<typeof StatPoint>;
 
+export const AgentStatsSkillUsage = z.object({
+  skill_id: z.string(),
+  name: z.string(),
+  /** Fraction (0..1) of this window's runs that had this skill enabled+linked. */
+  pct: z.number().min(0).max(1),
+});
+export type AgentStatsSkillUsage = z.infer<typeof AgentStatsSkillUsage>;
+
+export const AgentStatsCategoryCount = z.object({
+  category: z.string(),
+  count: z.number().int(),
+});
+export type AgentStatsCategoryCount = z.infer<typeof AgentStatsCategoryCount>;
+
+export const AgentStatsRunRow = z.object({
+  run_id: z.string(),
+  ran_at: z.string(),
+  pr_number: z.number().int().nullable(),
+  tokens_in: z.number().int().nullable(),
+  tokens_out: z.number().int().nullable(),
+  cost_usd: z.number().nullable(),
+  findings_count: z.number().int().nullable(),
+  source: z.enum(['local', 'ci']),
+});
+export type AgentStatsRunRow = z.infer<typeof AgentStatsRunRow>;
+
 export const AgentStats = z.object({
   agent_id: z.string(),
   agent_name: z.string(),
@@ -115,6 +141,9 @@ export const AgentStats = z.object({
   }),
   /** recent runs for a small trend chart (oldest→newest). */
   trend: z.array(StatPoint),
+  most_used_skills: z.array(AgentStatsSkillUsage),
+  findings_by_category: z.array(AgentStatsCategoryCount),
+  run_history: z.array(AgentStatsRunRow),
 });
 export type AgentStats = z.infer<typeof AgentStats>;
 
