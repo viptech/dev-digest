@@ -144,9 +144,9 @@ export type CommunitySkill = z.infer<typeof CommunitySkill>;
 export const ConventionCandidate = z.object({
   id: z.string(),
   rule: z.string(),
-  evidence_path: z.string(),
-  evidence_snippet: z.string(),
-  confidence: z.number().min(0).max(1),
+  evidence_path: z.string().nullish(),
+  evidence_snippet: z.string().nullish(),
+  confidence: z.number().min(0).max(1).nullish(),
   accepted: z.boolean(),
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
