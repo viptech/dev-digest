@@ -3,8 +3,9 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Button, Modal, FormField, TextInput, Textarea, Tabs, Badge } from "@devdigest/ui";
-import type { EvalCase } from "@devdigest/shared";
+import type { EvalCaseWithLastRun } from "../../../../../../../../../lib/hooks/evals";
 import { useCreateEvalCase, useUpdateEvalCase, useRunEvalCase } from "../../../../../../../../../lib/hooks/evals";
+import { ApiError } from "../../../../../../../../../lib/api";
 import { isValidJson } from "./helpers";
 import { s } from "./styles";
 
@@ -17,13 +18,15 @@ export function EvalCaseModal({
   onClose,
 }: {
   agentId: string;
-  existing?: EvalCase;
+  existing?: EvalCaseWithLastRun;
   onClose: () => void;
 }) {
   const t = useTranslations("eval");
   const create = useCreateEvalCase(agentId);
   const update = useUpdateEvalCase(agentId);
   const run = useRunEvalCase(agentId);
+  const [error, setError] = React.useState<string | null>(null);
+  const [running, setRunning] = React.useState(false);
 
   const meta = (existing?.input_meta ?? {}) as { title?: string; body?: string };
   const [name, setName] = React.useState(existing?.name ?? "");
@@ -38,17 +41,52 @@ export function EvalCaseModal({
   const jsonValid = isValidJson(expectedText);
   const saving = create.isPending || update.isPending;
 
-  const save = async () => {
-    const input = {
-      name,
-      input_diff: diff,
-      input_meta: { title, body },
-      expected_output: jsonValid && expectedText.trim() ? JSON.parse(expectedText) : [],
-    };
-    if (existing) await update.mutateAsync({ id: existing.id, patch: input });
-    else await create.mutateAsync(input);
-    onClose();
+  const errorMessage = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
+
+  const buildInput = () => ({
+    name,
+    input_diff: diff,
+    input_meta: { title, body },
+    expected_output: jsonValid && expectedText.trim() ? JSON.parse(expectedText) : [],
+  });
+
+  /** Create-or-update, returning the persisted case id — used both by the
+   *  plain Save button and by "Run case" (which must save first so the run
+   *  reflects unsaved edits, not the stale persisted row). */
+  const persist = async (): Promise<string> => {
+    const input = buildInput();
+    if (existing) {
+      const updated = await update.mutateAsync({ id: existing.id, patch: input });
+      return updated.id;
+    }
+    const created = await create.mutateAsync(input);
+    return created.id;
   };
+
+  const save = async () => {
+    setError(null);
+    try {
+      await persist();
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e, t("caseEditor.saveFailed")));
+    }
+  };
+
+  const saveAndRun = async () => {
+    setError(null);
+    setRunning(true);
+    try {
+      const caseId = await persist();
+      await run.mutateAsync(caseId);
+    } catch (e) {
+      setError(errorMessage(e, t("caseEditor.runFailed")));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const lastRun = run.data?.run.per_trace[0] ?? (existing?.last_run ? { pass: existing.last_run.pass } : undefined);
 
   return (
     <Modal
@@ -56,24 +94,25 @@ export function EvalCaseModal({
       title={t("caseEditor.caseTitle", { name: name || t("caseEditor.newCase") })}
       onClose={onClose}
       footer={
-        <div style={s.footer}>
-          {existing && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {error && <div style={s.errorNotice}>{error}</div>}
+          <div style={s.footer}>
             <Button
               kind="secondary"
               icon="Play"
-              onClick={() => run.mutate(existing.id)}
-              disabled={run.isPending}
+              onClick={saveAndRun}
+              disabled={running || saving || !name.trim() || !jsonValid}
             >
-              {run.isPending ? t("caseEditor.running") : t("caseEditor.runCase")}
+              {running ? t("caseEditor.running") : t("caseEditor.runCase")}
             </Button>
-          )}
-          <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
-            <Button kind="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button kind="primary" onClick={save} disabled={saving || !name.trim() || !jsonValid}>
-              {saving ? t("caseEditor.saving") : t("caseEditor.save")}
-            </Button>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
+              <Button kind="ghost" onClick={onClose}>
+                {t("caseEditor.cancel")}
+              </Button>
+              <Button kind="primary" onClick={save} disabled={saving || running || !name.trim() || !jsonValid}>
+                {saving ? t("caseEditor.saving") : t("caseEditor.save")}
+              </Button>
+            </div>
           </div>
         </div>
       }
@@ -111,9 +150,9 @@ export function EvalCaseModal({
           >
             <Textarea value={expectedText} onChange={setExpectedText} rows={16} mono />
           </FormField>
-          {existing && run.data && (
-            <Badge color={run.data.run.per_trace[0]?.pass ? "var(--ok)" : "var(--crit)"}>
-              {run.data.run.per_trace[0]?.pass ? t("caseEditor.lastRunPassed") : t("caseEditor.lastRunFailed")}
+          {lastRun && (
+            <Badge color={lastRun.pass ? "var(--ok)" : "var(--crit)"}>
+              {lastRun.pass ? t("caseEditor.lastRunPassed") : t("caseEditor.lastRunFailed")}
             </Badge>
           )}
         </div>

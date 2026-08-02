@@ -6,4 +6,9 @@ export const s = {
   footer: { display: "flex", gap: 10, justifyContent: "flex-end" } satisfies CSSProperties,
   body: { padding: 24 } satisfies CSSProperties,
   columns: { display: "flex", gap: 20 } satisfies CSSProperties,
+  errorNotice: {
+    color: "var(--crit)",
+    fontSize: 12,
+    padding: "6px 0",
+  } satisfies CSSProperties,
 } as const;

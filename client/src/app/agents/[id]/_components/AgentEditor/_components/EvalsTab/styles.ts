@@ -17,4 +17,9 @@ export const s = {
   resultBadge: (pass: boolean): CSSProperties => ({
     color: pass ? "var(--ok)" : "var(--crit)",
   }),
+  rowError: {
+    color: "var(--crit)",
+    fontSize: 12,
+    padding: "0 12px",
+  } satisfies CSSProperties,
 } as const;
