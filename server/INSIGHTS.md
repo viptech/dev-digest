@@ -110,3 +110,32 @@ hallucinated-шляхів у `extract()`) без Testcontainers, треба зб
 сервіс лише читає через нього settings-override, який однаково відсутній.
 Доказ: server/test/conventions-file-guard.test.ts:24-58 (новий тест),
 патерн-прецедент — server/test/repo-intel-facade-degraded.test.ts:27-38
+
+## 2026-08-02 · gotcha
+**Fastify `app.inject()` без `payload` шле `null`-тіло, а не `undefined` — це валить zod `body: Schema.optional()`**
+Роут `POST /repos/:repoId/conventions/extract` отримав `body:
+ExtractBody.optional()`, а існуючі виклики в тесті були
+`app.inject({ method: 'POST', url })` без `payload` взагалі. Це давало
+422 `Expected object, received null` — light-my-request підставляє
+`null`, коли `payload` не передано і немає `Content-Type`, а
+`fastify-type-provider-zod` перевіряє body ще до хендлера, тож
+`req.body?.x` у коді ніколи не встигає обробити цей випадок. Фікс:
+явно передавати `payload: {}` у тестових викликах з порожнім тілом
+(не production-баг — суто особливість `inject()`).
+Доказ: server/test/conventions.it.test.ts:98-102
+
+## 2026-08-02 · gotcha
+**Зміна дефолтного значення параметра сервісу («мовчазна» зміна поведінки при виклику без аргументу) тихо ламає юніт-тест, написаний до появи цього параметра**
+`ConventionsService.extract()` отримав третій параметр `samplingMode:
+'code' | 'llm' = 'code'` (Task 4), а `conventions-file-guard.test.ts`
+викликав `service.extract('ws1', 'repo1')` без нього — до Task 4 це
+завжди йшло 2-step LLM-гілкою (де і живе filter-guard, який тест
+перевіряє), а після — пішло новою 'code'-гілкою, яка взагалі не
+викликає `ConventionFileSelection`, тож guard ніколи не спрацьовував і
+`readFiles` викликався 3 рази замість очікуваного 1. `tsc --noEmit`
+цього не ловить (параметр опціональний, тип валідний) — спливає лише
+на прогоні тестів. Урок: зміна дефолту опціонального параметра
+вимагає explicit-перевірки викликів без цього аргументу по всьому
+репо, не лише в місцях, які сам таск торкається.
+Доказ: server/test/conventions-file-guard.test.ts:64 (виклик тепер
+явно `service.extract('ws1', 'repo1', 'llm')`)
