@@ -11,14 +11,16 @@ export interface InsertConvention {
   workspaceId: string;
   repoId: string;
   rule: string;
+  category: string;
   evidencePath?: string | null;
   evidenceSnippet?: string | null;
+  evidenceLine?: number | null;
   confidence?: number | null;
 }
 
 export interface UpdateConvention {
   rule?: string;
-  accepted?: boolean;
+  status?: 'pending' | 'accepted' | 'rejected';
 }
 
 export class ConventionsRepository {
@@ -41,10 +43,13 @@ export class ConventionsRepository {
           workspaceId: r.workspaceId,
           repoId: r.repoId,
           rule: r.rule,
+          category: r.category,
           evidencePath: r.evidencePath ?? null,
           evidenceSnippet: r.evidenceSnippet ?? null,
+          evidenceLine: r.evidenceLine ?? null,
           confidence: r.confidence ?? null,
           accepted: false,
+          status: 'pending' as const,
         })),
       )
       .returning();
@@ -97,7 +102,7 @@ export class ConventionsRepository {
       .update(t.conventions)
       .set({
         ...(patch.rule !== undefined ? { rule: patch.rule } : {}),
-        ...(patch.accepted !== undefined ? { accepted: patch.accepted } : {}),
+        ...(patch.status !== undefined ? { status: patch.status, accepted: patch.status === 'accepted' } : {}),
       })
       .where(and(eq(t.conventions.workspaceId, workspaceId), eq(t.conventions.id, id)))
       .returning();

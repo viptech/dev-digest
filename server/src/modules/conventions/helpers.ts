@@ -6,10 +6,13 @@ export function toConventionDto(row: ConventionRow): ConventionCandidate {
   return {
     id: row.id,
     rule: row.rule,
+    category: row.category,
     evidence_path: row.evidencePath ?? null,
     evidence_snippet: row.evidenceSnippet ?? null,
+    evidence_line: row.evidenceLine ?? null,
     confidence: row.confidence ?? null,
-    accepted: row.accepted,
+    accepted: row.status === 'accepted',
+    status: row.status as 'pending' | 'accepted' | 'rejected',
   };
 }
 
@@ -23,8 +26,10 @@ export type ConventionFileSelection = z.infer<typeof ConventionFileSelectionSche
 export const ConventionExtractionSchema = z.object({
   candidates: z.array(
     z.object({
+      category: z.string().describe('Short category, e.g. "naming", "error-handling", "testing", "structure".'),
       rule: z.string(),
       evidence_path: z.string(),
+      evidence_line: z.number().int().describe('1-based line number in evidence_path where the pattern is shown.'),
       evidence_snippet: z.string(),
       confidence: z.number().min(0).max(1),
     }),

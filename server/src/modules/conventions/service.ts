@@ -138,8 +138,10 @@ export class ConventionsService {
         workspaceId,
         repoId,
         rule: c.rule,
+        category: c.category,
         evidencePath: c.evidence_path,
         evidenceSnippet: c.evidence_snippet,
+        evidenceLine: c.evidence_line,
         confidence: c.confidence,
       })),
     );
