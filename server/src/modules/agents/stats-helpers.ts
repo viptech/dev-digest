@@ -58,7 +58,7 @@ export function computeAgentStats(input: StatsInput): AgentStats {
 
   const skillRunCounts = new Map<string, number>();
   for (const r of runs) {
-    for (const id of r.skillIds ?? []) {
+    for (const id of new Set(r.skillIds ?? [])) {
       skillRunCounts.set(id, (skillRunCounts.get(id) ?? 0) + 1);
     }
   }

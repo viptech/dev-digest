@@ -96,4 +96,21 @@ describe('computeAgentStats', () => {
     expect(stats.most_used_skills[0]).toEqual({ skill_id: 's1', name: 'Corner Cases', pct: 0.5 });
     expect(stats.most_used_skills[1]).toEqual({ skill_id: 's2', name: 'Api Contract', pct: 0.25 });
   });
+
+  it('dedupes duplicate skill ids within a single run so pct never exceeds 1', () => {
+    const runs = [
+      { ...BASE_RUN, id: 'r1', skillIds: ['s1', 's1'] },
+      { ...BASE_RUN, id: 'r2', skillIds: ['s1'] },
+    ];
+    const stats = computeAgentStats({
+      agentId: 'a1',
+      agentName: 'Agent',
+      runs,
+      findings: [],
+      skillNames: new Map([['s1', 'Corner Cases']]),
+    });
+    // Both runs used s1 once each (duplicate mention within r1 must not double-count) -> 2/2 = 1.
+    expect(stats.most_used_skills[0]).toEqual({ skill_id: 's1', name: 'Corner Cases', pct: 1 });
+    expect(stats.most_used_skills[0]!.pct).toBeLessThanOrEqual(1);
+  });
 });
