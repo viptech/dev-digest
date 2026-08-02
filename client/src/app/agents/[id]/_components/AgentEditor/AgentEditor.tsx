@@ -1,6 +1,7 @@
 /* AgentEditor — agent config editor (model + system prompt) + Skills tab
-   (link/unlink/reorder the skills fed into this agent's prompt). Later
-   lessons add Evals/Stats/CI tabs. Tab state lives in ?tab=. */
+   (link/unlink/reorder the skills fed into this agent's prompt) + Evals tab
+   (eval cases + Run case). Later lessons add Stats/CI tabs. Tab state lives
+   in ?tab=. */
 "use client";
 
 import React from "react";
