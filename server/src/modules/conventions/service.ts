@@ -121,7 +121,7 @@ export class ConventionsService {
     });
 
     const rawCandidates = extraction.data.candidates.slice(0, MAX_CANDIDATES);
-    const verified = await verifyEvidence(this.container.repoIntel, repoId, rawCandidates);
+    const verified = verifyEvidence(files, rawCandidates);
     if (verified.length < rawCandidates.length) {
       logger?.warn(
         { repoId, workspaceId, dropped: rawCandidates.length - verified.length },

@@ -66,11 +66,11 @@ describe('ConventionsService.extract — file-selection guard', () => {
     // calls ConventionFileSelection at all, so it wouldn't exercise this path.
     await service.extract('ws1', 'repo1', 'llm');
 
-    // First call is the guarded readFiles(repoId, selected) for the files the
-    // model chose to read; verifyEvidence issues a second readFiles call
-    // afterwards for evidence checking (empty here since ConventionExtraction
-    // returns no candidates), so we assert on the first call specifically
-    // rather than on the total call count.
+    // Only one readFiles call happens now: the guarded readFiles(repoId, selected)
+    // for the files the model chose to read. verifyEvidence no longer issues its
+    // own readFiles call — it verifies against this same in-memory `files` array,
+    // so a candidate's evidence_path must match a path that was actually read.
+    expect(readFiles).toHaveBeenCalledTimes(1);
     const [, passedPaths] = readFiles.mock.calls[0]!;
     expect(passedPaths).toEqual(['src/a.ts']);
     expect(passedPaths).not.toContain('../../etc/passwd');
