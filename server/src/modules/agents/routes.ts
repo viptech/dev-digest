@@ -73,7 +73,10 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
 
   app.get('/agents', async (req) => {
     const { workspaceId } = await getContext(app.container, req);
-    return service.list(workspaceId);
+    const agents = await service.list(workspaceId);
+    // Renamed for clarity — `is_enabled` reads better than the bare `enabled`
+    // once we add more boolean toggles to this list response.
+    return agents.map(({ enabled, ...rest }) => ({ ...rest, is_enabled: enabled }));
   });
 
   app.get('/agents/:id', { schema: { params: IdParams } }, async (req) => {
