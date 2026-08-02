@@ -10,6 +10,7 @@ vi.mock("@/components/app-shell", () => ({
 }));
 
 const extractMutate = vi.fn();
+const updateMutateAsync = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/hooks/conventions", () => ({
   useConventions: () => ({
     data: [
@@ -27,14 +28,26 @@ vi.mock("@/lib/hooks/conventions", () => ({
     refetch: vi.fn(),
   }),
   useExtractConventions: () => ({ mutate: extractMutate, isPending: false, isError: false }),
-  useUpdateConvention: () => ({ mutateAsync: vi.fn() }),
+  useUpdateConvention: () => ({ mutateAsync: updateMutateAsync }),
 }));
 vi.mock("next/navigation", () => ({ useParams: () => ({ repoId: "r1" }) }));
-vi.mock("@/lib/repo-context", () => ({ useActiveRepo: () => ({ activeRepo: { full_name: "acme/demo" } }) }));
+let repoNotFound = false;
+vi.mock("@/lib/repo-context", () => ({
+  useActiveRepo: () => ({ activeRepo: { full_name: "acme/demo" } }),
+  useRepoNotFound: () => repoNotFound,
+}));
+vi.mock("@/components/repo-not-found", () => ({
+  RepoNotFound: () => <div>repo-not-found</div>,
+}));
 
 import { ConventionsView } from "./ConventionsView";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  repoNotFound = false;
+  updateMutateAsync.mockClear();
+  updateMutateAsync.mockResolvedValue(undefined);
+});
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
@@ -55,5 +68,21 @@ describe("ConventionsView", () => {
     renderWithIntl(<ConventionsView />);
     fireEvent.click(screen.getByText("Re-scan"));
     expect(extractMutate).toHaveBeenCalled();
+  });
+
+  it("shows RepoNotFound instead of the grid when the repo doesn't resolve", () => {
+    repoNotFound = true;
+    renderWithIntl(<ConventionsView />);
+    expect(screen.getByText("repo-not-found")).toBeInTheDocument();
+    expect(screen.queryByText("Services take a Container.")).not.toBeInTheDocument();
+  });
+
+  it("clears the Accepting state and surfaces an inline error when accept fails", async () => {
+    updateMutateAsync.mockRejectedValueOnce(new Error("boom"));
+    renderWithIntl(<ConventionsView />);
+    fireEvent.click(screen.getByText("Accept as Skill"));
+    expect(await screen.findByText("Couldn't accept — try again.")).toBeInTheDocument();
+    expect(screen.getByText("Accept as Skill")).toBeInTheDocument();
+    expect(screen.queryByText("Accepting…")).not.toBeInTheDocument();
   });
 });

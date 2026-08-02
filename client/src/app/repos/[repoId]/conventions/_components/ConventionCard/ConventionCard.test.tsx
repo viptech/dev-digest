@@ -43,4 +43,9 @@ describe("ConventionCard", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(onAccept).toHaveBeenCalled();
   });
+
+  it("shows the error message when passed one", () => {
+    renderWithIntl(<ConventionCard candidate={CANDIDATE} onAccept={vi.fn()} error="Couldn't accept — try again." />);
+    expect(screen.getByText("Couldn't accept — try again.")).toBeInTheDocument();
+  });
 });

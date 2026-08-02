@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 
@@ -28,12 +28,13 @@ export class ConventionsRepository {
     return this.db
       .select()
       .from(t.conventions)
-      .where(and(eq(t.conventions.workspaceId, workspaceId), eq(t.conventions.repoId, repoId)));
+      .where(and(eq(t.conventions.workspaceId, workspaceId), eq(t.conventions.repoId, repoId)))
+      .orderBy(desc(t.conventions.confidence));
   }
 
-  async insertMany(rows: InsertConvention[]): Promise<ConventionRow[]> {
+  async insertMany(rows: InsertConvention[], db: Db = this.db): Promise<ConventionRow[]> {
     if (rows.length === 0) return [];
-    return this.db
+    return db
       .insert(t.conventions)
       .values(
         rows.map((r) => ({
@@ -52,8 +53,8 @@ export class ConventionsRepository {
   /** Drop candidates the user never accepted, before a re-scan writes fresh
    *  ones — keeps the list from growing unbounded across repeated "Extract"
    *  clicks while preserving anything already accepted. */
-  async deleteUnaccepted(workspaceId: string, repoId: string): Promise<void> {
-    await this.db
+  async deleteUnaccepted(workspaceId: string, repoId: string, db: Db = this.db): Promise<void> {
+    await db
       .delete(t.conventions)
       .where(
         and(
@@ -62,6 +63,21 @@ export class ConventionsRepository {
           eq(t.conventions.accepted, false),
         ),
       );
+  }
+
+  /** Atomically replaces the unaccepted candidates for a repo: delete the old
+   *  ones and insert the fresh ones in a single transaction, so a DB failure
+   *  between the two steps can't silently drop existing candidates without
+   *  writing the new set. */
+  async replaceUnaccepted(
+    workspaceId: string,
+    repoId: string,
+    rows: InsertConvention[],
+  ): Promise<ConventionRow[]> {
+    return this.db.transaction(async (tx) => {
+      await this.deleteUnaccepted(workspaceId, repoId, tx);
+      return this.insertMany(rows, tx);
+    });
   }
 
   async getById(workspaceId: string, id: string): Promise<ConventionRow | undefined> {

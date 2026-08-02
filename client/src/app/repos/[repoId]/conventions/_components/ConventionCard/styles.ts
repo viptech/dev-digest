@@ -19,4 +19,8 @@ export const s = {
     whiteSpace: "pre-wrap",
   } as React.CSSProperties,
   footer: { display: "flex", alignItems: "center", gap: 10 } as React.CSSProperties,
+  error: {
+    fontSize: 12,
+    color: "var(--crit)",
+  } as React.CSSProperties,
 };

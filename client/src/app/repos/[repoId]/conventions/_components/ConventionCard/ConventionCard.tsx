@@ -10,10 +10,12 @@ export function ConventionCard({
   candidate,
   onAccept,
   accepting,
+  error,
 }: {
   candidate: ConventionCandidate;
   onAccept: () => void;
   accepting?: boolean;
+  error?: string;
 }) {
   const t = useTranslations("conventions");
   return (
@@ -25,6 +27,7 @@ export function ConventionCard({
           {candidate.evidence_snippet ? `\n${candidate.evidence_snippet}` : ""}
         </div>
       )}
+      {error && <div style={s.error}>{error}</div>}
       <div style={s.footer}>
         {candidate.confidence != null && (
           <Badge color="var(--text-secondary)">

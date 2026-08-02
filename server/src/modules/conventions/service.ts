@@ -14,6 +14,14 @@ export interface UpdateConventionInput {
   accepted?: boolean;
 }
 
+/** Minimal structured logger (pino-compatible: (obj, msg)) — mirrors reviews/run-executor.ts's Logger. */
+export type Logger = {
+  info: (obj: unknown, msg?: string) => void;
+  warn: (obj: unknown, msg?: string) => void;
+  error: (obj: unknown, msg?: string) => void;
+  debug: (obj: unknown, msg?: string) => void;
+};
+
 export class ConventionsService {
   private repo: ConventionsRepository;
 
@@ -42,9 +50,15 @@ export class ConventionsService {
    * the clone has no readable files — matches repo-intel's existing
    * best-effort contract.
    */
-  async extract(workspaceId: string, repoId: string): Promise<ConventionCandidate[]> {
+  async extract(workspaceId: string, repoId: string, logger?: Logger): Promise<ConventionCandidate[]> {
     const samples = await this.container.repoIntel.getConventionSamples(repoId, SAMPLE_COUNT);
-    if (samples.length === 0) return this.list(workspaceId, repoId);
+    if (samples.length === 0) {
+      logger?.warn(
+        { repoId, workspaceId },
+        'conventions.extract: no candidate files from repo-intel — repo may not be indexed',
+      );
+      return this.list(workspaceId, repoId);
+    }
 
     const { provider, model } = await resolveFeatureModel(this.container, workspaceId, 'conventions');
     const llm = await this.container.llm(provider as Provider);
@@ -71,10 +85,22 @@ export class ConventionsService {
     const selected = selection.data.files
       .filter((f) => samples.includes(f))
       .slice(0, MAX_SELECTED_FILES);
-    if (selected.length === 0) return this.list(workspaceId, repoId);
+    if (selected.length === 0) {
+      logger?.warn(
+        { repoId, workspaceId, offered: samples.length, modelReturned: selection.data.files.length },
+        'conventions.extract: model selected no files that were actually offered — dropping the response',
+      );
+      return this.list(workspaceId, repoId);
+    }
 
     const files = await this.container.repoIntel.readFiles(repoId, selected);
-    if (files.length === 0) return this.list(workspaceId, repoId);
+    if (files.length === 0) {
+      logger?.warn(
+        { repoId, workspaceId, selected },
+        'conventions.extract: none of the selected files were readable from the clone',
+      );
+      return this.list(workspaceId, repoId);
+    }
 
     const filesBlock = files
       .map((f) => `### ${f.path}\n${f.content.slice(0, MAX_FILE_CHARS)}`)
@@ -98,9 +124,16 @@ export class ConventionsService {
     });
 
     const candidates = extraction.data.candidates.slice(0, MAX_CANDIDATES);
+    if (candidates.length === 0) {
+      logger?.warn(
+        { repoId, workspaceId, filesRead: files.length },
+        'conventions.extract: model extracted zero rule candidates from the read files',
+      );
+    }
 
-    await this.repo.deleteUnaccepted(workspaceId, repoId);
-    await this.repo.insertMany(
+    await this.repo.replaceUnaccepted(
+      workspaceId,
+      repoId,
       candidates.map((c) => ({
         workspaceId,
         repoId,

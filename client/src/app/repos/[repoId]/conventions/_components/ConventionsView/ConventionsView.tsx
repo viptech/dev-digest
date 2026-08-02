@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, EmptyState, ErrorState, Skeleton } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
-import { useActiveRepo } from "@/lib/repo-context";
+import { RepoNotFound } from "@/components/repo-not-found";
+import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { useConventions, useExtractConventions, useUpdateConvention } from "@/lib/hooks/conventions";
 import { ConventionCard } from "../ConventionCard";
 import { s } from "./styles";
@@ -15,18 +16,34 @@ export function ConventionsView() {
   const params = useParams<{ repoId: string }>();
   const repoId = params.repoId;
   const { activeRepo } = useActiveRepo();
+  const repoNotFound = useRepoNotFound(repoId);
   const { data: candidates, isLoading, isError, refetch } = useConventions(repoId);
   const extract = useExtractConventions(repoId);
   const update = useUpdateConvention(repoId);
   const [acceptingId, setAcceptingId] = React.useState<string | null>(null);
+  const [acceptErrorId, setAcceptErrorId] = React.useState<string | null>(null);
 
   const accept = async (id: string) => {
     setAcceptingId(id);
-    await update.mutateAsync({ id, patch: { accepted: true } });
-    setAcceptingId(null);
+    setAcceptErrorId(null);
+    try {
+      await update.mutateAsync({ id, patch: { accepted: true } });
+    } catch {
+      setAcceptErrorId(id);
+    } finally {
+      setAcceptingId(null);
+    }
   };
 
   const repoName = activeRepo?.full_name ?? t("page.repoFallback");
+
+  if (repoNotFound) {
+    return (
+      <AppShell crumb={[{ label: t("page.crumbLab") }, { label: t("page.crumbConventions") }]}>
+        <RepoNotFound />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell crumb={[{ label: t("page.crumbLab") }, { label: t("page.crumbConventions") }]}>
@@ -83,6 +100,7 @@ export function ConventionsView() {
                   candidate={c}
                   onAccept={() => accept(c.id)}
                   accepting={acceptingId === c.id}
+                  error={acceptErrorId === c.id ? t("card.acceptFailed") : undefined}
                 />
               ))}
             </div>
