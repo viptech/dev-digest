@@ -18,7 +18,18 @@
     "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files",
     "samplingModeLabel": "Sampling",
     "samplingModeCode": "Code-only (deterministic)",
-    "samplingModeLlm": "LLM picks files"
+    "samplingModeLlm": "LLM picks files",
+    "createSkillFromAccepted": "Create skill from accepted"
+  },
+  "createSkillModal": {
+    "title": "Create skill from accepted candidates",
+    "subtitle": "{count, plural, one {# candidate} other {# candidates}} will be included",
+    "nameLabel": "Skill name",
+    "descriptionLabel": "Description",
+    "agentLabel": "Link to agent",
+    "bodyLabel": "Skill body (Markdown)",
+    "save": "Create skill",
+    "saving": "Creating…"
   },
   "card": {
     "confidence": "Confidence",

@@ -9,6 +9,7 @@ import { RepoNotFound } from "@/components/repo-not-found";
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { useConventions, useExtractConventions, useUpdateConvention } from "@/lib/hooks/conventions";
 import { ConventionCard } from "../ConventionCard";
+import { CreateSkillFromConventionsModal } from "../CreateSkillFromConventionsModal";
 import { s } from "./styles";
 
 export function ConventionsView() {
@@ -23,6 +24,8 @@ export function ConventionsView() {
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [errorId, setErrorId] = React.useState<string | null>(null);
   const [samplingMode, setSamplingMode] = React.useState<"code" | "llm">("code");
+  const [showCreateSkill, setShowCreateSkill] = React.useState(false);
+  const acceptedCandidates = (candidates ?? []).filter((c) => c.status === "accepted");
 
   const setStatus = async (id: string, status: "accepted" | "rejected") => {
     setBusyId(id);
@@ -80,6 +83,14 @@ export function ConventionsView() {
                   ? t("page.rescan")
                   : t("page.runExtraction")}
             </Button>
+            <Button
+              kind="secondary"
+              size="sm"
+              onClick={() => setShowCreateSkill(true)}
+              disabled={acceptedCandidates.length === 0}
+            >
+              {t("page.createSkillFromAccepted")}
+            </Button>
           </div>
         </div>
 
@@ -124,6 +135,12 @@ export function ConventionsView() {
           </>
         )}
       </div>
+      {showCreateSkill && (
+        <CreateSkillFromConventionsModal
+          accepted={acceptedCandidates}
+          onClose={() => setShowCreateSkill(false)}
+        />
+      )}
     </AppShell>
   );
 }
