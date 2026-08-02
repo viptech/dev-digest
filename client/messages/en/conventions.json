@@ -29,7 +29,8 @@
     "agentLabel": "Link to agent",
     "bodyLabel": "Skill body (Markdown)",
     "save": "Create skill",
-    "saving": "Creating…"
+    "saving": "Creating…",
+    "saveFailed": "Couldn't create the skill. Please try again."
   },
   "card": {
     "confidence": "Confidence",

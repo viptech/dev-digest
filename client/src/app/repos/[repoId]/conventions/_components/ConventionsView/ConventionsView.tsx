@@ -61,15 +61,20 @@ export function ConventionsView() {
             <p style={s.subtitle}>{t("page.subtitle")}</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <SelectInput
-              value={samplingMode}
-              onChange={(v) => setSamplingMode(v as "code" | "llm")}
-              options={[
-                { value: "code", label: t("page.samplingModeCode") },
-                { value: "llm", label: t("page.samplingModeLlm") },
-              ]}
-              mono={false}
-            />
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)" }}>
+                {t("page.samplingModeLabel")}
+              </span>
+              <SelectInput
+                value={samplingMode}
+                onChange={(v) => setSamplingMode(v as "code" | "llm")}
+                options={[
+                  { value: "code", label: t("page.samplingModeCode") },
+                  { value: "llm", label: t("page.samplingModeLlm") },
+                ]}
+                mono={false}
+              />
+            </label>
             <Button
               kind="primary"
               size="sm"

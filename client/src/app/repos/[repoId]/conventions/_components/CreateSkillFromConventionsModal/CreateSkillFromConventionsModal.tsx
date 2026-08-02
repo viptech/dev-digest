@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button, Modal, FormField, TextInput, Textarea, SelectInput } from "@devdigest/ui";
 import type { ConventionCandidate } from "@devdigest/shared";
 import { useCreateSkill } from "@/lib/hooks/skills";
@@ -17,6 +18,7 @@ export function CreateSkillFromConventionsModal({
   onClose: () => void;
 }) {
   const t = useTranslations("conventions");
+  const qc = useQueryClient();
   const { data: agents } = useAgents();
   const create = useCreateSkill();
   const [name, setName] = React.useState("repo-conventions");
@@ -37,10 +39,11 @@ export function CreateSkillFromConventionsModal({
       const skill = await create.mutateAsync({ name, description, type: "convention", body });
       if (agentId) {
         await api.post(`/agents/${agentId}/skills`, { skill_id: skill.id });
+        qc.invalidateQueries({ queryKey: ["agent-skills", agentId] });
       }
       onClose();
     } catch {
-      setError(t("card.acceptFailed"));
+      setError(t("createSkillModal.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -57,7 +60,11 @@ export function CreateSkillFromConventionsModal({
           <Button kind="ghost" onClick={onClose}>
             {t("card.cancelEdit")}
           </Button>
-          <Button kind="primary" onClick={submit} disabled={saving || !name.trim() || !body.trim() || !agentId}>
+          <Button
+            kind="primary"
+            onClick={submit}
+            disabled={saving || !name.trim() || !description.trim() || !body.trim() || !agentId}
+          >
             {saving ? t("createSkillModal.saving") : t("createSkillModal.save")}
           </Button>
         </div>

@@ -79,7 +79,7 @@ export function ConventionCard({
           )}
           {error && <div style={s.error}>{error}</div>}
           <div style={s.footer}>
-            <Badge color="var(--text-muted)">{candidate.category || t("card.category")}</Badge>
+            {candidate.category && <Badge color="var(--text-muted)">{candidate.category}</Badge>}
             {candidate.confidence != null && (
               <Badge color="var(--text-secondary)">
                 {t("card.confidence")}: {Math.round(candidate.confidence * 100)}%

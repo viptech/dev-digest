@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import messages from "../../../../../../../messages/en/conventions.json";
 import type { ConventionCandidate } from "@devdigest/shared";
 import { buildSkillBody } from "./helpers";
@@ -65,11 +66,13 @@ afterEach(() => {
   });
 });
 
-function renderWithIntl(ui: React.ReactElement) {
+function renderWithIntl(ui: React.ReactElement, qc: QueryClient = new QueryClient()) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ conventions: messages }}>
-      {ui}
-    </NextIntlClientProvider>,
+    <QueryClientProvider client={qc}>
+      <NextIntlClientProvider locale="en" messages={{ conventions: messages }}>
+        {ui}
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -91,6 +94,14 @@ describe("CreateSkillFromConventionsModal", () => {
     expect(save).toBeDisabled();
   });
 
+  it("Save is disabled without a description", () => {
+    renderWithIntl(<CreateSkillFromConventionsModal accepted={accepted} onClose={vi.fn()} />);
+    const save = screen.getByText("Create skill").closest("button")!;
+    const descriptionInput = screen.getByDisplayValue("House conventions extracted from this repo.");
+    fireEvent.change(descriptionInput, { target: { value: "  " } });
+    expect(save).toBeDisabled();
+  });
+
   it("Save is disabled without a selected agent", () => {
     useAgentsMock.mockReturnValue({ data: [] });
     renderWithIntl(<CreateSkillFromConventionsModal accepted={accepted} onClose={vi.fn()} />);
@@ -98,9 +109,11 @@ describe("CreateSkillFromConventionsModal", () => {
     expect(save).toBeDisabled();
   });
 
-  it("submitting calls useCreateSkill then api.post with the returned skill id", async () => {
+  it("submitting calls useCreateSkill then api.post with the returned skill id, and invalidates the agent-skills cache", async () => {
     const onClose = vi.fn();
-    renderWithIntl(<CreateSkillFromConventionsModal accepted={accepted} onClose={onClose} />);
+    const qc = new QueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    renderWithIntl(<CreateSkillFromConventionsModal accepted={accepted} onClose={onClose} />, qc);
     await act(async () => {
       fireEvent.click(screen.getByText("Create skill"));
       await Promise.resolve();
@@ -108,6 +121,7 @@ describe("CreateSkillFromConventionsModal", () => {
     });
     expect(createMutateAsync).toHaveBeenCalled();
     expect(apiPost).toHaveBeenCalledWith("/agents/a1/skills", { skill_id: "new-skill-id" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["agent-skills", "a1"] });
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -116,7 +130,7 @@ describe("CreateSkillFromConventionsModal", () => {
     const onClose = vi.fn();
     renderWithIntl(<CreateSkillFromConventionsModal accepted={accepted} onClose={onClose} />);
     fireEvent.click(screen.getByText("Create skill"));
-    expect(await screen.findByText("Couldn't accept — try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't create the skill. Please try again.")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });
 });
