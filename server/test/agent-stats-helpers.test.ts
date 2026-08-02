@@ -97,6 +97,18 @@ describe('computeAgentStats', () => {
     expect(stats.most_used_skills[1]).toEqual({ skill_id: 's2', name: 'Api Contract', pct: 0.25 });
   });
 
+  it('falls back to a readable placeholder (not the raw UUID) for a skill no longer in skillNames', () => {
+    const runs = [{ ...BASE_RUN, id: 'r1', skillIds: ['deleted-id'] }];
+    const stats = computeAgentStats({
+      agentId: 'a1',
+      agentName: 'Agent',
+      runs,
+      findings: [],
+      skillNames: new Map(), // skill hard-deleted — id not present
+    });
+    expect(stats.most_used_skills[0]).toEqual({ skill_id: 'deleted-id', name: '(deleted skill)', pct: 1 });
+  });
+
   it('dedupes duplicate skill ids within a single run so pct never exceeds 1', () => {
     const runs = [
       { ...BASE_RUN, id: 'r1', skillIds: ['s1', 's1'] },

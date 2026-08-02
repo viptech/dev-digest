@@ -34,6 +34,12 @@ export class StatsRepository {
           eq(t.agentRuns.workspaceId, workspaceId),
           eq(t.agentRuns.agentId, agentId),
           gte(t.agentRuns.ranAt, since),
+          // Stats describe completed reviews — a 'running'/'failed' run has
+          // null skillIds/costUsd/durationMs and would otherwise pollute
+          // every headline aggregate (total runs, avg cost/latency, and the
+          // most-used-skills % denominator) with rows that never produced a
+          // review.
+          eq(t.agentRuns.status, 'done'),
         ),
       );
 

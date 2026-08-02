@@ -119,6 +119,86 @@ d('agent stats (Testcontainers pg)', () => {
     await app.close();
   });
 
+  it('resolves a real agent_skills link into most_used_skills with the correct name and pct (Plan A wiring)', async () => {
+    const app = await buildApp({
+      config: config(),
+      db: pg.handle.db,
+      overrides: {
+        embedder: new MockEmbedder(),
+        git: new MockGitClient({ diff: DIFF }),
+        llm: { openai: new MockLLMProvider('openai', { structured: REVIEW }) },
+      },
+    });
+
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Skill Stats Agent', provider: 'openai', model: 'gpt-4.1', system_prompt: 'review' },
+      })
+    ).json();
+
+    const skill = (
+      await app.inject({
+        method: 'POST',
+        url: '/skills',
+        payload: {
+          name: 'Corner Cases',
+          description: 'Checks corner cases',
+          body: 'Look for corner cases.',
+          enabled: true,
+        },
+      })
+    ).json();
+
+    const linkRes = await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/skills`,
+      payload: { skill_id: skill.id },
+    });
+    expect(linkRes.statusCode).toBe(200);
+
+    const [repo] = await pg.handle.db
+      .insert(t.repos)
+      .values({ workspaceId, owner: 'acme', name: 'skill-stats-repo', fullName: 'acme/skill-stats-repo' })
+      .returning();
+    const [pr] = await pg.handle.db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId: repo!.id,
+        number: 9,
+        title: 't',
+        author: 'a',
+        branch: 'b',
+        base: 'main',
+        headSha: 'x',
+        additions: 1,
+        deletions: 0,
+        filesCount: 1,
+        status: 'needs_review',
+      })
+      .returning();
+    await pg.handle.db.insert(t.prFiles).values({
+      prId: pr!.id,
+      path: 'src/config.ts',
+      additions: 1,
+      deletions: 0,
+      patch: '@@ -10,3 +10,4 @@\n   port: 3000,\n+  stripeKey: "sk_live_xxx",\n   redisUrl: x,',
+    });
+
+    await app.inject({ method: 'POST', url: `/pulls/${pr!.id}/review`, payload: { agentId: agent.id } });
+    await waitForPrRuns(pg.handle.db, pr!.id, { expected: 1 });
+
+    const res = await app.inject({ method: 'GET', url: `/agents/${agent.id}/stats` });
+    expect(res.statusCode).toBe(200);
+    const stats = res.json();
+    expect(stats.runs).toBe(1);
+    expect(stats.most_used_skills).toEqual([{ skill_id: skill.id, name: 'Corner Cases', pct: 1 }]);
+
+    await app.close();
+  });
+
   it('404s for an unknown agent', async () => {
     const app = await buildApp({
       config: config(),

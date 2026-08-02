@@ -65,7 +65,10 @@ export function computeAgentStats(input: StatsInput): AgentStats {
   const mostUsedSkills = [...skillRunCounts.entries()]
     .map(([skillId, count]) => ({
       skill_id: skillId,
-      name: skillNames.get(skillId) ?? skillId,
+      // Skills are hard-deleted (no FK) — a historical run can reference an
+      // id that no longer resolves. Show a readable placeholder instead of
+      // a raw 36-char UUID.
+      name: skillNames.get(skillId) ?? '(deleted skill)',
       pct: runs.length === 0 ? 0 : count / runs.length,
     }))
     .sort((a, b) => b.pct - a.pct)
