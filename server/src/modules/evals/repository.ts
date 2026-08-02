@@ -133,7 +133,7 @@ export class EvalsRepository {
       .select()
       .from(t.evalRuns)
       .where(inArray(t.evalRuns.caseId, caseIds))
-      .orderBy(desc(t.evalRuns.ranAt));
+      .orderBy(desc(t.evalRuns.ranAt), desc(t.evalRuns.id));
     const out = new Map<string, EvalRunRow>();
     for (const row of rows) {
       if (!out.has(row.caseId)) out.set(row.caseId, row); // first hit per case = newest (orderBy desc)
