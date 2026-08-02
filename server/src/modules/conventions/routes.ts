@@ -15,9 +15,13 @@ import { ConventionsService } from './service.js';
 
 const RepoParams = z.object({ repoId: z.string().uuid() });
 
+const ExtractBody = z.object({
+  sampling_mode: z.enum(['code', 'llm']).optional(),
+});
+
 const UpdateConventionBody = z.object({
   rule: z.string().min(1).optional(),
-  accepted: z.boolean().optional(),
+  status: z.enum(['pending', 'accepted', 'rejected']).optional(),
 });
 
 export default async function conventionsRoutes(appBase: FastifyInstance) {
@@ -31,10 +35,10 @@ export default async function conventionsRoutes(appBase: FastifyInstance) {
 
   app.post(
     '/repos/:repoId/conventions/extract',
-    { schema: { params: RepoParams } },
+    { schema: { params: RepoParams, body: ExtractBody.optional() } },
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
-      return service.extract(workspaceId, req.params.repoId, req.log);
+      return service.extract(workspaceId, req.params.repoId, req.body?.sampling_mode ?? 'code', req.log);
     },
   );
 
