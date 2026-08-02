@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { StatsTab } from "./StatsTab";
-import type { AgentStats } from "@devdigest/shared";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import type { AgentStats, RunTrace } from "@devdigest/shared";
+import agentsMessages from "../../../../../../../../messages/en/agents.json";
+import runsMessages from "../../../../../../../../messages/en/runs.json";
 
 const STATS: AgentStats = {
   agent_id: "a1",
@@ -28,13 +30,40 @@ const STATS: AgentStats = {
   ],
 };
 
+const TRACE: RunTrace = {
+  config: { agent: "Agent", version: "1", provider: "openai", model: "gpt-4.1", pr: 482, source: "local" },
+  stats: { duration_ms: 6200, tokens_in: 1000, tokens_out: 200, cost_usd: 0.05, findings: 3, grounding: "1/1 passed" },
+  prompt_assembly: { system: "You are a reviewer.", skills: "### skill", memory: null, specs: null, user: "Review PR #482" },
+  tool_calls: [],
+  raw_output: "{}",
+  memory_pulled: [],
+  specs_read: [],
+  log: [],
+};
+
 vi.mock("../../../../../../../lib/hooks/agents", () => ({
   useAgentStats: () => ({ data: STATS, isLoading: false }),
 }));
+vi.mock("../../../../../../../lib/hooks/trace", () => ({
+  useRunTrace: () => ({ data: TRACE, isLoading: false }),
+}));
+vi.mock("../../../../../../../lib/hooks/reviews", () => ({
+  useRunEvents: () => ({ events: [], running: false }),
+}));
+
+import { StatsTab } from "./StatsTab";
+
+function renderWithIntl(ui: React.ReactElement) {
+  return render(
+    <NextIntlClientProvider locale="en" messages={{ agents: agentsMessages, runs: runsMessages }}>
+      {ui}
+    </NextIntlClientProvider>,
+  );
+}
 
 describe("StatsTab", () => {
   it("renders the 4 headline tiles", () => {
-    render(<StatsTab agentId="a1" />);
+    renderWithIntl(<StatsTab agentId="a1" />);
     expect(screen.getByText("5")).toBeInTheDocument(); // total runs
     expect(screen.getByText("$0.04")).toBeInTheDocument();
     expect(screen.getByText("6.2s")).toBeInTheDocument();
@@ -42,8 +71,15 @@ describe("StatsTab", () => {
   });
 
   it("renders most-used skills and run history", () => {
-    render(<StatsTab agentId="a1" />);
+    renderWithIntl(<StatsTab agentId="a1" />);
     expect(screen.getByText("Corner Cases")).toBeInTheDocument();
     expect(screen.getByText("#482")).toBeInTheDocument();
+  });
+
+  it("opens the run trace drawer for a row when 'View trace' is clicked", () => {
+    renderWithIntl(<StatsTab agentId="a1" />);
+    expect(screen.queryByText("Configuration")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("View trace"));
+    expect(screen.getByText("Configuration")).toBeInTheDocument(); // RunTraceDrawer's trace tab
   });
 });

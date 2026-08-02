@@ -16,4 +16,13 @@ export const s = {
   table: { width: "100%", borderCollapse: "collapse", fontSize: 12 } satisfies CSSProperties,
   th: { textAlign: "left", color: "var(--text-muted)", padding: "6px 8px", borderBottom: "1px solid var(--border)" } satisfies CSSProperties,
   td: { padding: "6px 8px", borderBottom: "1px solid var(--border)" } satisfies CSSProperties,
+  traceLink: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    color: "var(--accent)",
+    fontSize: 12,
+    cursor: "pointer",
+    textDecoration: "underline",
+  } satisfies CSSProperties,
 };
