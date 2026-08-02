@@ -82,3 +82,31 @@ LLM-selection / `evidence_path` всі кажуть `src/service.ts`, а фік�
 Доказ: server/test/conventions.it.test.ts (фікстура пишеться в
 `join(clonePath, 'src', 'service.ts')`, щоб збігтись з usages по всьому
 тесту); readClone — server/src/modules/repo-intel/service.ts:779
+
+## 2026-08-02 · gotcha
+**Немає жодного прецеденту `db.transaction(...)` у `server/src` — `grep -rn "transaction" server/src` знаходить лише коментар у `seed-prompts.ts`**
+Коли треба обгорнути кілька repository-викликів в одну транзакцію (напр.
+`deleteUnaccepted` + `insertMany` в conventions), немає усталеного
+патерну "проброс tx через сервіс" — довелось завести його самому:
+repository-методи (`insertMany`, `deleteUnaccepted`) приймають
+опціональний `db: Db = this.db` останнім параметром, а новий метод
+(`replaceUnaccepted`) відкриває `this.db.transaction(async (tx) => {...})`
+і прокидає `tx` замість `this.db` у внутрішні виклики. Наступного разу,
+коли знадобиться транзакція деінде — або йди цим шляхом, або онови цей
+запис, якщо з'явиться кращий спільний патерн.
+Доказ: server/src/modules/conventions/repository.ts:68-81
+
+## 2026-08-02 · decision
+**Юніт-тест сервісу без Postgres: патчимо приватне поле `repo` напряму через `as unknown as {repo: ...}`, а не мокаємо весь `Container`**
+`ConventionsService`/`RepoIntelService` створюють свій repository у
+конструкторі (`this.repo = new XRepository(container.db)`), тож щоб
+протестувати саму сервісну логіку (напр. filter-guard від
+hallucinated-шляхів у `extract()`) без Testcontainers, треба збудувати
+мінімальний `Container`-like об'єкт лише з тими полями, які сервіс
+реально читає (тут: `repoIntel`, `llm`, і фіктивний `db` для
+`resolveFeatureModel`), а потім переписати `service['repo']` напряму —
+той самий трюк, що й у `repo-intel-facade-degraded.test.ts`. `container.db`
+можна лишити тонким стабом (`select().from().where()` → `[]`), якщо
+сервіс лише читає через нього settings-override, який однаково відсутній.
+Доказ: server/test/conventions-file-guard.test.ts:24-58 (новий тест),
+патерн-прецедент — server/test/repo-intel-facade-degraded.test.ts:27-38
