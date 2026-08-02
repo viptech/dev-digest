@@ -4,6 +4,7 @@ import { reviewPullRequest } from '@devdigest/reviewer-core';
 import type { Container } from '../../platform/container.js';
 import { AgentsRepository } from '../agents/repository.js';
 import { EvalsRepository } from './repository.js';
+import { ValidationError } from '../../platform/errors.js';
 import {
   toEvalCaseDto,
   toEvalRunDto,
@@ -11,6 +12,14 @@ import {
   parseGroundingRatio,
   type ExpectedFinding,
 } from './helpers.js';
+
+/** Summary of the most recent run for a case, attached to list() results
+ *  (route-level response shape — not part of the shared EvalCase contract,
+ *  to avoid the dual-copy client/server contract drift this feature has hit
+ *  before). */
+export interface EvalCaseWithLastRun extends EvalCase {
+  last_run: { pass: boolean; recall: number; ran_at: string } | null;
+}
 
 export interface CreateEvalCaseInput {
   name: string;
@@ -31,9 +40,18 @@ export class EvalsService {
     this.agents = container.agentsRepo;
   }
 
-  async list(workspaceId: string, agentId: string): Promise<EvalCase[]> {
+  async list(workspaceId: string, agentId: string): Promise<EvalCaseWithLastRun[]> {
     const rows = await this.repo.listByOwner(workspaceId, 'agent', agentId);
-    return rows.map(toEvalCaseDto);
+    const lastRuns = await this.repo.latestRunByCase(rows.map((r) => r.id));
+    return rows.map((row) => {
+      const run = lastRuns.get(row.id);
+      return {
+        ...toEvalCaseDto(row),
+        last_run: run
+          ? { pass: !!run.pass, recall: run.recall ?? 0, ran_at: new Date(run.ranAt).toISOString() }
+          : null,
+      };
+    });
   }
 
   async create(workspaceId: string, agentId: string, input: CreateEvalCaseInput): Promise<EvalCase> {
@@ -52,9 +70,13 @@ export class EvalsService {
 
   async update(
     workspaceId: string,
+    agentId: string,
     caseId: string,
     patch: UpdateEvalCaseInput,
   ): Promise<EvalCase | undefined> {
+    const existing = await this.repo.getById(workspaceId, caseId);
+    if (!existing || existing.ownerId !== agentId) return undefined;
+
     const row = await this.repo.update(workspaceId, caseId, {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.input_diff !== undefined ? { inputDiff: patch.input_diff } : {}),
@@ -65,7 +87,9 @@ export class EvalsService {
     return row ? toEvalCaseDto(row) : undefined;
   }
 
-  async delete(workspaceId: string, caseId: string): Promise<boolean> {
+  async delete(workspaceId: string, agentId: string, caseId: string): Promise<boolean> {
+    const existing = await this.repo.getById(workspaceId, caseId);
+    if (!existing || existing.ownerId !== agentId) return false;
     return this.repo.deleteById(workspaceId, caseId);
   }
 
@@ -82,6 +106,10 @@ export class EvalsService {
   ): Promise<{ case: EvalCase; run: EvalRun } | undefined> {
     const evalCase = await this.repo.getById(workspaceId, caseId);
     if (!evalCase || evalCase.ownerId !== agentId) return undefined;
+
+    if (!evalCase.inputDiff || evalCase.inputDiff.trim().length === 0) {
+      throw new ValidationError('Eval case has no diff to review');
+    }
 
     const agent = await this.agents.getById(workspaceId, agentId);
     if (!agent) return undefined;

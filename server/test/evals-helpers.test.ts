@@ -60,6 +60,20 @@ describe('matchFindings', () => {
     const result = matchFindings(expected, [finding({ category: 'security' })]);
     expect(result.matched).toBe(0);
   });
+
+  it('respects start_line when the expected matcher specifies one', () => {
+    const expected = [{ severity: 'CRITICAL' as const, file: 'src/a.ts', start_line: 42 }];
+    const result = matchFindings(expected, [finding({ start_line: 10 })]);
+    expect(result.matched).toBe(0);
+    expect(result.pass).toBe(false);
+  });
+
+  it('matches on start_line when it agrees with the actual finding', () => {
+    const expected = [{ severity: 'CRITICAL' as const, file: 'src/a.ts', start_line: 10 }];
+    const result = matchFindings(expected, [finding({ start_line: 10 })]);
+    expect(result.matched).toBe(1);
+    expect(result.pass).toBe(true);
+  });
 });
 
 describe('parseGroundingRatio', () => {

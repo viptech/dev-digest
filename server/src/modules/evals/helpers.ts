@@ -32,7 +32,8 @@ export function matchFindings(expected: ExpectedFinding[], actual: Finding[]): M
         !usedActual.has(i) &&
         a.file === exp.file &&
         a.severity === exp.severity &&
-        (exp.category === undefined || a.category === exp.category),
+        (exp.category === undefined || a.category === exp.category) &&
+        (exp.start_line === undefined || a.start_line === exp.start_line),
     );
     if (idx >= 0) {
       usedActual.add(idx);

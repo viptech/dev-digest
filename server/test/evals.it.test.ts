@@ -102,7 +102,35 @@ d('evals — run a case with/without a skill (Testcontainers pg)', () => {
     expect(body.run.traces_passed).toBe(1); // pass: expected [] and got []
 
     // No skill linked → the skill's distinctive text must NOT reach the LLM call.
+    expect(lastPromptText(llm).length).toBeGreaterThan(0); // a real call was made
     expect(lastPromptText(llm)).not.toContain('Flag test files missing edge-case coverage');
+
+    await app.close();
+  });
+
+  it('running a case with an empty diff is rejected with 422 instead of a misleading pass', async () => {
+    const { app } = await appWith(NO_FINDINGS_REVIEW);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Empty Diff Agent', provider: 'openai', model: 'gpt-4.1', system_prompt: 'review tests' },
+      })
+    ).json();
+
+    const evalCase = (
+      await app.inject({
+        method: 'POST',
+        url: `/agents/${agent.id}/evals`,
+        payload: { name: 'no-diff', input_diff: '   ', expected_output: [] },
+      })
+    ).json();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/evals/${evalCase.id}/run`,
+    });
+    expect(res.statusCode).toBe(422);
 
     await app.close();
   });
