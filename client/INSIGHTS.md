@@ -106,3 +106,18 @@ PASS". Не лише написаний вручну fixture-код (див. з�
 ніж `avg_cost_usd` (тут — 0.05).
 Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/StatsTab/StatsTab.test.tsx
 (`run_history[0].cost_usd: 0.05`, коментар пояснює причину)
+
+## 2026-08-02 · gotcha
+**Глибина `../` імпорту з `_components/StatsTab` різна для `lib/hooks/*` (7 рівнів) і для сусіднього `app/repos/...` (6 рівнів) — та сама папка, різна кількість `../`**
+Продовжує запис від 2026-08-02 про EvalsTab: рахувати "на око" по аналогії з
+уже наявним імпортом того ж файлу небезпечно, якщо цілі лежать у різних
+піддеревах. `StatsTab.tsx`'s `useAgentStats` імпорт іде
+`"../../../../../../../lib/hooks/agents"` (7 `../`, бо ціль — `src/lib/...`),
+але імпорт `RunTraceDrawer` з `src/app/repos/[repoId]/pulls/[number]/
+_components/RunTraceDrawer` — лише 6 `../`, бо ціль сама лежить під `app/`
+(на 1 рівень мілкіше за `lib/`, з яким порівнювали). Копіювання кількості
+`../` з сусіднього імпорту в тому ж файлі — не надійний евристик; рахуй
+`node -e "console.log(path.relative(fromDir, toDir))"` окремо для кожної
+цілі.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/StatsTab/StatsTab.tsx:6-7
+(`../../../../../../../lib/hooks/agents` проти `../../../../../../repos/[repoId]/pulls/[number]/_components/RunTraceDrawer`)
