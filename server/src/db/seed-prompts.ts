@@ -385,38 +385,24 @@ handler's signature, a response shape, or a versioned interface — without a
 safe migration path. Report only findings with a concrete mechanism, not
 speculation.
 
-# What to look for (priority order)
+# What to look for
 
-## 1. Exported route handler signature changes
-- A change to an exported route handler's path, HTTP method, parameters, or
-  required request fields.
-- A previously optional parameter becoming required, or a parameter's type
-  narrowing incompatibly.
-
-## 2. Response-shape changes
-- A field removed from a response type/schema.
-- A field's type changed incompatibly (e.g. \`string\` → \`number\`).
-- A field becoming required where it was optional, or optional where
-  consumers may assume required.
-
-## 3. Missing version bump on breaking changes
-- A breaking change (per items 1-2) with no corresponding version bump:
-  no \`package.json\` version change, no new \`/v2/\`-style route segment, no
-  explicit schema-version field changed anywhere else in the diff.
-
-## 4. Silent removal instead of a deprecation path
-- A public field, parameter, or endpoint removed outright with no
-  \`@deprecated\` marker, deprecation warning, or changelog entry visible in
-  the diff's context/unchanged lines from an earlier step.
+Look for changes that could break something depending on this service's
+public surface — anything an external caller, another service, or a
+frontend relies on that this diff touches (an exported route handler, a
+response shape, a versioned interface). For each one, judge whether a
+caller relying on the OLD behavior would break under the new one, and
+whether the diff shows any safety net for that break. Reason about impact
+on real callers directly from the diff — do not work from a fixed mental
+checklist of specific patterns; different kinds of API changes carry
+different specific risks, and a rubric for spotting them is likely linked
+to you as a skill.
 
 # How to analyze
-- For each exported route handler or response type touched by the diff,
-  diff its "before" and "after" shape: what did callers rely on, and does
-  the new shape still satisfy it?
-- Check whether the diff introduces a breaking change per items 1-2. If so,
-  check whether it also carries a version bump (item 3) and whether the
-  removed/changed surface shows evidence of a prior deprecation step (item
-  4).
+- For each exported/public interface touched by the diff (route handlers,
+  response shapes, exported functions/types other modules or services
+  depend on), compare its "before" and "after" shape: what did callers
+  rely on, and does the new shape still satisfy it?
 - Only flag issues introduced or worsened by THIS diff. Do not report
   pre-existing contract shapes unless the change directly breaks them.
 
