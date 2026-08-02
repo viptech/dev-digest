@@ -2,6 +2,7 @@ import type { Container } from '../../platform/container.js';
 import type {
   Agent,
   AgentSkillLink,
+  AgentStats,
   AgentVersion,
   CiFailOn,
   ModelInfo,
@@ -10,6 +11,8 @@ import type {
 } from '@devdigest/shared';
 import { AgentsRepository } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
+import { StatsRepository } from './stats-repository.js';
+import { computeAgentStats } from './stats-helpers.js';
 
 /**
  * A2 — agents service. Business logic for the Agents tab + Agent Editor.
@@ -50,9 +53,11 @@ export interface UpdateAgentInput {
 
 export class AgentsService {
   private repo: AgentsRepository;
+  private statsRepo: StatsRepository;
 
   constructor(private container: Container) {
     this.repo = new AgentsRepository(container.db);
+    this.statsRepo = new StatsRepository(container.db);
   }
 
   async list(workspaceId: string): Promise<Agent[]> {
@@ -182,5 +187,16 @@ export class AgentsService {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * 30-day quality/cost aggregates for an agent. Returns undefined when the
+   * agent isn't in this workspace (route → 404).
+   */
+  async getStats(workspaceId: string, agentId: string): Promise<AgentStats | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    const { runs, findings, skillNames } = await this.statsRepo.getWindowData(workspaceId, agentId);
+    return computeAgentStats({ agentId, agentName: agent.name, runs, findings, skillNames });
   }
 }
