@@ -61,8 +61,15 @@ describe('ConventionsService.extract — file-selection guard', () => {
     );
     const service = buildService(readFiles);
 
-    await service.extract('ws1', 'repo1');
+    // 'llm' explicitly: this guard only exists in the 2-step LLM file-selection
+    // branch — 'code' (the default since the sampling_mode homework task) never
+    // calls ConventionFileSelection at all, so it wouldn't exercise this path.
+    await service.extract('ws1', 'repo1', 'llm');
 
+    // Only one readFiles call happens now: the guarded readFiles(repoId, selected)
+    // for the files the model chose to read. verifyEvidence no longer issues its
+    // own readFiles call — it verifies against this same in-memory `files` array,
+    // so a candidate's evidence_path must match a path that was actually read.
     expect(readFiles).toHaveBeenCalledTimes(1);
     const [, passedPaths] = readFiles.mock.calls[0]!;
     expect(passedPaths).toEqual(['src/a.ts']);

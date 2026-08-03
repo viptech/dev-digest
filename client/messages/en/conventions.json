@@ -15,13 +15,36 @@
       "body": "Scan the repo to surface house-rules — naming, error handling, structure — each backed by evidence you can turn into a Skill.",
       "cta": "Run extraction"
     },
-    "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files"
+    "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files",
+    "samplingModeLabel": "Sampling",
+    "samplingModeCode": "Code-only (deterministic)",
+    "samplingModeLlm": "LLM picks files",
+    "createSkillFromAccepted": "Create skill from accepted"
+  },
+  "createSkillModal": {
+    "title": "Create skill from accepted candidates",
+    "subtitle": "{count, plural, one {# candidate} other {# candidates}} will be included",
+    "nameLabel": "Skill name",
+    "descriptionLabel": "Description",
+    "agentLabel": "Link to agent",
+    "bodyLabel": "Skill body (Markdown)",
+    "save": "Create skill",
+    "saving": "Creating…",
+    "saveFailed": "Couldn't create the skill. Please try again."
   },
   "card": {
     "confidence": "Confidence",
     "accepted": "Accepted",
     "accepting": "Accepting…",
     "acceptAsSkill": "Accept as Skill",
-    "acceptFailed": "Couldn't accept — try again."
+    "acceptFailed": "Couldn't accept — try again.",
+    "reject": "Reject",
+    "rejecting": "Rejecting…",
+    "rejected": "Rejected",
+    "editRule": "Edit",
+    "saveRule": "Save",
+    "cancelEdit": "Cancel",
+    "viewOnGithub": "View on GitHub",
+    "category": "Category"
   }
 }

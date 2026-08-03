@@ -17,10 +17,13 @@ vi.mock("@/lib/hooks/conventions", () => ({
       {
         id: "c1",
         rule: "Services take a Container.",
+        category: "Structure",
         evidence_path: "src/service.ts",
         evidence_snippet: "ctor",
+        evidence_line: 5,
         confidence: 0.9,
         accepted: false,
+        status: "pending",
       },
     ],
     isLoading: false,
@@ -28,12 +31,12 @@ vi.mock("@/lib/hooks/conventions", () => ({
     refetch: vi.fn(),
   }),
   useExtractConventions: () => ({ mutate: extractMutate, isPending: false, isError: false }),
-  useUpdateConvention: () => ({ mutateAsync: updateMutateAsync }),
+  useUpdateConvention: () => ({ mutateAsync: updateMutateAsync, mutate: vi.fn() }),
 }));
 vi.mock("next/navigation", () => ({ useParams: () => ({ repoId: "r1" }) }));
 let repoNotFound = false;
 vi.mock("@/lib/repo-context", () => ({
-  useActiveRepo: () => ({ activeRepo: { full_name: "acme/demo" } }),
+  useActiveRepo: () => ({ activeRepo: { full_name: "acme/demo", default_branch: "main" } }),
   useRepoNotFound: () => repoNotFound,
 }));
 vi.mock("@/components/repo-not-found", () => ({
@@ -67,7 +70,14 @@ describe("ConventionsView", () => {
   it("clicking the extract button triggers extraction", () => {
     renderWithIntl(<ConventionsView />);
     fireEvent.click(screen.getByText("Re-scan"));
-    expect(extractMutate).toHaveBeenCalled();
+    expect(extractMutate).toHaveBeenCalledWith("code");
+  });
+
+  it("selecting the LLM sampling mode and clicking extract calls mutate with 'llm'", () => {
+    renderWithIntl(<ConventionsView />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "llm" } });
+    fireEvent.click(screen.getByText("Re-scan"));
+    expect(extractMutate).toHaveBeenCalledWith("llm");
   });
 
   it("shows RepoNotFound instead of the grid when the repo doesn't resolve", () => {
