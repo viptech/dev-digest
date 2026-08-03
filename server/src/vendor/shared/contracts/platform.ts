@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
 import { Severity, FindingCategory } from './findings.js';
+import { PrIntentRecord } from './review-api.js';
 
 /**
  * Platform / scaffolding DTOs owned by F1:
@@ -232,6 +233,8 @@ export const PrDetail = PrMeta.extend({
   files: z.array(PrFile),
   commits: z.array(PrCommit),
   linked_issue: IssueMeta.nullish(),
+  /** Persisted Intent Layer classification for this PR, if one exists. */
+  intent: PrIntentRecord.nullish(),
 });
 export type PrDetail = z.infer<typeof PrDetail>;
 

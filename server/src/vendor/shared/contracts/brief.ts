@@ -6,10 +6,23 @@ import { z } from 'zod';
  */
 
 // ---- Intent ----
+/** Explicit structural confidence — not a prose caveat folded into `intent`. */
+export const IntentConfidence = z.enum(['high', 'low']);
+export type IntentConfidence = z.infer<typeof IntentConfidence>;
+
+/** Provenance: which signal category actually drove the classification.
+ *  'inferred' is the synthesized-from-indirect-signals case. */
+export const IntentSource = z.enum(['description', 'linked_issue', 'plan_spec', 'inferred']);
+export type IntentSource = z.infer<typeof IntentSource>;
+
 export const Intent = z.object({
   intent: z.string(),
   in_scope: z.array(z.string()),
   out_of_scope: z.array(z.string()),
+  confidence: IntentConfidence,
+  source: IntentSource,
+  /** The resolved plan/spec path or cited URL that informed the intent, if any. */
+  plan_ref: z.string().nullish(),
 });
 export type Intent = z.infer<typeof Intent>;
 

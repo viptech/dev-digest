@@ -64,3 +64,40 @@ describe('assemblePrompt — ## PR description', () => {
     expect((assembly.pr_description as string).length).toBe(4000);
   });
 });
+
+describe('assemblePrompt — sections (safe, content-free logging metadata)', () => {
+  it('reports name/source/chars/approxTokens for every rendered section, and nothing else', () => {
+    const { sections } = assemblePrompt({
+      system: 'AGENT-SYS',
+      diff: 'DIFF-TEXT',
+      prDescription: 'a PR body',
+      intent: 'an intent string',
+    });
+    const byName = Object.fromEntries(sections.map((s) => [s.name, s]));
+
+    expect(byName['system']).toEqual({
+      name: 'system',
+      source: 'agent-config',
+      chars: 'AGENT-SYS'.length,
+      approxTokens: Math.ceil('AGENT-SYS'.length / 4),
+    });
+    expect(byName['diff']).toMatchObject({ source: 'diff-loader', chars: 'DIFF-TEXT'.length });
+    expect(byName['pr-description']).toMatchObject({ source: 'pr-body', chars: 'a PR body'.length });
+    expect(byName['intent']).toMatchObject({ source: 'intent-service', chars: 'an intent string'.length });
+    expect(byName['injection-guard']).toBeDefined();
+
+    // Every entry has exactly these four keys — no `content`/`text`/`raw` field ever, by construction.
+    for (const s of sections) {
+      expect(Object.keys(s).sort()).toEqual(['approxTokens', 'chars', 'name', 'source']);
+    }
+  });
+
+  it('omits sections for absent/empty optional fields (same contract as rendering)', () => {
+    const { sections } = assemblePrompt({ system: 'sys', diff: 'DIFF' });
+    const names = sections.map((s) => s.name);
+    expect(names).toEqual(['system', 'injection-guard', 'diff']);
+    expect(names).not.toContain('pr-description');
+    expect(names).not.toContain('intent');
+    expect(names).not.toContain('skills');
+  });
+});

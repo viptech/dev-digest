@@ -67,6 +67,15 @@ describe('reviewPullRequest (engine)', () => {
     expect(outcome.review.score).toBe(65);
     // progress is surfaced (server bridges this onto SSE; runner logs it)
     expect(events.some((m) => m.includes('Citation grounding'))).toBe(true);
+
+    // Safe, content-free sizing metadata for structured logging — never the
+    // diff/system/spec text itself, only name/source/length per section.
+    expect(outcome.sections.length).toBeGreaterThan(0);
+    const diffSection = outcome.sections.find((s) => s.name === 'diff');
+    expect(diffSection).toMatchObject({ source: 'diff-loader' });
+    for (const s of outcome.sections) {
+      expect(Object.keys(s).sort()).toEqual(['approxTokens', 'chars', 'name', 'source']);
+    }
   });
 
   it('score is deterministic from findings: a clean approve scores 100', async () => {

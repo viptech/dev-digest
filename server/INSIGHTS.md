@@ -139,3 +139,50 @@ ExtractBody.optional()`, а існуючі виклики в тесті були
 репо, не лише в місцях, які сам таск торкається.
 Доказ: server/test/conventions-file-guard.test.ts:64 (виклик тепер
 явно `service.extract('ws1', 'repo1', 'llm')`)
+
+## 2026-08-03 · gotcha
+**`PrDetail.linked_issue` НІКОЛИ не персистується в БД — це live-фетч лише в
+`GET /pulls/:id`, а не поле на `pull_requests`**
+План Intent Layer стверджував, що лінкований issue "already resolved at
+ingestion time... persisted on PrDetail.linked_issue" — і план цитував саме
+рядок `octokit.ts:118` як доказ персистентності. Насправді `linked_issue`
+збирається виключно всередині обробника `GET /pulls/:id` (виклик
+`gh.getPullRequest(...)` прямо в роуті, не при імпорті PR) і ніде не
+записується в `pull_requests`/окрему таблицю. Будь-який фоновий процес (як
+`ReviewRunExecutor`, що не проходить через цей HTTP-роут) не має лінкованого
+issue "безкоштовно" з рядка БД — його потрібно фетчити наживо через
+`container.github()`, обов'язково best-effort (немає токена / офлайн →
+деградація до `undefined`, не throw).
+Доказ: server/src/modules/pulls/routes.ts:222-223 (live-фетч у роуті) vs
+відсутність `linkedIssue`/`linked_issue` колонки в
+server/src/db/schema/pulls.ts
+
+## 2026-08-03 · gotcha
+**Додавання required-полів (`confidence`/`source`) до `Intent` контракту
+ламає готовий fixture-тест `Intent.parse(...)` — компілятор цього не ловить**
+`server/test/contracts.test.ts` мав `Intent.parse({ intent, in_scope,
+out_of_scope })` без `confidence`/`source` — це компілювалось (бо тест не
+типізований проти нового `z.object`, а викликає `.parse` на рантаймовому
+значенні), але падало б на рантаймі з ZodError після розширення схеми
+required-полями. `tsc` тут безсилий: ловиться лише прогоном тестів.
+Перевіряй `grep` фікстур/фікстур-білдерів контракту, який розширюєш required
+полями, а не лише типи, що на нього спираються.
+Доказ: server/test/contracts.test.ts:68-76 (фікстуру доповнено
+`confidence: 'high', source: 'description'` після розширення `Intent` в
+server/src/vendor/shared/contracts/brief.ts:9-25)
+
+## 2026-08-03 · decision
+**"Local-only debug toggle" реалізовано як hard gate в `loadConfig`, а не
+як просто задокументоване правило "не вмикай у проді"**
+`PROMPT_LOG_VERBOSE` (детальний per-section розпис у структурованому
+логі складання промпта) обчислюється як `parsed.PROMPT_LOG_VERBOSE ===
+'true' && parsed.NODE_ENV !== 'production'` прямо у `loadConfig` —
+помилково виставлена змінна оточення в проді фізично не може увімкнути
+verbose-режим, це не покладається на дисципліну деплою. Патерн вартий
+повторного використання для будь-якого майбутнього "тільки локально"
+прапорця: гейт у самій функції парсингу конфіга, не коментар поруч зі
+змінною.
+Доказ: server/src/platform/config.ts:79 (`promptLogVerbose: parsed.
+PROMPT_LOG_VERBOSE === 'true' && parsed.NODE_ENV !== 'production'`),
+перевірено тестом server/test/config.test.ts:24-28 (`NODE_ENV:
+'production'` → `false` навіть при `PROMPT_LOG_VERBOSE: 'true'`)

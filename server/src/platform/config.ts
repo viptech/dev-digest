@@ -36,6 +36,12 @@ const EnvSchema = z.object({
     (v) => (v === '' ? undefined : v),
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   ),
+  // Prompt-assembly structured logging (section name/source/length/model,
+  // never content) is always on; this flag only adds the full per-section
+  // breakdown to that log line instead of just the aggregate totals. Hard-
+  // gated to non-production below — setting this in a prod .env has no
+  // effect, so it can't accidentally widen what a shared/prod log captures.
+  PROMPT_LOG_VERBOSE: z.string().optional(),
 });
 
 export type AppConfig = {
@@ -59,6 +65,13 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /**
+   * Verbose prompt-assembly logging (full per-section name/source/length
+   * breakdown, still never section content). Always `false` when
+   * `nodeEnv === 'production'`, regardless of the env var — a local-only
+   * debug toggle, not a production log-verbosity control.
+   */
+  promptLogVerbose: boolean;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -77,5 +90,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    promptLogVerbose: parsed.PROMPT_LOG_VERBOSE === 'true' && parsed.NODE_ENV !== 'production',
   };
 }
