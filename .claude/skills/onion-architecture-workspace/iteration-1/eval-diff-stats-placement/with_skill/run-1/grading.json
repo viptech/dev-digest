@@ -1,0 +1,8 @@
+{
+  "summary": { "pass_rate": 1.0, "passed": 3, "failed": 0, "total": 3 },
+  "expectations": [
+    { "text": "Recommends putting the diff-stat computation in service.ts (or a domain helper it calls), not repository.ts", "passed": true, "evidence": "Pure computation in a new diff-stats.ts helper, orchestrated by service.ts" },
+    { "text": "States or implies repository.ts should stay limited to reading/writing the stored diff blob via Drizzle, not doing the computation", "passed": true, "evidence": "\"Loading the stored blob and writing the recomputed numbers back is repository.ts work\"" },
+    { "text": "Explicitly says this does NOT belong in reviewer-core / reviewer-core does not need to know about it, since it's incidental to the review pipeline", "passed": true, "evidence": "\"No. reviewer-core consumes a diff to build LLM prompts... it's about review correctness, not about displaying PR size\"" }
+  ]
+}

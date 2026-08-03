@@ -161,6 +161,9 @@ export interface RepoIntel {
   getUnresolvedReferences(repoId: string, files: string[]): Promise<RefRow[]>;
   /** Top-N file paths by rank, filtered of tests/configs. */
   getConventionSamples(repoId: string, n: number): Promise<string[]>;
+  /** Read file contents from the local clone for the given repo-relative paths.
+   *  Best-effort: missing clone/files are skipped, never thrown. */
+  readFiles(repoId: string, paths: string[]): Promise<{ path: string; content: string }[]>;
 
   // --- T3: onboarding reading-path + critical paths (graph required) ------
   getTopFilesByRank(

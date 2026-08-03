@@ -76,3 +76,48 @@ fixture-виклику не задати унікальне значення (а
 Доказ: client/src/components/findings-tooltip/FindingsTooltip.test.tsx
 (тест "shows each finding's title and file:line on hover..." — другий
 `finding({ id: "f2", ... })` виклик тепер явно передає власний `rationale`)
+
+## 2026-08-02 · gotcha
+**План/бриф з готовим кодом рахує глибину `../` відносних імпортів для нової
+папки на око — і помиляється на один рівень**
+Для `EvalsTab/EvalsTab.tsx` (сьомий рівень вкладеності від `src`, як і
+`SkillsTab/SkillsTab.tsx`) бриф пропонував `"../../../../../../lib/hooks/evals"`
+(6 рівнів) — правильно 7, що видно порівнянням з реальним
+`SkillsTab.tsx`. Для вкладеної `EvalsTab/_components/EvalCaseModal/
+EvalCaseModal.tsx` (9 рівнів) бриф давав 8. TypeScript це не ловить
+(модуль просто не резолвиться до `noUnusedLocals`-подібної перевірки — тут
+взагалі падає з чіткою помилкою резолву), але `vi.mock(...)` з неправильним
+шляхом тихо НЕ мокає хук (модуль з іншим resolved-шляхом не збігається), і
+тест падає пізніше на мережевому виклику, а не на помилці мокання. Рахуй
+глибину `node -e "path.relative(...)"` або порівнянням з існуючим файлом
+на тому самому рівні вкладеності, а не копіюванням з брифу.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.tsx:6
+(7 рівнів `../`, було виправлено з 6 як у брифі задачі Task 5 Evals Tab)
+
+## 2026-08-02 · gotcha
+**Готовий код тесту з брифу (Task 4, Stats Tab) сам містить дублікат тексту, що ламає `getByText`**
+`task-4-brief.md`'s `StatsTab.test.tsx` задає одночасно `avg_cost_usd: 0.04`
+(рендериться в MetricCard як "$0.04") і `run_history[0].cost_usd: 0.04`
+(та сама таблична клітинка рендерить теж "$0.04") — `getByText("$0.04")`
+падає з "Found multiple elements", хоча тест у брифі позначений як "Expected:
+PASS". Не лише написаний вручну fixture-код (див. запис від 2026-07-31 про
+`FindingsTooltip`) — готовий код у бриф-документі теж треба прогнати, а не
+скопіювати наосліп. Фікс: зробити `cost_usd` у `run_history` іншим числом,
+ніж `avg_cost_usd` (тут — 0.05).
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/StatsTab/StatsTab.test.tsx
+(`run_history[0].cost_usd: 0.05`, коментар пояснює причину)
+
+## 2026-08-02 · gotcha
+**Глибина `../` імпорту з `_components/StatsTab` різна для `lib/hooks/*` (7 рівнів) і для сусіднього `app/repos/...` (6 рівнів) — та сама папка, різна кількість `../`**
+Продовжує запис від 2026-08-02 про EvalsTab: рахувати "на око" по аналогії з
+уже наявним імпортом того ж файлу небезпечно, якщо цілі лежать у різних
+піддеревах. `StatsTab.tsx`'s `useAgentStats` імпорт іде
+`"../../../../../../../lib/hooks/agents"` (7 `../`, бо ціль — `src/lib/...`),
+але імпорт `RunTraceDrawer` з `src/app/repos/[repoId]/pulls/[number]/
+_components/RunTraceDrawer` — лише 6 `../`, бо ціль сама лежить під `app/`
+(на 1 рівень мілкіше за `lib/`, з яким порівнювали). Копіювання кількості
+`../` з сусіднього імпорту в тому ж файлі — не надійний евристик; рахуй
+`node -e "console.log(path.relative(fromDir, toDir))"` окремо для кожної
+цілі.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/StatsTab/StatsTab.tsx:6-7
+(`../../../../../../../lib/hooks/agents` проти `../../../../../../repos/[repoId]/pulls/[number]/_components/RunTraceDrawer`)

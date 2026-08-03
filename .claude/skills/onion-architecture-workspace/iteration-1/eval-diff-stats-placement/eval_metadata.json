@@ -1,0 +1,10 @@
+{
+  "eval_id": 3,
+  "eval_name": "eval-diff-stats-placement",
+  "prompt": "I'm adding logic to server/src/modules/pulls that recomputes a PR's diff stats (files changed, additions, deletions) from the stored diff blob whenever someone re-opens the PR detail page. Should this go in service.ts or repository.ts, and does reviewer-core need to know about it?",
+  "assertions": [
+    { "id": "places_in_service", "text": "Recommends putting the diff-stat computation in service.ts (or a domain helper it calls), not repository.ts" },
+    { "id": "repository_stays_data_access", "text": "States or implies repository.ts should stay limited to reading/writing the stored diff blob via Drizzle, not doing the computation" },
+    { "id": "excludes_reviewer_core", "text": "Explicitly says this does NOT belong in reviewer-core / reviewer-core does not need to know about it, since it's incidental to the review pipeline" }
+  ]
+}

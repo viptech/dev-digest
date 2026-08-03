@@ -89,11 +89,36 @@
   },
   "skills": {
     "title": "Skills",
-    "enabledCount": "{linked} of {total} enabled",
+    "enabledCount": "{linked} of {total} linked",
     "filterPlaceholder": "Filter skills…",
-    "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Toggle to attach."
+    "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Toggle to attach.",
+    "disabledBadge": "disabled"
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."
+  },
+  "stats": {
+    "loading": "Loading stats…",
+    "totalRuns": "TOTAL RUNS (30D)",
+    "avgCostPerRun": "AVG COST / RUN",
+    "avgDuration": "AVG DURATION",
+    "acceptRate": "ACCEPT RATE",
+    "mostUsedSkills": "Most-used skills",
+    "noSkillsUsed": "No skills used in this window.",
+    "findingsBySeverity": "Findings by severity",
+    "findingsByCategory": "Findings by category",
+    "noFindings": "No findings in this window.",
+    "runHistory": "Run history",
+    "noRuns": "No runs yet.",
+    "table": {
+      "timestamp": "Timestamp",
+      "pr": "PR",
+      "tokens": "Tokens",
+      "cost": "Cost",
+      "findings": "Findings",
+      "source": "Source",
+      "trace": "Trace"
+    },
+    "viewTrace": "View trace"
   }
 }

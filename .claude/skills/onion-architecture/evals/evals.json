@@ -1,0 +1,41 @@
+{
+  "skill_name": "onion-architecture",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We want to post a Slack message whenever a review run finishes (server/src/modules/reviews). Where does the Slack integration code go, and can you sketch out the files I need?",
+      "expected_output": "Walks through the 5-step new-integration workflow: a Notifier-style port (in @devdigest/shared or a local types.ts), a concrete adapters/slack/*.ts implementation, a mock counterpart in adapters/mocks.ts, a lazy getter wired into platform/container.ts, and ReviewService/run-executor.ts consuming the port type via the container rather than importing the Slack adapter directly. Should NOT suggest importing the Slack client straight into the service or route.",
+      "assertions": [
+        { "id": "defines_port", "text": "Proposes defining a port/interface (e.g. Notifier) rather than referring to the Slack SDK type directly in service code" },
+        { "id": "adapter_under_adapters_dir", "text": "Places the concrete Slack implementation under adapters/<kind>/ (e.g. adapters/slack/*.ts)" },
+        { "id": "mentions_mock", "text": "Mentions adding a mock implementation (adapters/mocks.ts or module-local) so tests don't hit the real Slack API" },
+        { "id": "wires_into_container", "text": "Mentions wiring the new adapter into platform/container.ts (lazy getter / ContainerOverrides pattern)" },
+        { "id": "no_direct_adapter_import_in_service", "text": "Does not tell the user to import the Slack adapter class directly into service.ts instead of going through the container" }
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Can you review this route handler I just wrote in server/src/modules/pulls/routes.ts?\n\n```ts\nimport { OctokitGitHubClient } from '../../adapters/github/octokit.js';\n\napp.get('/pulls/:id/status', async (req, reply) => {\n  const client = new OctokitGitHubClient(container.secrets);\n  const status = await client.getStatus(req.params.id);\n  return reply.send({ status });\n});\n```",
+      "expected_output": "Flags the direct adapter import/instantiation inside routes.ts as a layering violation, explains routes should only call a service method, and shows the fix: move the GitHub call into PullsService (or similar), which reads the client via container.github, with the route reduced to zod-validated params -> service call -> response mapping.",
+      "assertions": [
+        { "id": "flags_violation", "text": "Explicitly identifies importing/instantiating the adapter directly inside routes.ts as a layering/architecture problem, not just a style nit" },
+        { "id": "proposes_service_method", "text": "Proposes moving the GitHub call into a service method (e.g. on PullsService) instead of the route" },
+        { "id": "uses_container_github", "text": "Suggests obtaining the client via container.github (or an equivalent container-resolved interface) instead of `new OctokitGitHubClient(...)`" },
+        { "id": "route_stays_thin", "text": "Describes or shows the resulting route reduced to param handling + service call + response mapping, with no adapter import left in routes.ts" }
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I'm adding logic to server/src/modules/pulls that recomputes a PR's diff stats (files changed, additions, deletions) from the stored diff blob whenever someone re-opens the PR detail page. Should this go in service.ts or repository.ts, and does reviewer-core need to know about it?",
+      "expected_output": "Places the pure diff-stat computation in service.ts (or a small domain helper) since it's a transformation with no I/O, keeps repository.ts limited to Drizzle read/write of the stored diff blob, and notes it does NOT belong in reviewer-core unless it becomes part of the shared diff->prompt->grounding pipeline — reviewer-core stays reserved for the actual review engine, not incidental PR-detail computations.",
+      "assertions": [
+        { "id": "places_in_service", "text": "Recommends putting the diff-stat computation in service.ts (or a domain helper it calls), not repository.ts" },
+        { "id": "repository_stays_data_access", "text": "States or implies repository.ts should stay limited to reading/writing the stored diff blob via Drizzle, not doing the computation" },
+        { "id": "excludes_reviewer_core", "text": "Explicitly says this does NOT belong in reviewer-core / reviewer-core does not need to know about it, since it's incidental to the review pipeline" }
+      ],
+      "files": []
+    }
+  ]
+}

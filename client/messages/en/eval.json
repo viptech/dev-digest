@@ -37,6 +37,9 @@
     "running": "Running…",
     "save": "Save",
     "saving": "Saving…",
+    "cancel": "Cancel",
+    "saveFailed": "Couldn't save this eval case. Please try again.",
+    "runFailed": "Couldn't run this eval case. Please try again.",
     "nameLabel": "Name",
     "namePlaceholder": "stripe-key-leak",
     "inputLabel": "Input",
@@ -71,7 +74,9 @@
     "run": "Run",
     "running": "Running…",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "runFailed": "Run failed. Please try again.",
+    "deleteFailed": "Delete failed. Please try again."
   },
   "page": {
     "crumbSkillsLab": "Skills Lab",

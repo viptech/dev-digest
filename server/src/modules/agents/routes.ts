@@ -27,6 +27,7 @@ const VersionParams = z.object({
  *   GET    /agents/:id/skills       → linked skills (ordered)
  *   POST   /agents/:id/skills       → set/reorder linked skills OR link one
  *   GET    /agents/:id/models       → dynamic model list for the agent's provider
+ *   GET    /agents/:id/stats        → 30-day quality/cost aggregates
  *   GET    /providers/:id/models    → dynamic model list for a provider (editor)
  */
 
@@ -169,6 +170,13 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     const agent = await service.get(workspaceId, req.params.id);
     if (!agent) throw new NotFoundError('Agent not found');
     return service.listModels(agent.provider);
+  });
+
+  app.get('/agents/:id/stats', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const stats = await service.getStats(workspaceId, req.params.id);
+    if (!stats) throw new NotFoundError('Agent not found');
+    return stats;
   });
 
   app.get('/providers/:id/models', { schema: { params: ProviderParams } }, async (req) => {

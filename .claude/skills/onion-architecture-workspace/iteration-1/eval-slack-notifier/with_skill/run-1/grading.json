@@ -1,0 +1,10 @@
+{
+  "summary": { "pass_rate": 1.0, "passed": 5, "failed": 0, "total": 5 },
+  "expectations": [
+    { "text": "Proposes defining a port/interface (e.g. Notifier) rather than referring to the Slack SDK type directly in service code", "passed": true, "evidence": "Defines `Notifier`/`notifyReviewRunFinished` in vendor/shared/adapters.ts, alongside GitHubClient etc." },
+    { "text": "Places the concrete Slack implementation under adapters/<kind>/ (e.g. adapters/slack/*.ts)", "passed": true, "evidence": "server/src/adapters/notifier/slack.ts, SlackNotifier class" },
+    { "text": "Mentions adding a mock implementation (adapters/mocks.ts or module-local) so tests don't hit the real Slack API", "passed": true, "evidence": "MockNotifier added to adapters/mocks.ts" },
+    { "text": "Mentions wiring the new adapter into platform/container.ts (lazy getter / ContainerOverrides pattern)", "passed": true, "evidence": "async notifier() getter + ContainerOverrides.notifier field, mirroring _git/_github" },
+    { "text": "Does not tell the user to import the Slack adapter class directly into service.ts instead of going through the container", "passed": true, "evidence": "Explicitly states run-executor.ts changes by calling the port, never by importing SlackNotifier" }
+  ]
+}

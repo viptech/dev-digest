@@ -632,6 +632,23 @@ export class RepoIntelService implements RepoIntel {
   }
 
   /**
+   * Read the CONTENT of specific repo-relative paths from the local clone.
+   * Best-effort: a missing clone or an individual unreadable file is skipped,
+   * never thrown — callers (conventions extraction) degrade to fewer samples
+   * rather than failing the whole request.
+   */
+  async readFiles(repoId: string, paths: string[]): Promise<{ path: string; content: string }[]> {
+    const repo = await this.repo.getRepoBasics(repoId);
+    if (!repo || !repo.clonePath) return [];
+    const out: { path: string; content: string }[] = [];
+    for (const path of paths) {
+      const content = await readClone(repo.clonePath, path);
+      if (content !== null) out.push({ path, content });
+    }
+    return out;
+  }
+
+  /**
    * Top-N file paths by rank DESC, dropping tests/configs/migrations and any
    * caller-supplied `exclude` substrings. Over-fetches by 10× before filtering
    * so the post-filter still yields N where possible.

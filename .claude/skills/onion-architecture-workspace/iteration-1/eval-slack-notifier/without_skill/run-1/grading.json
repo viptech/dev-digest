@@ -1,0 +1,10 @@
+{
+  "summary": { "pass_rate": 1.0, "passed": 5, "failed": 0, "total": 5 },
+  "expectations": [
+    { "text": "Proposes defining a port/interface (e.g. Notifier) rather than referring to the Slack SDK type directly in service code", "passed": true, "evidence": "Defines SlackNotifier interface in vendor/shared/adapters.ts" },
+    { "text": "Places the concrete Slack implementation under adapters/<kind>/ (e.g. adapters/slack/*.ts)", "passed": true, "evidence": "server/src/adapters/slack/webhook.ts, SlackWebhookNotifier" },
+    { "text": "Mentions adding a mock implementation (adapters/mocks.ts or module-local) so tests don't hit the real Slack API", "passed": true, "evidence": "MockSlackNotifier added to adapters/mocks.ts" },
+    { "text": "Mentions wiring the new adapter into platform/container.ts (lazy getter / ContainerOverrides pattern)", "passed": true, "evidence": "async slack() getter + ContainerOverrides.slack field" },
+    { "text": "Does not tell the user to import the Slack adapter class directly into service.ts instead of going through the container", "passed": true, "evidence": "New notify.ts helper takes Container and calls container.slack(), never imports SlackWebhookNotifier" }
+  ]
+}
