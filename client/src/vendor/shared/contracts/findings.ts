@@ -56,6 +56,16 @@ export const Finding = z.object({
   suggestion: z.string().nullish(), // markdown
   confidence: z.number().min(0).max(1),
   kind: FindingKind.nullish(),
+  /**
+   * Intent Layer — set by the model ONLY when a `## Intent` section was in
+   * its prompt (omitted/`null` otherwise, treated as in-scope by default: no
+   * intent info means nothing to judge scope against). `false` = the model
+   * judged this finding unrelated to the PR's stated intent/scope. Filtered
+   * deterministically post-grounding (`reviewer-core/review/run.ts`) — never
+   * used to silently drop a defect outright, only to collapse noisy
+   * out-of-scope chatter to at most one signal for a serious issue.
+   */
+  in_scope: z.boolean().nullish(),
   // Lethal-trifecta variant fields (present only when kind === 'lethal_trifecta')
   trifecta_components: z.array(TrifectaComponent).nullish(),
   evidence: z.array(TrifectaEvidence).nullish(),

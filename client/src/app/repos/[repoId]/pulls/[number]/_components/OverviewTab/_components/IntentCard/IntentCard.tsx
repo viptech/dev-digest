@@ -2,33 +2,56 @@
 
 import React from "react";
 import type { PrIntentRecord } from "@devdigest/shared";
-import { SectionLabel, Badge } from "@devdigest/ui";
+import { SectionLabel, Badge, Button } from "@devdigest/ui";
+import { useRefreshIntent } from "../../../../../../../../../lib/hooks/reviews";
+import { notify } from "../../../../../../../../../lib/toast";
 import { s } from "./styles";
 
 interface IntentCardProps {
   intent: PrIntentRecord;
+  prId: string | null | undefined;
 }
 
 /**
  * Intent Layer display — the synthesized `intent` + in/out-of-scope lists,
  * with a visible confidence indicator so a reviewer immediately sees when the
  * intent was SYNTHESIZED (low confidence, `source: "inferred"`) rather than
- * stated directly (description/linked issue/plan-spec).
+ * stated directly (description/linked issue/plan-spec). The refresh button
+ * covers the case the automatic recompute-on-new-commit can't: the user
+ * edited the PR description (or a linked issue/plan) without pushing a new
+ * commit, so `head_sha` didn't change but the classifier's input did.
  */
-export function IntentCard({ intent }: IntentCardProps) {
+export function IntentCard({ intent, prId }: IntentCardProps) {
   const high = intent.confidence === "high";
+  const refresh = useRefreshIntent(prId);
   return (
     <section>
       <SectionLabel
         icon="Sparkles"
         right={
-          <Badge
-            icon={high ? "CheckCircle" : "AlertTriangle"}
-            color={high ? "var(--info)" : "var(--warn)"}
-            bg={high ? "var(--info-bg)" : "var(--warn-bg)"}
-          >
-            {high ? "High confidence" : "Inferred — low confidence"}
-          </Badge>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Badge
+              icon={high ? "CheckCircle" : "AlertTriangle"}
+              color={high ? "var(--info)" : "var(--warn)"}
+              bg={high ? "var(--info-bg)" : "var(--warn-bg)"}
+            >
+              {high ? "High confidence" : "Inferred — low confidence"}
+            </Badge>
+            <Button
+              kind="ghost"
+              size="sm"
+              icon="RefreshCw"
+              loading={refresh.isPending}
+              disabled={!prId}
+              onClick={() =>
+                refresh.mutate(undefined, {
+                  onError: (err) => notify.error((err as Error).message),
+                })
+              }
+            >
+              Re-derive
+            </Button>
+          </div>
         }
       >
         Intent

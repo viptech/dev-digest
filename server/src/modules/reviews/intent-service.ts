@@ -1,5 +1,6 @@
-import type { Provider } from '@devdigest/shared';
+import type { Provider, UnifiedDiff } from '@devdigest/shared';
 import { Intent } from '@devdigest/shared';
+import type { PromptSectionMeta } from '@devdigest/reviewer-core';
 import type { Container } from '../../platform/container.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import type { ReviewRepository, PullRow } from './repository.js';
@@ -32,10 +33,48 @@ export interface IntentClassificationResult {
   modelUsed: string;
   /** Zero on a cache hit (no LLM call was made). */
   stats: { duration_ms: number; tokens_in: number; tokens_out: number; cost_usd: number | null };
+  /**
+   * Safe, content-free per-section sizing for the classifier's OWN prompt
+   * (title/description/issue/plan-spec/hunk-headers/fallback signals) — same
+   * shape as reviewer-core's `PromptSectionMeta`, for structured logging.
+   * Empty on a cache hit (no prompt was built).
+   */
+  sections: PromptSectionMeta[];
 }
 
 /** Below this many non-boilerplate characters, the PR body counts as "thin". */
 const THIN_BODY_CHARS = 40;
+
+/** Cap how many files' hunk headers are folded into the classifier input. */
+const MAX_HUNK_HEADER_FILES = 50;
+
+/**
+ * `path (+add/-del): @@ -oldStart,oldLines +newStart,newLines @@, ...` per
+ * changed file — structural hunk headers only, never hunk body lines. This is
+ * the "list of files with hunk headers, no change bodies" input the intent
+ * classifier is scoped to (cheaper + no risk of leaking full diff content into
+ * a cheap, less-trusted model call).
+ */
+function formatHunkHeaders(diff: UnifiedDiff): string {
+  return diff.files
+    .slice(0, MAX_HUNK_HEADER_FILES)
+    .map((f) => {
+      const headers = f.hunks
+        .map((h) => `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`)
+        .join(', ');
+      return `${f.path} (+${f.additions}/-${f.deletions}): ${headers || '(no hunks)'}`;
+    })
+    .join('\n');
+}
+
+function approxTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+function sectionMeta(name: string, source: string, text: string | undefined): PromptSectionMeta | undefined {
+  if (!text || text.length === 0) return undefined;
+  return { name, source, chars: text.length, approxTokens: approxTokens(text) };
+}
 
 /** This repo's own plan/spec doc convention (confirmed in `docs/superpowers/`). */
 const PLAN_SPEC_PATH_RE = /docs\/superpowers\/(?:plans|specs)\/[\w.\-/]+\.md/;
@@ -85,17 +124,21 @@ export class IntentClassificationService {
   /**
    * Classify (or reuse the cached classification for) a PR. Cache key is
    * `headSha` — mirrors `markReviewed(pull.id, pull.headSha)`'s staleness
-   * check. A cache hit makes NO LLM call (stats all zero).
+   * check. A cache hit makes NO LLM call (stats all zero). Pass
+   * `opts.force: true` to bypass the cache and reclassify unconditionally
+   * (e.g. the user edited the PR description without pushing a new commit,
+   * so `headSha` didn't change but the input did).
    */
   async classify(
     workspaceId: string,
     pull: PullRow,
     repoRow: { id: string; owner: string; name: string },
-    diffFiles: string[],
+    diff: UnifiedDiff,
     logger?: Logger,
+    opts: { force?: boolean } = {},
   ): Promise<IntentClassificationResult> {
     const cached = await this.repo.getIntent(pull.id);
-    if (cached && cached.headSha === pull.headSha) {
+    if (!opts.force && cached && cached.headSha === pull.headSha) {
       return {
         intent: {
           intent: cached.intent,
@@ -107,6 +150,7 @@ export class IntentClassificationService {
         providerUsed: cached.providerUsed,
         modelUsed: cached.modelUsed,
         stats: { duration_ms: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 },
+        sections: [],
       };
     }
 
@@ -152,56 +196,63 @@ export class IntentClassificationService {
     const { provider, model } = await resolveFeatureModel(this.container, workspaceId, 'review_intent');
     const llm = await this.container.llm(provider as Provider);
 
-    const inputSections: string[] = [
-      `Title: ${pull.title}`,
-      `Description: ${pull.body && pull.body.trim().length > 0 ? pull.body : '(empty)'}`,
-    ];
-    if (jiraKey) inputSections.push(`Referenced ticket key (context only, not fetched): ${jiraKey}`);
-    if (linkedIssue) {
-      inputSections.push(
-        `Linked issue #${linkedIssue.number}: ${linkedIssue.title}\n${linkedIssue.body ?? ''}`,
-      );
-    }
-    if (planSpecContent) {
-      inputSections.push(`Referenced plan/spec (${planSpecRef?.path}):\n${planSpecContent}`);
-    } else if (planSpecRef?.url) {
-      inputSections.push(
-        `Referenced plan/spec URL (cited only — NOT fetched, do not fabricate its content): ${planSpecRef.url}`,
-      );
-    }
-    if (useFallback) {
-      inputSections.push(
-        [
+    const titleText = `Title: ${pull.title}`;
+    const descriptionText = `Description: ${pull.body && pull.body.trim().length > 0 ? pull.body : '(empty)'}`;
+    const ticketText = jiraKey ? `Referenced ticket key (context only, not fetched): ${jiraKey}` : undefined;
+    const linkedIssueText = linkedIssue
+      ? `Linked issue #${linkedIssue.number}: ${linkedIssue.title}\n${linkedIssue.body ?? ''}`
+      : undefined;
+    const planSpecText = planSpecContent
+      ? `Referenced plan/spec (${planSpecRef?.path}):\n${planSpecContent}`
+      : planSpecRef?.url
+        ? `Referenced plan/spec URL (cited only — NOT fetched, do not fabricate its content): ${planSpecRef.url}`
+        : undefined;
+    // Always part of the input (not just the thin-description fallback path):
+    // file paths + structural hunk headers ONLY — never hunk body lines, so
+    // the cheap/less-trusted classifier model never sees full change content.
+    const hunkHeadersText = formatHunkHeaders(diff);
+    const changedFilesSection = hunkHeadersText
+      ? `Changed files (path, +add/-del, hunk headers — no change bodies):\n${hunkHeadersText}`
+      : undefined;
+    const fallbackText = useFallback
+      ? [
           'No direct signal available (thin/empty description, no linked issue, no plan/spec reference).',
-          'Indirect signals only:',
+          'Additional indirect signals:',
           `Branch: ${pull.branch}`,
-          `Changed files: ${diffFiles.slice(0, 50).join(', ') || '(none)'}`,
           `Commit messages: ${commitMessages.slice(0, 20).join(' | ') || '(none)'}`,
           `Diff stat: +${pull.additions}/-${pull.deletions} across ${pull.filesCount} file(s)`,
-        ].join('\n'),
-      );
-    }
+        ].join('\n')
+      : undefined;
+
+    const inputSections = [
+      titleText,
+      descriptionText,
+      ticketText,
+      linkedIssueText,
+      planSpecText,
+      changedFilesSection,
+      fallbackText,
+    ].filter((s): s is string => s !== undefined);
+
+    const systemPrompt =
+      'You derive a pull request\'s intent and scope before it is reviewed by another model. ' +
+      'Produce a short, structured summary: what the PR does (`intent`), and concrete `in_scope` / ' +
+      '`out_of_scope` bullet points. Set `confidence` to "high" only when a direct signal (a ' +
+      'substantive description, a linked issue, or a resolved plan/spec) was available; set it to ' +
+      '"low" whenever you had to synthesize from indirect signals (commit messages, branch name, diff ' +
+      'stat) because no direct signal was available, or the direct signal was itself too thin to be ' +
+      'conclusive. Set `source` to whichever signal category actually drove your answer ("description", ' +
+      '"linked_issue", "plan_spec", or "inferred" for the indirect-signals case). ' +
+      'IMPORTANT: an external plan/spec URL, if present, is given to you as a CITATION ONLY — it was ' +
+      'never fetched. Never invent or assume its contents; just note it was referenced. Keep the ' +
+      'whole output compact — this is a classification, not a report.';
 
     const result = await llm.completeStructured<Intent>({
       model,
       schema: Intent,
       schemaName: 'Intent',
       messages: [
-        {
-          role: 'system',
-          content:
-            'You derive a pull request\'s intent and scope before it is reviewed by another model. ' +
-            'Produce a short, structured summary: what the PR does (`intent`), and concrete `in_scope` / ' +
-            '`out_of_scope` bullet points. Set `confidence` to "high" only when a direct signal (a ' +
-            'substantive description, a linked issue, or a resolved plan/spec) was available; set it to ' +
-            '"low" whenever you had to synthesize from indirect signals (changed files, commit messages, ' +
-            'branch name, diff stat) or the direct signal was itself too thin to be conclusive. Set ' +
-            '`source` to whichever signal category actually drove your answer ("description", ' +
-            '"linked_issue", "plan_spec", or "inferred" for the indirect-signals case). ' +
-            'IMPORTANT: an external plan/spec URL, if present, is given to you as a CITATION ONLY — it was ' +
-            'never fetched. Never invent or assume its contents; just note it was referenced. Keep the ' +
-            'whole output compact — this is a classification, not a report.',
-        },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: inputSections.join('\n\n') },
       ],
     });
@@ -217,6 +268,19 @@ export class IntentClassificationService {
       headSha: pull.headSha,
     });
 
+    // Safe, content-free sizing metadata for the classifier's own prompt —
+    // mirrors reviewer-core's `assemblePrompt` sections, never the text itself.
+    const sections: PromptSectionMeta[] = [
+      sectionMeta('system', 'agent-config', systemPrompt),
+      sectionMeta('title', 'pr-title', titleText),
+      sectionMeta('description', 'pr-body', descriptionText),
+      sectionMeta('ticket-key', 'jira-regex', ticketText),
+      sectionMeta('linked-issue', 'github-issue', linkedIssueText),
+      sectionMeta('plan-spec', 'plan-spec-resolver', planSpecText),
+      sectionMeta('changed-files', 'diff-hunk-headers', changedFilesSection),
+      sectionMeta('fallback-signals', 'indirect-signals', fallbackText),
+    ].filter((s): s is PromptSectionMeta => s !== undefined);
+
     return {
       intent: data,
       providerUsed: provider,
@@ -227,6 +291,7 @@ export class IntentClassificationService {
         tokens_out: result.tokensOut,
         cost_usd: result.costUsd,
       },
+      sections,
     };
   }
 }

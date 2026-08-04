@@ -59,6 +59,38 @@ d('Settings: feature models + secrets status (Testcontainers pg)', () => {
     await app.close();
   });
 
+  it('review_intent: separate registry default from the main review model, independently overridable', async () => {
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: {} });
+
+    // Cheap flash-class OpenRouter default — a distinct, cheaper model than
+    // the review-grade defaults other features use (Intent Layer lab spec).
+    expect(await getFeatureModelOverride(app.container, workspaceId, 'review_intent')).toBeUndefined();
+    expect(await resolveFeatureModel(app.container, workspaceId, 'review_intent')).toEqual({
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4-flash',
+    });
+
+    // Overriding review_intent must not affect the main review-agent model
+    // selection (they're independent knobs in Settings).
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/settings',
+      payload: { feature_models: { review_intent: { provider: 'openrouter', model: 'z-ai/glm-4.7-flash' } } },
+    });
+    expect(put.statusCode).toBe(200);
+
+    expect(await resolveFeatureModel(app.container, workspaceId, 'review_intent')).toEqual({
+      provider: 'openrouter',
+      model: 'z-ai/glm-4.7-flash',
+    });
+    expect(await resolveFeatureModel(app.container, workspaceId, 'onboarding')).toEqual({
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4-flash',
+    });
+
+    await app.close();
+  });
+
   it('GET /settings/secrets-status returns booleans only — never the key values', async () => {
     const secrets: SecretsProvider = {
       get: async (k) => (k === 'OPENROUTER_API_KEY' ? 'sk-or-secret-value' : undefined),

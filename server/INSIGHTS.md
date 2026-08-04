@@ -186,3 +186,33 @@ verbose-режим, це не покладається на дисципліну
 PROMPT_LOG_VERBOSE === 'true' && parsed.NODE_ENV !== 'production'`),
 перевірено тестом server/test/config.test.ts:24-28 (`NODE_ENV:
 'production'` → `false` навіть при `PROMPT_LOG_VERBOSE: 'true'`)
+
+## 2026-08-04 · gotcha
+**Зміна дефолтного провайдера в `FEATURE_MODELS` може непомітно зламати
+герметичність `*.it.test.ts`, і це видно не одразу**
+Зміна `FEATURE_MODELS['review_intent'].defaultProvider` з `'openai'` на
+`'openrouter'` (`server/src/vendor/shared/contracts/platform.ts:53-60`)
+зламала герметичність усіх `server/test/*.it.test.ts`, що запускають
+рев'ю через `POST /pulls/:id/review`: ці тести мокають лише
+`overrides.llm.openai` (бо саме такий provider у тестового review-агента),
+а `review_intent` раніше ТЕЖ був `openai` — тобто класифікація intent
+випадково потрапляла під той самий мок. Після зміни дефолту
+`container.llm('openrouter')` (`server/src/platform/container.ts:163-179`)
+почав провалюватись до РЕАЛЬНОЇ побудови провайдера на будь-якій машині, де
+в `~/.devdigest/secrets.json`/`process.env` є справжній
+`OPENROUTER_API_KEY` — це дало реальні ~8-10с мережеві виклики всередині
+"герметичного" Testcontainers-тесту й нестабільні падіння в
+`server/test/reviews-skills.it.test.ts`, бо дефолтний 10с таймаут
+`waitForPrRuns` (`server/test/helpers/runs.ts:17`) встигав спрацювати
+раніше, ніж run доходив до термінального статусу (`trace.prompt_assembly`
+лишався `undefined`). Виправлено додаванням явного
+`openrouter: new MockLLMProvider(...)` поруч з `openai`/`anthropic` у
+кожному `it.test.ts`, що тригерить рев'ю
+(`reviews-skills.it.test.ts`, `agent-stats.it.test.ts`, `reviews.it.test.ts`).
+Правило на майбутнє: будь-яка зміна дефолтного провайдера в
+`FEATURE_MODELS` вимагає звірки з llm-моками у ВСІХ `it.test.ts`, не лише
+з тестами самої фічі — прогалина в моку не видно, доки на машині випадково
+не виявиться справжній ключ саме для цього провайдера.
+Доказ: server/src/platform/container.ts:163-179 (`buildLlm` — падає в
+реальний провайдер, коли `overrides.llm[id]` відсутній), server/test/reviews-skills.it.test.ts
+(додано `openrouter` мок після виправлення)

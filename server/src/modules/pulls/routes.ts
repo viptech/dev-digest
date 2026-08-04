@@ -16,6 +16,7 @@ import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
 import { buildFindingsSummary } from './findings-summary.js';
+import { toPrIntentRecord } from '../reviews/helpers.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -220,15 +221,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
     // intent card. Best-effort: never fails the PR detail request.
     const persistedIntent = await container.reviewRepo.getIntent(pr.id).catch(() => undefined);
     const intent: PrIntentRecord | null = persistedIntent
-      ? {
-          pr_id: pr.id,
-          intent: persistedIntent.intent,
-          in_scope: persistedIntent.in_scope,
-          out_of_scope: persistedIntent.out_of_scope,
-          confidence: persistedIntent.confidence,
-          source: persistedIntent.source,
-          plan_ref: persistedIntent.plan_ref ?? null,
-        }
+      ? toPrIntentRecord(pr.id, persistedIntent)
       : null;
 
     // Local-first: refresh detail from GitHub when a token is configured;

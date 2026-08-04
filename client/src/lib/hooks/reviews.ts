@@ -8,6 +8,7 @@ import { api, API_BASE } from "../api";
 import { notify } from "../toast";
 import type {
   FindingActionKind,
+  PrIntentRecord,
   PrReviewComment,
   ReviewRecord,
   ReviewRunResponse,
@@ -131,6 +132,19 @@ export function useRunReview() {
       }),
     onSuccess: (_d, { prId }) => {
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
+    },
+  });
+}
+
+// ---- Force-reclassify PR intent (bypasses the head_sha cache) ----
+// For the case the automatic recompute-on-new-commit can't cover: the user
+// edited the PR description (or a linked issue/plan) without a new push.
+export function useRefreshIntent(prId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ intent: PrIntentRecord }>(`/pulls/${prId}/intent/refresh`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pull", prId] });
     },
   });
 }

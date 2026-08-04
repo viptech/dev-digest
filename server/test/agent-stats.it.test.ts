@@ -39,6 +39,16 @@ const REVIEW: Review = {
     },
   ],
 };
+// review_intent defaults to openrouter (Intent Layer) independent of the
+// review agent's own provider — mock it too, or intent-classification
+// pre-work falls through to a REAL provider construction.
+const MOCK_INTENT = {
+  intent: 'test PR',
+  in_scope: [],
+  out_of_scope: [],
+  confidence: 'high' as const,
+  source: 'description' as const,
+};
 
 d('agent stats (Testcontainers pg)', () => {
   let pg: PgFixture;
@@ -61,7 +71,10 @@ d('agent stats (Testcontainers pg)', () => {
       overrides: {
         embedder: new MockEmbedder(),
         git: new MockGitClient({ diff: DIFF }),
-        llm: { openai: new MockLLMProvider('openai', { structured: REVIEW }) },
+        llm: {
+          openai: new MockLLMProvider('openai', { structured: REVIEW }),
+          openrouter: new MockLLMProvider('openrouter', { structured: MOCK_INTENT }),
+        },
       },
     });
 
@@ -126,7 +139,10 @@ d('agent stats (Testcontainers pg)', () => {
       overrides: {
         embedder: new MockEmbedder(),
         git: new MockGitClient({ diff: DIFF }),
-        llm: { openai: new MockLLMProvider('openai', { structured: REVIEW }) },
+        llm: {
+          openai: new MockLLMProvider('openai', { structured: REVIEW }),
+          openrouter: new MockLLMProvider('openrouter', { structured: MOCK_INTENT }),
+        },
       },
     });
 

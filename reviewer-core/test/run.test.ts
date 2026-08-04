@@ -113,6 +113,91 @@ describe('reviewPullRequest (engine)', () => {
     ).rejects.toThrow('cancelled');
   });
 
+  it('Intent Layer scope filter: drops non-critical out-of-scope findings, collapses critical ones to one signal', async () => {
+    const scoped = {
+      verdict: 'request_changes',
+      summary: 'mixed scope findings',
+      score: 10,
+      findings: [
+        {
+          id: 'in-scope',
+          severity: 'WARNING',
+          category: 'bug',
+          title: 'in-scope warning',
+          file: 'src/config.ts',
+          start_line: 11,
+          end_line: 11,
+          rationale: 'relates to the PR',
+          confidence: 0.9,
+          kind: 'finding',
+          in_scope: true,
+        },
+        {
+          id: 'out-of-scope-minor',
+          severity: 'SUGGESTION',
+          category: 'style',
+          title: 'unrelated style nit',
+          file: 'src/config.ts',
+          start_line: 11,
+          end_line: 11,
+          rationale: 'pre-existing, unrelated to this PR',
+          confidence: 0.6,
+          kind: 'finding',
+          in_scope: false,
+        },
+        {
+          id: 'out-of-scope-critical-1',
+          severity: 'CRITICAL',
+          category: 'security',
+          title: 'unrelated critical issue A',
+          file: 'src/config.ts',
+          start_line: 11,
+          end_line: 11,
+          rationale: 'serious but unrelated to this PR',
+          confidence: 0.9,
+          kind: 'finding',
+          in_scope: false,
+        },
+        {
+          id: 'out-of-scope-critical-2',
+          severity: 'CRITICAL',
+          category: 'security',
+          title: 'unrelated critical issue B (duplicate signal)',
+          file: 'src/config.ts',
+          start_line: 11,
+          end_line: 11,
+          rationale: 'same class of serious-but-unrelated problem',
+          confidence: 0.5,
+          kind: 'finding',
+          in_scope: false,
+        },
+      ],
+    };
+    const llm = new MockLLMProvider('openai', { structured: scoped });
+    const diff = await new MockGitClient().diff();
+
+    const outcome = await reviewPullRequest({
+      systemPrompt: 'security reviewer',
+      model: 'gpt-4.1',
+      diff,
+      llm,
+      intent: 'Adds rate limiting to the public API endpoints.',
+      task: 'Review PR #1',
+    });
+
+    // in-scope kept + exactly ONE of the two critical out-of-scope duplicates
+    // kept (the higher-confidence one) — the minor out-of-scope finding and
+    // the duplicate critical one are dropped.
+    const ids = outcome.review.findings.map((f) => f.id).sort();
+    expect(ids).toEqual(['in-scope', 'out-of-scope-critical-1']);
+
+    const droppedIds = outcome.dropped.map((d) => d.finding.id).sort();
+    expect(droppedIds).toEqual(['out-of-scope-critical-2', 'out-of-scope-minor']);
+    expect(outcome.dropped.find((d) => d.finding.id === 'out-of-scope-minor')?.reason).toContain(
+      'out of scope',
+    );
+  });
+
   it('forwards sessionId to every LLM call (OpenRouter session grouping)', async () => {
     const seen: (string | undefined)[] = [];
     const recorder: LLMProvider = {

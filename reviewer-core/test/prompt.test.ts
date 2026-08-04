@@ -65,6 +65,17 @@ describe('assemblePrompt — ## PR description', () => {
   });
 });
 
+describe('assemblePrompt — Intent Layer scope-tagging instruction', () => {
+  it('instructs the model to set in_scope, only when Intent is present', () => {
+    const withIntent = userOf({ system: 'sys', diff: 'DIFF', intent: 'Adds rate limiting.' });
+    expect(withIntent).toMatch(/in_scope.*false/);
+    expect(withIntent).toMatch(/in_scope.*true/);
+
+    const withoutIntent = userOf({ system: 'sys', diff: 'DIFF' });
+    expect(withoutIntent).not.toContain('in_scope');
+  });
+});
+
 describe('assemblePrompt — sections (safe, content-free logging metadata)', () => {
   it('reports name/source/chars/approxTokens for every rendered section, and nothing else', () => {
     const { sections } = assemblePrompt({

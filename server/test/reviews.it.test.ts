@@ -119,6 +119,18 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
         git: new MockGitClient({ diff: DIFF }),
         llm: {
           [provider]: new MockLLMProvider(provider, { structured }),
+          // review_intent defaults to openrouter (Intent Layer) independent
+          // of the review agent's own provider — mock it too, or intent-
+          // classification pre-work falls through to a REAL provider build.
+          openrouter: new MockLLMProvider('openrouter', {
+            structured: {
+              intent: 'test PR',
+              in_scope: [],
+              out_of_scope: [],
+              confidence: 'high',
+              source: 'description',
+            },
+          }),
         },
       },
     });

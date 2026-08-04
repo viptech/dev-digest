@@ -7,14 +7,15 @@ import { IntentCard } from "./_components/IntentCard";
 import { s } from "./styles";
 
 interface OverviewTabProps {
+  prId: string | null | undefined;
   prBody: string | null | undefined;
   intent?: PrIntentRecord | null;
 }
 
-export function OverviewTab({ prBody, intent }: OverviewTabProps) {
+export function OverviewTab({ prId, prBody, intent }: OverviewTabProps) {
   return (
     <>
-      {intent && <IntentCard intent={intent} />}
+      {intent && <IntentCard intent={intent} prId={prId} />}
       {prBody && (
         <section>
           <SectionLabel icon="MessageSquare">Description</SectionLabel>

@@ -120,7 +120,7 @@ export class ReviewRunExecutor {
         workspaceId,
         pull,
         { id: repo.id, owner: repo.owner, name: repo.name },
-        diff.files.map((f) => f.path),
+        diff,
         logger,
       );
       intentText = formatIntentForPrompt(outcome.intent);
@@ -128,6 +128,26 @@ export class ReviewRunExecutor {
       runLog.info(
         `Intent classified (${outcome.intent.confidence} confidence, source=${outcome.intent.source}) — ${Date.now() - t0}ms`,
       );
+      // Same safe, structured prompt-assembly log as the main review call
+      // (see below) — for the classifier's OWN prompt. Two distinct calls,
+      // two distinct log lines, both name/source/length/model only, never
+      // content. Zero-cost/no-op on a cache hit (outcome.sections is empty).
+      if (outcome.sections.length > 0) {
+        runLog.info('Prompt assembled', {
+          // Pre-work is shared across every queued run for this PR (fanned
+          // out into each one's Live Log/trace) — correlate by prId, same as
+          // the fan-out ctx below, rather than picking one arbitrary runId.
+          prId: pull.id,
+          call: 'intent-classification',
+          model: outcome.modelUsed,
+          sectionCount: outcome.sections.length,
+          totalChars: outcome.sections.reduce((n, s) => n + s.chars, 0),
+          totalApproxTokens: outcome.sections.reduce((n, s) => n + s.approxTokens, 0),
+          tokensIn: outcome.stats.tokens_in,
+          tokensOut: outcome.stats.tokens_out,
+          ...(this.container.config.promptLogVerbose ? { sections: outcome.sections } : {}),
+        });
+      }
     } catch (err) {
       runLog.info(`Intent classification skipped: ${(err as Error).message}`);
     }
@@ -278,11 +298,14 @@ export class ReviewRunExecutor {
       // aggregate totals are logged either way.
       runLog.info('Prompt assembled', {
         runId,
+        call: 'review',
         model: agent.model,
         mode: outcome.mode,
         sectionCount: outcome.sections.length,
         totalChars: outcome.sections.reduce((n, s) => n + s.chars, 0),
         totalApproxTokens: outcome.sections.reduce((n, s) => n + s.approxTokens, 0),
+        tokensIn,
+        tokensOut,
         ...(this.container.config.promptLogVerbose ? { sections: outcome.sections } : {}),
       });
 

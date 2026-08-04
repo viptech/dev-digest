@@ -9,11 +9,12 @@ import { ReviewService } from './service.js';
 
 /**
  * reviews module.
- *   POST   /pulls/:id/review  {agentId} | {all:true}  → run review(s); returns runs
- *   GET    /runs/:id/events                            → SSE stream of RunEvent (replay-first)
- *   GET    /runs/:id/trace                             → the single-document RunTrace
- *   GET    /pulls/:id/reviews                          → persisted reviews + findings for a PR
- *   POST   /findings/:id/(accept|dismiss)              → finding actions
+ *   POST   /pulls/:id/review          {agentId} | {all:true}  → run review(s); returns runs
+ *   POST   /pulls/:id/intent/refresh                          → force-reclassify PR intent (bypasses head_sha cache)
+ *   GET    /runs/:id/events                                    → SSE stream of RunEvent (replay-first)
+ *   GET    /runs/:id/trace                                     → the single-document RunTrace
+ *   GET    /pulls/:id/reviews                                  → persisted reviews + findings for a PR
+ *   POST   /findings/:id/(accept|dismiss)                      → finding actions
  */
 const FINDING_ACTIONS = ['accept', 'dismiss'] as const;
 export default async function reviewsRoutes(appBase: FastifyInstance) {
@@ -42,6 +43,20 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     );
     return { pr_id: req.params.id, runs, reviews };
   });
+
+  // ---- Force-reclassify PR intent (manual trigger) ------------------
+  // Bypasses the head_sha cache unconditionally — for a reviewer who edited
+  // the PR description (or a linked issue/plan) without pushing a new commit,
+  // where the automatic pre-work cache check wouldn't have noticed anything
+  // changed. Synchronous: one cheap classifier call, not N agent runs.
+  app.post(
+    '/pulls/:id/intent/refresh',
+    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.refreshIntent(workspaceId, req.params.id, req.log);
+    },
+  );
 
   // ---- SSE: live run events (replay buffer first, then live; ends on done) -
   // No rate limit: SSE is one long-lived connection, not burst traffic.

@@ -23,6 +23,18 @@ const DIFF = `diff --git a/src/config.ts b/src/config.ts
    redisUrl: x,`;
 
 const EMPTY_REVIEW: Review = { verdict: 'approve', summary: 'ok', score: 100, findings: [] };
+// review_intent defaults to openrouter (Intent Layer, cheap flash-class model)
+// — independent of whatever provider the review agent itself uses. Every test
+// that runs a review must mock 'openrouter' too, or the intent-classification
+// pre-work step falls through to a REAL provider construction (slow, and a
+// real network call if a key happens to be configured on the machine).
+const MOCK_INTENT = {
+  intent: 'test PR',
+  in_scope: [],
+  out_of_scope: [],
+  confidence: 'high' as const,
+  source: 'description' as const,
+};
 
 let repoSeq = 0;
 async function setupRepoAndPr(db: PgFixture['handle']['db'], workspaceId: string) {
@@ -80,7 +92,10 @@ d('skill → prompt wiring (Testcontainers pg)', () => {
       overrides: {
         embedder: new MockEmbedder(),
         git: new MockGitClient({ diff: DIFF }),
-        llm: { openai: new MockLLMProvider('openai', { structured: EMPTY_REVIEW }) },
+        llm: {
+          openai: new MockLLMProvider('openai', { structured: EMPTY_REVIEW }),
+          openrouter: new MockLLMProvider('openrouter', { structured: MOCK_INTENT }),
+        },
       },
     });
   }
