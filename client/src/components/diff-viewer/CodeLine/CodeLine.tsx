@@ -59,7 +59,16 @@ export function CodeLine({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={highlight ? { ...lineRowFor(ln.kind), ...cs.highlightRow } : lineRowFor(ln.kind)}>
+      <div
+        style={{
+          ...lineRowFor(ln.kind),
+          ...(highlight ? cs.highlightRow : null),
+          // Smart Diff — a colored left rail on the exact finding line,
+          // matching the badge's severity color (independent of the
+          // scroll-to highlight outline above).
+          ...(finding ? { borderLeft: `3px solid ${SEV[finding].c}` } : null),
+        }}
+      >
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button
