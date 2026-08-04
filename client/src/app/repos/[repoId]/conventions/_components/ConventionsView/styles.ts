@@ -8,8 +8,8 @@ export const s = {
   h1: { fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em" } satisfies CSSProperties,
   subtitle: { fontSize: 14, color: "var(--text-secondary)", marginTop: 4 } satisfies CSSProperties,
   grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+    display: "flex",
+    flexDirection: "column",
     gap: 14,
   } satisfies CSSProperties,
 } as const;

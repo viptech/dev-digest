@@ -20,7 +20,9 @@ export const s = {
   } as React.CSSProperties,
   footer: {
     display: "flex",
-    flexDirection: "column",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   } as React.CSSProperties,
   badges: {
