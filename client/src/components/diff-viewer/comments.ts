@@ -115,8 +115,10 @@ export const cs = {
     outlineOffset: "-1px",
   } satisfies CSSProperties,
   /** Smart Diff's inline per-line severity badge (e.g. "warning", "suggestion"),
-     rendered at the end of a finding's line — colors/icon filled in per-severity
-     via `SEV` (@devdigest/ui) at the call site. */
+     rendered at the end of a finding's line — color filled in per-severity via
+     `SEV` (@devdigest/ui) at the call site. All-longhand border (never mix the
+     `border` shorthand with a `borderColor` override on the same rerender —
+     React warns; see FindingCard/styles.ts for the same fix). */
   findingBadge: {
     display: "inline-flex",
     alignItems: "center",
@@ -125,7 +127,8 @@ export const cs = {
     marginRight: 10,
     padding: "1px 8px",
     borderRadius: 5,
-    border: "1px solid",
+    borderStyle: "solid",
+    borderWidth: 1,
     fontSize: 11,
     fontWeight: 600,
     whiteSpace: "nowrap",
