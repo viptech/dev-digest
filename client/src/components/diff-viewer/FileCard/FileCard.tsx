@@ -5,7 +5,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
-import type { PrFile } from "@/lib/types";
+import type { PrFile, Severity, SmartDiffFinding } from "@/lib/types";
 import { AUTO_EXPAND_MAX_LINES } from "../constants";
 import { parsePatch, type Line } from "../helpers";
 import {
@@ -18,6 +18,20 @@ import {
 import { s, chevronFor } from "../styles";
 import { CodeLine } from "../CodeLine";
 import { OutdatedComments } from "../OutdatedComments";
+
+/** Highest-severity-wins ordering for when a line has more than one finding. */
+const SEVERITY_RANK: Record<Severity, number> = { CRITICAL: 3, WARNING: 2, SUGGESTION: 1 };
+
+/** Smart Diff — new-line-number → worst severity, for CodeLine's inline badge. */
+function findingByLine(findings: SmartDiffFinding[] | undefined): Map<number, Severity> {
+  const m = new Map<number, Severity>();
+  if (!findings) return m;
+  for (const f of findings) {
+    const existing = m.get(f.line);
+    if (!existing || SEVERITY_RANK[f.severity] > SEVERITY_RANK[existing]) m.set(f.line, f.severity);
+  }
+  return m;
+}
 
 /** Threads anchored to a given parsed line (RIGHT=new, LEFT=old). */
 function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): CommentThread[] {
@@ -34,6 +48,7 @@ export function FileCard({
   file,
   commenting,
   scrollToLine,
+  findings,
 }: {
   file: PrFile;
   commenting?: DiffCommentApi;
@@ -41,6 +56,9 @@ export function FileCard({
      scroll this card open to and highlight. Forces the card open even if it
      would otherwise auto-collapse (large file). */
   scrollToLine?: number | null;
+  /** Smart Diff — this file's findings (line + severity), rendered as an
+     inline badge on each matching line. */
+  findings?: SmartDiffFinding[];
 }) {
   const t = useTranslations("shell");
   const [open, setOpen] = React.useState(
@@ -52,6 +70,7 @@ export function FileCard({
     if (scrollToLine != null) setOpen(true);
   }, [scrollToLine]);
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
+  const findingByLineMap = React.useMemo(() => findingByLine(findings), [findings]);
 
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
@@ -102,6 +121,7 @@ export function FileCard({
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}
                 highlight={scrollToLine != null && ln.newNo === scrollToLine}
+                finding={ln.newNo != null ? findingByLineMap.get(ln.newNo) : undefined}
               />
             ))
           )}

@@ -64,7 +64,7 @@ d('GET /pulls/:id/smart-diff (Testcontainers pg)', () => {
     await pg?.stop();
   });
 
-  it('before any review: all files present, lock file in boilerplate, finding_lines all empty', async () => {
+  it('before any review: all files present, lock file in boilerplate, findings all empty', async () => {
     const app = await buildApp({ config: config(), db: pg.handle.db });
     const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
 
@@ -83,13 +83,13 @@ d('GET /pulls/:id/smart-diff (Testcontainers pg)', () => {
 
     for (const group of body.groups) {
       for (const f of group.files) {
-        expect(f.finding_lines).toEqual([]);
+        expect(f.findings).toEqual([]);
         expect(f.pseudocode_summary).toBeNull();
       }
     }
   });
 
-  it('after a review with findings: the matching file shows non-empty finding_lines', async () => {
+  it('after a review with findings: the matching file shows non-empty findings (line + severity)', async () => {
     const app = await buildApp({ config: config(), db: pg.handle.db });
     const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
 
@@ -122,11 +122,11 @@ d('GET /pulls/:id/smart-diff (Testcontainers pg)', () => {
 
     const core = body.groups.find((g) => g.role === 'core');
     const retryFile = core?.files.find((f) => f.path === 'src/payments/retry.ts');
-    expect(retryFile?.finding_lines).toEqual([18]);
+    expect(retryFile?.findings).toEqual([{ line: 18, severity: 'WARNING' }]);
 
     const boilerplate = body.groups.find((g) => g.role === 'boilerplate');
     const lockFile = boilerplate?.files.find((f) => f.path === 'package-lock.json');
-    expect(lockFile?.finding_lines).toEqual([]);
+    expect(lockFile?.findings).toEqual([]);
   });
 
   it('404s for an unknown/foreign-workspace PR id', async () => {

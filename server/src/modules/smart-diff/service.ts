@@ -1,4 +1,4 @@
-import type { SmartDiff, SmartDiffFile, SmartDiffGroup, SmartDiffRole } from '@devdigest/shared';
+import type { Severity, SmartDiff, SmartDiffFile, SmartDiffFinding, SmartDiffGroup, SmartDiffRole } from '@devdigest/shared';
 import { classifyFile } from './classifier.js';
 import { SPLIT_THRESHOLD_LINES } from './classification-rules.js';
 import type { FindingRow, PrFileRow, SmartDiffRepo } from './repository.js';
@@ -28,13 +28,13 @@ export class SmartDiffService {
 
 /** Pure assembly — no I/O, unit-testable with plain fixture arrays. */
 export function assembleSmartDiff(files: PrFileRow[], findings: FindingRow[]): SmartDiff {
-  const findingLinesByFile = new Map<string, number[]>();
+  const findingsByFile = new Map<string, SmartDiffFinding[]>();
   for (const f of findings) {
-    const lines = findingLinesByFile.get(f.file) ?? [];
-    lines.push(f.startLine);
-    findingLinesByFile.set(f.file, lines);
+    const list = findingsByFile.get(f.file) ?? [];
+    list.push({ line: f.startLine, severity: f.severity as Severity });
+    findingsByFile.set(f.file, list);
   }
-  for (const lines of findingLinesByFile.values()) lines.sort((a, b) => a - b);
+  for (const list of findingsByFile.values()) list.sort((a, b) => a.line - b.line);
 
   const filesByRole = new Map<SmartDiffRole, SmartDiffFile[]>(ROLE_ORDER.map((r) => [r, []]));
   let totalLines = 0;
@@ -48,7 +48,7 @@ export function assembleSmartDiff(files: PrFileRow[], findings: FindingRow[]): S
       pseudocode_summary: null,
       additions: file.additions,
       deletions: file.deletions,
-      finding_lines: findingLinesByFile.get(file.path) ?? [],
+      findings: findingsByFile.get(file.path) ?? [],
     });
   }
 

@@ -66,7 +66,7 @@ export function SmartDiffViewer({ prId, files, commenting }: SmartDiffViewerProp
                 {group.files.map((sdFile) => {
                   const prFile = fileByPath.get(sdFile.path);
                   if (!prFile) return null;
-                  const hasFindings = sdFile.finding_lines.length > 0;
+                  const hasFindings = sdFile.findings.length > 0;
                   const active = scrollTarget?.path === sdFile.path ? scrollTarget.line : null;
                   return (
                     <div key={sdFile.path} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -76,15 +76,15 @@ export function SmartDiffViewer({ prId, files, commenting }: SmartDiffViewerProp
                             type="button"
                             style={s.findingsBadgeBtn}
                             onClick={() =>
-                              setScrollTarget({ path: sdFile.path, line: sdFile.finding_lines[0]! })
+                              setScrollTarget({ path: sdFile.path, line: sdFile.findings[0]!.line })
                             }
                           >
                             <Icon.AlertTriangle size={12} />
-                            {sdFile.finding_lines.length} finding{sdFile.finding_lines.length === 1 ? "" : "s"}
+                            {sdFile.findings.length} finding{sdFile.findings.length === 1 ? "" : "s"}
                           </button>
                         </div>
                       )}
-                      <FileCard file={prFile} commenting={commenting} scrollToLine={active} />
+                      <FileCard file={prFile} commenting={commenting} scrollToLine={active} findings={sdFile.findings} />
                     </div>
                   );
                 })}

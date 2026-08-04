@@ -3,6 +3,8 @@
 "use client";
 
 import React from "react";
+import { Icon, SEV } from "@devdigest/ui";
+import type { Severity } from "@/lib/types";
 import { commentTargetFor, type CommentThread, type DiffCommentApi, cs } from "../comments";
 import { type Line } from "../helpers";
 import { s, lineRowFor, lineSignFor } from "../styles";
@@ -15,6 +17,7 @@ export function CodeLine({
   threads,
   commenting,
   highlight,
+  finding,
 }: {
   ln: Line;
   path: string;
@@ -23,6 +26,9 @@ export function CodeLine({
   /** Smart Diff's "N findings" badge scroll target — true for the one line
      this row should scroll into view and briefly highlight for. */
   highlight?: boolean;
+  /** Smart Diff — this line's (worst) finding severity, if any, rendered as
+     an inline severity badge next to the line text. */
+  finding?: Severity;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
@@ -74,6 +80,12 @@ export function CodeLine({
         <span className="mono" style={s.lineText}>
           {ln.text || " "}
         </span>
+        {finding && (
+          <span style={{ ...cs.findingBadge, borderColor: SEV[finding].c, background: SEV[finding].bg, color: SEV[finding].c }}>
+            {React.createElement(Icon[SEV[finding].icon], { size: 11 })}
+            {SEV[finding].label.toLowerCase()}
+          </span>
+        )}
       </div>
 
       {commenting &&

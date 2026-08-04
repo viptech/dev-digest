@@ -114,6 +114,22 @@ export const cs = {
     outline: "2px solid var(--accent)",
     outlineOffset: "-1px",
   } satisfies CSSProperties,
+  /** Smart Diff's inline per-line severity badge (e.g. "warning", "suggestion"),
+     rendered at the end of a finding's line — colors/icon filled in per-severity
+     via `SEV` (@devdigest/ui) at the call site. */
+  findingBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: "auto",
+    marginRight: 10,
+    padding: "1px 8px",
+    borderRadius: 5,
+    border: "1px solid",
+    fontSize: 11,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+  } satisfies CSSProperties,
   addBtn: {
     position: "absolute",
     left: 2,

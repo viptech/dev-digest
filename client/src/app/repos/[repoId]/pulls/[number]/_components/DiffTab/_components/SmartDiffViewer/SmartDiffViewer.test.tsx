@@ -46,7 +46,7 @@ function smartDiff(overrides: Partial<SmartDiff> = {}): SmartDiff {
             pseudocode_summary: null,
             additions: 10,
             deletions: 2,
-            finding_lines: [12],
+            findings: [{ line: 12, severity: "WARNING" }],
           },
         ],
       },
@@ -58,7 +58,7 @@ function smartDiff(overrides: Partial<SmartDiff> = {}): SmartDiff {
             pseudocode_summary: null,
             additions: 2,
             deletions: 0,
-            finding_lines: [],
+            findings: [],
           },
         ],
       },
@@ -70,7 +70,7 @@ function smartDiff(overrides: Partial<SmartDiff> = {}): SmartDiff {
             pseudocode_summary: null,
             additions: 900,
             deletions: 800,
-            finding_lines: [],
+            findings: [],
           },
         ],
       },
@@ -101,7 +101,7 @@ describe("SmartDiffViewer", () => {
     expect(screen.getByText("Boilerplate · 1 file")).toBeInTheDocument();
   });
 
-  it("renders a clickable findings badge only when finding_lines is non-empty", () => {
+  it("renders a clickable findings badge only when findings is non-empty", () => {
     mockSmartDiff = smartDiff();
     renderWithIntl(
       <SmartDiffViewer
@@ -118,6 +118,24 @@ describe("SmartDiffViewer", () => {
     fireEvent.click(badge);
     // Clicking doesn't throw and the file card stays rendered.
     expect(screen.getByText("src/service.ts")).toBeInTheDocument();
+  });
+
+  it("renders an inline severity badge on the exact line a finding is anchored to", () => {
+    mockSmartDiff = smartDiff();
+    const patch = ["@@ -10,3 +10,3 @@", " ctx line 10", " ctx line 11", "+added line 12"].join("\n");
+    renderWithIntl(
+      <SmartDiffViewer
+        prId="pr-1"
+        files={[
+          prFile({ path: "src/service.ts", patch }),
+          prFile({ path: "src/index.ts" }),
+          prFile({ path: "package-lock.json" }),
+        ]}
+      />,
+    );
+
+    // Line 12 (the finding's line) carries an inline "warning" severity badge.
+    expect(screen.getByText("warning")).toBeInTheDocument();
   });
 
   it("expanding the boilerplate group renders its file", () => {

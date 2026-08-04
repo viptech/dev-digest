@@ -18,7 +18,7 @@ const smartDiff: SmartDiff = {
     {
       role: "core",
       files: [
-        { path: "src/service.ts", pseudocode_summary: null, additions: 10, deletions: 2, finding_lines: [] },
+        { path: "src/service.ts", pseudocode_summary: null, additions: 10, deletions: 2, findings: [] },
       ],
     },
   ],
