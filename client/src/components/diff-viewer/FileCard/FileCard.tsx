@@ -30,11 +30,27 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+export function FileCard({
+  file,
+  commenting,
+  scrollToLine,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  /** Smart Diff's clickable "N findings" badge — the new-side line number to
+     scroll this card open to and highlight. Forces the card open even if it
+     would otherwise auto-collapse (large file). */
+  scrollToLine?: number | null;
+}) {
   const t = useTranslations("shell");
   const [open, setOpen] = React.useState(
     (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
   );
+  // A finding badge click always wants to see the line, regardless of the
+  // file's auto-expand default.
+  React.useEffect(() => {
+    if (scrollToLine != null) setOpen(true);
+  }, [scrollToLine]);
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
 
   // Group this file's comments into threads, then split into ones we can anchor
@@ -85,6 +101,7 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
                 path={file.path}
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}
+                highlight={scrollToLine != null && ln.newNo === scrollToLine}
               />
             ))
           )}

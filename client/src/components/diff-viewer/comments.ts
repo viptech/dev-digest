@@ -108,6 +108,12 @@ export function partitionThreads(
 // ---- styles (layout only; cards/inputs/buttons reuse @devdigest/ui) ----
 export const cs = {
   rowWrap: { position: "relative" } satisfies CSSProperties,
+  /** Smart Diff's scroll-to-finding target — a transient outline so the
+     clicked line is unambiguous once scrolled into view. */
+  highlightRow: {
+    outline: "2px solid var(--accent)",
+    outlineOffset: "-1px",
+  } satisfies CSSProperties,
   addBtn: {
     position: "absolute",
     left: 2,

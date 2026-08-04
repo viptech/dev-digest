@@ -14,14 +14,25 @@ export function CodeLine({
   path,
   threads,
   commenting,
+  highlight,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
+  /** Smart Diff's "N findings" badge scroll target — true for the one line
+     this row should scroll into view and briefly highlight for. */
+  highlight?: boolean;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
+  const rowRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (highlight && rowRef.current) {
+      rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlight]);
 
   if (ln.kind === "hunk") {
     return (
@@ -37,11 +48,12 @@ export function CodeLine({
 
   return (
     <div
+      ref={rowRef}
       style={cs.rowWrap}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={lineRowFor(ln.kind)}>
+      <div style={highlight ? { ...lineRowFor(ln.kind), ...cs.highlightRow } : lineRowFor(ln.kind)}>
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button

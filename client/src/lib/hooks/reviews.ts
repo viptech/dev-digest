@@ -14,6 +14,7 @@ import type {
   ReviewRunResponse,
   RunEvent,
   RunSummary,
+  SmartDiff,
 } from "@devdigest/shared";
 
 // ---- Active (in-flight) runs — server-side source of truth ----
@@ -84,6 +85,18 @@ export function useDeleteReview(prId: string | null | undefined) {
   return useMutation({
     mutationFn: (reviewId: string) => api.del<{ ok: boolean }>(`/reviews/${reviewId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reviews", prId] }),
+  });
+}
+
+// ---- Smart Diff (Files changed tab, "Smart order" toggle) ----
+/** Files grouped by risk role (core/wiring/boilerplate) + the latest review's
+   findings joined in per file. Purely deterministic on the server — no LLM
+   call, so this is a plain cached GET like `usePrReviews`. */
+export function useSmartDiff(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["smart-diff", prId],
+    queryFn: () => api.get<SmartDiff>(`/pulls/${prId}/smart-diff`),
+    enabled: !!prId,
   });
 }
 

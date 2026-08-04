@@ -121,3 +121,21 @@ _components/RunTraceDrawer` — лише 6 `../`, бо ціль сама леж�
 цілі.
 Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/StatsTab/StatsTab.tsx:6-7
 (`../../../../../../../lib/hooks/agents` проти `../../../../../../repos/[repoId]/pulls/[number]/_components/RunTraceDrawer`)
+
+## 2026-08-04 · gotcha
+**`diff-viewer` не мав ЖОДНОГО механізму scroll-to-line/highlight до Smart Diff — не було що "перевикористати", довелось додавати з нуля в `FileCard`/`CodeLine`**
+Плани, що посилаються на "reuse the existing scroll/highlight primitives" у
+`@/components/diff-viewer`, мали на увазі майбутню фічу, не факт: до Smart
+Diff `CodeLine`/`FileCard` не мали жодного `ref`/`scrollIntoView`/`highlight`
+пропу — `grep -n "scrollIntoView" client/src/components/diff-viewer` не
+знаходив нічого. Довелось додати мінімальний `highlight?: boolean` пропс у
+`CodeLine` (з `useRef` + `useEffect(() => ref.current?.scrollIntoView(...))`)
+і `scrollToLine?: number | null` у `FileCard` (форсує `open=true` і рахує
+`highlight` для рядка з відповідним `ln.newNo`), а не переписувати diff-рендер
+з нуля. Також `FileCard` не експортувався з публічного `diff-viewer/index.ts`
+(лише `DiffViewer` + `DiffCommentApi`) — довелось розширити експорт, коли
+з'явився другий викликач (`SmartDiffViewer`, що рендерить `FileCard` напряму
+для групування по ролях, а не через `DiffViewer`).
+Доказ: client/src/components/diff-viewer/CodeLine/CodeLine.tsx:17,29-35;
+client/src/components/diff-viewer/FileCard/FileCard.tsx:36,51-53;
+client/src/components/diff-viewer/index.ts:2 (новий `export { FileCard }`)
