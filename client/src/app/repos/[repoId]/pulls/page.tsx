@@ -13,7 +13,7 @@ import {
 } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
 import { RepoNotFound } from "@/components/repo-not-found";
-import { usePulls, useRefreshRepo } from "@/lib/hooks";
+import { usePulls, useRefreshRepo, useSearchPulls } from "@/lib/hooks";
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { ApiError } from "@/lib/api";
 import { COLUMN_KEYS, SKELETON_ROWS } from "./constants";
@@ -47,9 +47,13 @@ export default function PullsPage() {
   const [sort, setSort] = React.useState("newest");
 
   const q = query.trim().toLowerCase();
-  const filtered = (pulls ?? [])
+  // Long queries hit the server (full PR history, not just what's loaded);
+  // short ones stay client-side against the already-fetched page.
+  const { data: searchResults } = useSearchPulls(repoId, q.length >= 3 ? q : undefined);
+  const source = q.length >= 3 ? (searchResults ?? []) : (pulls ?? []);
+  const filtered = source
     .filter((p) => status === "all" || p.status === status)
-    .filter((p) => !q || p.title.toLowerCase().includes(q) || String(p.number).includes(q))
+    .filter((p) => q.length >= 3 || !q || p.title.toLowerCase().includes(q) || String(p.number).includes(q))
     .slice()
     .sort((a, b) => {
       const ta = Date.parse(a.updated_at ?? "") || 0;

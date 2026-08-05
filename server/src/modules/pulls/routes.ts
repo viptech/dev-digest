@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, desc, eq, inArray, sum } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, sum } from 'drizzle-orm';
+import { z } from 'zod';
 import type {
   PrMeta,
   PrDetail,
@@ -15,6 +16,9 @@ import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
 import { buildFindingsSummary } from './findings-summary.js';
+import { buildSearchPattern } from './search.js';
+
+const PrSearchQuery = z.object({ q: z.string().min(1) });
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -199,6 +203,49 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       };
     });
   });
+
+  // ---- Search PRs by title within a repo -----------------------------
+  // For repos with a long PR history, client-side filtering of the already-
+  // fetched list isn't enough — this hits the DB directly by title substring.
+  app.get(
+    '/repos/:id/pulls/search',
+    { schema: { params: IdParams, querystring: PrSearchQuery } },
+    async (req): Promise<PrMeta[]> => {
+      await getContext(container, req);
+      const pattern = buildSearchPattern(req.query.q);
+      const rows = await container.db
+        .select()
+        .from(t.pullRequests)
+        .where(and(eq(t.pullRequests.repoId, req.params.id), ilike(t.pullRequests.title, pattern)))
+        .limit(50);
+
+      const now = Date.now();
+      return rows.map((r) => ({
+        id: r.id,
+        number: r.number,
+        title: r.title,
+        author: r.author,
+        branch: r.branch,
+        base: r.base,
+        head_sha: r.headSha,
+        additions: r.additions,
+        deletions: r.deletions,
+        files_count: r.filesCount,
+        status: deriveReviewStatus({
+          ghStatus: r.status,
+          lastReviewedSha: r.lastReviewedSha,
+          headSha: r.headSha,
+          updatedAt: r.updatedAt,
+          now,
+        }),
+        opened_at: r.openedAt?.toISOString() ?? null,
+        updated_at: r.updatedAt?.toISOString() ?? null,
+        score: null,
+        cost_usd: null,
+        findings_summary: null,
+      }));
+    },
+  );
 
   app.get('/pulls/:id', { schema: { params: IdParams } }, async (req): Promise<PrDetail> => {
     const { workspaceId } = await getContext(container, req);

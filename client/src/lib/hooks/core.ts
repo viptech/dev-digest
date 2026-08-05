@@ -111,6 +111,17 @@ export function usePulls(repoId: string | null | undefined) {
   });
 }
 
+// Server-side PR search by title (GET /repos/:id/pulls/search) — used once the
+// query is long enough to be worth a round trip; short queries stay client-side.
+export function useSearchPulls(repoId: string | null | undefined, query: string | undefined) {
+  return useQuery({
+    queryKey: ["pulls", repoId, "search", query],
+    queryFn: () =>
+      api.get<PrMeta[]>(`/repos/${repoId}/pulls/search?q=${encodeURIComponent(query ?? "")}`),
+    enabled: !!repoId && !!query && query.length >= 3,
+  });
+}
+
 export function usePullDetail(prId: string | number | null | undefined) {
   return useQuery({
     queryKey: ["pull", prId],

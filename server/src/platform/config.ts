@@ -36,6 +36,9 @@ const EnvSchema = z.object({
     (v) => (v === '' ? undefined : v),
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   ),
+  // Cap on rows returned by GET /repos/:id/pulls/search — keeps a broad query
+  // (e.g. a single common letter) from returning the whole PR history.
+  PR_SEARCH_MAX_RESULTS: z.coerce.number().int().default(50),
 });
 
 export type AppConfig = {
@@ -59,6 +62,8 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /** Row cap for GET /repos/:id/pulls/search. Default 50. */
+  prSearchMaxResults: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -77,5 +82,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    prSearchMaxResults: parsed.PR_SEARCH_MAX_RESULTS,
   };
 }
