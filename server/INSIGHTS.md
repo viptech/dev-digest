@@ -216,3 +216,21 @@ PROMPT_LOG_VERBOSE === 'true' && parsed.NODE_ENV !== 'production'`),
 Доказ: server/src/platform/container.ts:163-179 (`buildLlm` — падає в
 реальний провайдер, коли `overrides.llm[id]` відсутній), server/test/reviews-skills.it.test.ts
 (додано `openrouter` мок після виправлення)
+
+## 2026-08-06 · gotcha
+**Невалідний `POST /agents` у Testcontainers-тесті провалюється МОВЧКИ й
+маскується під "run ніколи не завершується" (10с таймаут `waitForPrRuns`)**
+Пропущене required-поле `provider` в тілі `POST /agents` (схема
+`CreateAgentBody`) валиться на Zod-валідації з 400 — `app.inject(...).json()`
+повертає error-об'єкт без `id`. Наступний
+`POST /pulls/:id/review payload:{agentId: undefined}` серіалізується у JSON
+БЕЗ ключа `agentId` (бо `JSON.stringify` дропає `undefined`-значення), тобто
+`resolveTargets` кидає `invalid_run_request` — жодного `agent_runs` рядка не
+створюється. `waitForPrRuns(db, prId, {expected:1})` в цьому випадку не бачить
+ЖОДНОГО рядка (не лише незавершеного) і чесно чекає весь `timeoutMs` (10с)
+перш ніж повернутись — симптом виглядає як "run досі виконується", а не як
+"агент не створився". Перевіряй `agent.id` одразу після `POST /agents` у
+новому тесті, а не лише в кінці ланцюжка.
+Доказ: server/src/modules/agents/routes.ts:34-45 (`provider: Provider` —
+required, без `.optional()`), server/test/helpers/runs.ts:17-30
+(`waitForPrRuns` — таймаут, а не помилка, коли рядків нема зовсім)

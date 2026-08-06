@@ -139,3 +139,31 @@ Diff `CodeLine`/`FileCard` не мали жодного `ref`/`scrollIntoView`/`
 Доказ: client/src/components/diff-viewer/CodeLine/CodeLine.tsx:17,29-35;
 client/src/components/diff-viewer/FileCard/FileCard.tsx:36,51-53;
 client/src/components/diff-viewer/index.ts:2 (новий `export { FileCard }`)
+
+## 2026-08-06 · gotcha
+**jsdom у цьому проєкті не реалізує `scrollIntoView` — будь-який ref-based
+scroll-effect кине `TypeError`, поки компонент не протестований end-to-end**
+`CodeLine`/`ReviewRunAccordion` роками викликали `ref.current?.scrollIntoView(...)`
+без жодного полiфілу, і це не спливало, бо жоден існуючий тест насправді не
+доводив рендер до точки, де `highlight`/`targetRunId` стає truthy для
+змонтованого елемента (напр. `SmartDiffViewer.test.tsx` клікав бейдж, але
+`prFile()` мав `patch: null` → рядок з потрібним `ln.newNo` просто не
+рендерився). Перший тест, що дійсно домагається кліку/фокусу на змонтованому
+вузлі (нова картка `FindingCard` з `forceFocus`), одразу впав з
+`cardRef.current?.scrollIntoView is not a function`. Фікс — той самий
+патерн, що вже є для `ResizeObserver`: global-стаб у test setup, а не мок у
+кожному тестовому файлі окремо.
+Доказ: client/src/test/setup.ts (доданий стаб `Element.prototype.scrollIntoView`)
+
+## 2026-08-06 · decision
+**Прив'язка Smart Diff "N findings" бейджа до Findings tab, а не до
+скролу в diff, вимагала `id` у `SmartDiffFinding` — самого `line`+`severity`
+не досить**
+Щоб клік по бейджу розгортав КОНКРЕТНУ картку в Findings tab (а не просто
+гортав diff), потрібно було адресувати finding за його реальним id, не лише
+за номером рядка (кілька findings можуть теоретично лежати на одному рядку).
+Контракт `SmartDiffFinding` довелось розширити полем `id` синхронно в
+server- і client-копіях — легко забути оновити одну з двох при такій зміні
+(вендор-дублювання схем, не спільний пакет).
+Доказ: server/src/vendor/shared/contracts/brief.ts (`SmartDiffFinding`),
+client/src/vendor/shared/contracts/brief.ts (та ж схема)
