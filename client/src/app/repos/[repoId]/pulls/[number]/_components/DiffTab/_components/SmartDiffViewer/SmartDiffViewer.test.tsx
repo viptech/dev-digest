@@ -46,7 +46,7 @@ function smartDiff(overrides: Partial<SmartDiff> = {}): SmartDiff {
             pseudocode_summary: null,
             additions: 10,
             deletions: 2,
-            findings: [{ line: 12, severity: "WARNING" }],
+            findings: [{ id: "f1", line: 12, severity: "WARNING" }],
           },
         ],
       },
@@ -118,6 +118,21 @@ describe("SmartDiffViewer", () => {
     fireEvent.click(badge);
     // Clicking doesn't throw and the file card stays rendered.
     expect(screen.getByText("src/service.ts")).toBeInTheDocument();
+  });
+
+  it("clicking a findings badge calls onOpenFinding with that file's first finding id", () => {
+    mockSmartDiff = smartDiff();
+    const onOpenFinding = vi.fn();
+    renderWithIntl(
+      <SmartDiffViewer
+        prId="pr-1"
+        files={[prFile({ path: "src/service.ts" }), prFile({ path: "src/index.ts" }), prFile({ path: "package-lock.json" })]}
+        onOpenFinding={onOpenFinding}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /1 finding/i }));
+    expect(onOpenFinding).toHaveBeenCalledWith("f1");
   });
 
   it("renders an inline severity badge on the exact line a finding is anchored to", () => {

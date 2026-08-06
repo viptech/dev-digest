@@ -121,8 +121,8 @@ describe('AI contracts parse fixtures', () => {
               additions: 84,
               deletions: 0,
               findings: [
-                { line: 28, severity: 'WARNING' },
-                { line: 52, severity: 'CRITICAL' },
+                { id: 'f1', line: 28, severity: 'WARNING' },
+                { id: 'f2', line: 52, severity: 'CRITICAL' },
               ],
             },
           ],

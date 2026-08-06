@@ -49,6 +49,12 @@ describe("FindingCard (smoke, both themes)", () => {
     });
   });
 
+  it("forceFocus expands a collapsed card", () => {
+    renderWithIntl(<FindingCard f={FINDING} onAction={() => {}} forceFocus focusNonce={1} />);
+    // The suggestion block only renders once expanded.
+    expect(screen.getByText("Move the key to an environment variable.")).toBeInTheDocument();
+  });
+
   it("fires accept/dismiss actions", () => {
     const onAction = vi.fn();
     renderWithIntl(<FindingCard f={FINDING} defaultExpanded onAction={onAction} />);

@@ -12,21 +12,24 @@ interface SmartDiffViewerProps {
   prId: string | null;
   files: PrFile[];
   commenting?: DiffCommentApi;
+  /** A finding badge was clicked — the parent switches to the Findings tab
+   *  and expands that finding's card there. */
+  onOpenFinding?: (findingId: string) => void;
 }
 
 /**
  * Smart Diff — groups a PR's already-imported files by risk role
  * (core/wiring/boilerplate), joining in the latest review's findings.
  * `core`/`wiring` start expanded, `boilerplate` starts collapsed. A clickable
- * "N findings" badge scrolls the reused `FileCard`/`CodeLine` diff rendering
- * to (and highlights) the first finding's line.
+ * "N findings" badge jumps to that file's first finding's card in the
+ * Findings tab (via `onOpenFinding`) — the diff view itself doesn't own a
+ * findings UI, so scrolling within it isn't the right destination.
  */
-export function SmartDiffViewer({ prId, files, commenting }: SmartDiffViewerProps) {
+export function SmartDiffViewer({ prId, files, commenting, onOpenFinding }: SmartDiffViewerProps) {
   const { data: smartDiff, isLoading, isError } = useSmartDiff(prId);
   const [expanded, setExpanded] = React.useState<Record<SmartDiffRole, boolean>>({
     ...ROLE_DEFAULT_EXPANDED,
   });
-  const [scrollTarget, setScrollTarget] = React.useState<{ path: string; line: number } | null>(null);
 
   const fileByPath = React.useMemo(() => {
     const m = new Map<string, PrFile>();
@@ -67,7 +70,6 @@ export function SmartDiffViewer({ prId, files, commenting }: SmartDiffViewerProp
                   const prFile = fileByPath.get(sdFile.path);
                   if (!prFile) return null;
                   const hasFindings = sdFile.findings.length > 0;
-                  const active = scrollTarget?.path === sdFile.path ? scrollTarget.line : null;
                   return (
                     <div key={sdFile.path} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       {hasFindings && (
@@ -75,16 +77,14 @@ export function SmartDiffViewer({ prId, files, commenting }: SmartDiffViewerProp
                           <button
                             type="button"
                             style={s.findingsBadgeBtn}
-                            onClick={() =>
-                              setScrollTarget({ path: sdFile.path, line: sdFile.findings[0]!.line })
-                            }
+                            onClick={() => onOpenFinding?.(sdFile.findings[0]!.id)}
                           >
                             <Icon.AlertTriangle size={12} />
                             {sdFile.findings.length} finding{sdFile.findings.length === 1 ? "" : "s"}
                           </button>
                         </div>
                       )}
-                      <FileCard file={prFile} commenting={commenting} scrollToLine={active} findings={sdFile.findings} />
+                      <FileCard file={prFile} commenting={commenting} findings={sdFile.findings} />
                     </div>
                   );
                 })}

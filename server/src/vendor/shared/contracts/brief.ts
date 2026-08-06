@@ -95,8 +95,11 @@ export type PrHistory = z.infer<typeof PrHistory>;
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
-/** One finding anchored to a line, for the inline per-line severity badge. */
+/** One finding anchored to a line, for the inline per-line severity badge.
+ *  `id` is the underlying finding row's id — lets the client jump from a
+ *  Smart Diff badge straight to that finding's card in the Findings tab. */
 export const SmartDiffFinding = z.object({
+  id: z.string(),
   line: z.number().int(),
   severity: Severity,
 });

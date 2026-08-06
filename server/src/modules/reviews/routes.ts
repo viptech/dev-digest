@@ -10,6 +10,7 @@ import { ReviewService } from './service.js';
 /**
  * reviews module.
  *   POST   /pulls/:id/review          {agentId} | {all:true}  → run review(s); returns runs
+ *   GET    /pulls/:id/intent                                   → persisted PR intent, standalone (may be null)
  *   POST   /pulls/:id/intent/refresh                          → force-reclassify PR intent (bypasses head_sha cache)
  *   GET    /runs/:id/events                                    → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                                     → the single-document RunTrace
@@ -42,6 +43,14 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
       req.log,
     );
     return { pr_id: req.params.id, runs, reviews };
+  });
+
+  // ---- Get PR intent (persisted classification, if any) ------------------
+  // Standalone read (also embedded in GET /pulls/:id for the initial page
+  // load) so the client can cache/refetch just this piece independently.
+  app.get('/pulls/:id/intent', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getIntent(workspaceId, req.params.id);
   });
 
   // ---- Force-reclassify PR intent (manual trigger) ------------------

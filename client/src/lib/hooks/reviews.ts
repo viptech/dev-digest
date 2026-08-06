@@ -149,6 +149,20 @@ export function useRunReview() {
   });
 }
 
+// ---- PR intent (standalone GET, decoupled from PR detail) ----
+// `initialIntent` — the `intent` already embedded in PrDetail (GET /pulls/:id)
+// — seeds the cache so the Overview tab doesn't show a loading flash on first
+// paint; React Query still revalidates against GET /pulls/:id/intent in the
+// background (default staleTime is 0).
+export function useIntent(prId: string | null | undefined, initialIntent?: PrIntentRecord | null) {
+  return useQuery({
+    queryKey: ["intent", prId],
+    queryFn: () => api.get<{ intent: PrIntentRecord | null }>(`/pulls/${prId}/intent`).then((r) => r.intent),
+    enabled: !!prId,
+    initialData: initialIntent,
+  });
+}
+
 // ---- Force-reclassify PR intent (bypasses the head_sha cache) ----
 // For the case the automatic recompute-on-new-commit can't cover: the user
 // edited the PR description (or a linked issue/plan) without a new push.
@@ -156,8 +170,8 @@ export function useRefreshIntent(prId: string | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<{ intent: PrIntentRecord }>(`/pulls/${prId}/intent/refresh`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pull", prId] });
+    onSuccess: (res) => {
+      qc.setQueryData(["intent", prId], res.intent);
     },
   });
 }

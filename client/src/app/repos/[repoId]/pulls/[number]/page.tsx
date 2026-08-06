@@ -67,6 +67,14 @@ export default function PRDetailPage() {
   };
   const setTab = (t: string) => setParam("tab", t);
 
+  // Smart Diff finding badge (Diff tab) → Findings tab, with that finding's
+  // card force-expanded + scrolled into view.
+  const [focusFinding, setFocusFinding] = React.useState<{ findingId: string; n: number } | null>(null);
+  const openFinding = (findingId: string) => {
+    setFocusFinding((p) => ({ findingId, n: (p?.n ?? 0) + 1 }));
+    setTab("findings");
+  };
+
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
   const allFindings: FindingRecord[] = React.useMemo(
@@ -148,6 +156,8 @@ export default function PRDetailPage() {
             repoFullName={repoFullName}
             headSha={pr.head_sha}
             cancelMutation={cancel}
+            focusFindingId={focusFinding?.findingId ?? null}
+            focusNonce={focusFinding?.n ?? 0}
             onOpenTrace={(id) => setParam("trace", id)}
             onDelete={(id) => {
               if (window.confirm("Delete this run from history? (its logs are removed too)"))
@@ -167,6 +177,7 @@ export default function PRDetailPage() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            onOpenFinding={openFinding}
           />
         )}
       </div>

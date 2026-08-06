@@ -315,4 +315,28 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(body.runs.length).toBeGreaterThanOrEqual(2);
     await app.close();
   });
+
+  it('GET /pulls/:id/intent is null before any review, then holds the classified intent after', async () => {
+    const app = await appWith(REVIEW_FIXTURE);
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+
+    const before = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/intent` })).json();
+    expect(before).toEqual({ intent: null });
+
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Sec', provider: 'openai', model: 'gpt-4.1', system_prompt: 'Find security issues.' },
+      })
+    ).json();
+    await app.inject({ method: 'POST', url: `/pulls/${pr.id}/review`, payload: { agentId: agent.id } });
+    // runReview is fire-and-forget (see waitForPrRuns' doc comment); intent
+    // classification is pre-work inside that same background execution.
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+
+    const after = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/intent` })).json();
+    expect(after.intent).toMatchObject({ pr_id: pr.id, intent: 'test PR', source: 'description' });
+    await app.close();
+  });
 });

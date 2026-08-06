@@ -144,6 +144,18 @@ export class ReviewService {
   }
 
   /**
+   * The PR's persisted intent classification, if any — a standalone read so
+   * the client can cache/invalidate it independently of the whole PR detail
+   * payload (which also embeds `intent`, kept for the initial page load).
+   */
+  async getIntent(workspaceId: string, prId: string): Promise<{ intent: PrIntentRecord | null }> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const persisted = await this.repo.getIntent(prId);
+    return { intent: persisted ? toPrIntentRecord(prId, persisted) : null };
+  }
+
+  /**
    * Manual re-classification — bypasses the `headSha` cache unconditionally.
    * For the case the automatic pre-work cache check can't cover: a reviewer
    * edits the PR description (or a linked issue/plan changes) WITHOUT a new

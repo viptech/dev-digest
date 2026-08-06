@@ -119,7 +119,7 @@ describe('SmartDiffService.build (assembly with a stub repository, no DB)', () =
     expect(repo.latestReviewFindings).toHaveBeenCalledWith('pr-1');
     expect(llmSpy).not.toHaveBeenCalled(); // never wired to anything LLM-shaped
     expect(result.groups.find((g) => g.role === 'core')!.files[0]!.findings).toEqual([
-      { line: 12, severity: 'WARNING' },
+      { id: 'f1', line: 12, severity: 'WARNING' },
     ]);
   });
 

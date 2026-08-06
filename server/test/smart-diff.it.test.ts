@@ -104,17 +104,20 @@ d('GET /pulls/:id/smart-diff (Testcontainers pg)', () => {
         score: 62,
       })
       .returning();
-    await pg.handle.db.insert(t.findings).values({
-      reviewId: review!.id,
-      file: 'src/payments/retry.ts',
-      startLine: 18,
-      endLine: 20,
-      severity: 'WARNING',
-      category: 'bug',
-      title: 'Unbounded retry loop',
-      rationale: 'No max-attempts guard.',
-      confidence: 0.8,
-    });
+    const [finding] = await pg.handle.db
+      .insert(t.findings)
+      .values({
+        reviewId: review!.id,
+        file: 'src/payments/retry.ts',
+        startLine: 18,
+        endLine: 20,
+        severity: 'WARNING',
+        category: 'bug',
+        title: 'Unbounded retry loop',
+        rationale: 'No max-attempts guard.',
+        confidence: 0.8,
+      })
+      .returning();
 
     const res = await app.inject({ method: 'GET', url: `/pulls/${pr.id}/smart-diff` });
     expect(res.statusCode).toBe(200);
@@ -122,7 +125,7 @@ d('GET /pulls/:id/smart-diff (Testcontainers pg)', () => {
 
     const core = body.groups.find((g) => g.role === 'core');
     const retryFile = core?.files.find((f) => f.path === 'src/payments/retry.ts');
-    expect(retryFile?.findings).toEqual([{ line: 18, severity: 'WARNING' }]);
+    expect(retryFile?.findings).toEqual([{ id: finding!.id, line: 18, severity: 'WARNING' }]);
 
     const boilerplate = body.groups.find((g) => g.role === 'boilerplate');
     const lockFile = boilerplate?.files.find((f) => f.path === 'package-lock.json');
