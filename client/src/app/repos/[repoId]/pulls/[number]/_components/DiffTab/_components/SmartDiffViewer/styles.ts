@@ -27,20 +27,6 @@ export const s = {
     gap: 10,
     background: "var(--bg-surface)",
   } satisfies CSSProperties,
-  fileHeaderRight: { display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" } satisfies CSSProperties,
-  findingsBadgeBtn: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 5,
-    padding: "3px 9px",
-    borderRadius: 5,
-    fontSize: 12,
-    fontWeight: 600,
-    border: "1px solid var(--warn)",
-    background: "var(--warn-bg)",
-    color: "var(--warn)",
-    cursor: "pointer",
-  } satisfies CSSProperties,
   toggleRow: { display: "inline-flex", gap: 4 } satisfies CSSProperties,
 } as const;
 

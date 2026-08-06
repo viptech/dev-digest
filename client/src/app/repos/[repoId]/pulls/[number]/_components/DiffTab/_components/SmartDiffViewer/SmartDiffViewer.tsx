@@ -69,23 +69,14 @@ export function SmartDiffViewer({ prId, files, commenting, onOpenFinding }: Smar
                 {group.files.map((sdFile) => {
                   const prFile = fileByPath.get(sdFile.path);
                   if (!prFile) return null;
-                  const hasFindings = sdFile.findings.length > 0;
                   return (
-                    <div key={sdFile.path} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      {hasFindings && (
-                        <div style={s.fileHeaderRight}>
-                          <button
-                            type="button"
-                            style={s.findingsBadgeBtn}
-                            onClick={() => onOpenFinding?.(sdFile.findings[0]!.id)}
-                          >
-                            <Icon.AlertTriangle size={12} />
-                            {sdFile.findings.length} finding{sdFile.findings.length === 1 ? "" : "s"}
-                          </button>
-                        </div>
-                      )}
-                      <FileCard file={prFile} commenting={commenting} findings={sdFile.findings} />
-                    </div>
+                    <FileCard
+                      key={sdFile.path}
+                      file={prFile}
+                      commenting={commenting}
+                      findings={sdFile.findings}
+                      onOpenFinding={onOpenFinding}
+                    />
                   );
                 })}
               </div>

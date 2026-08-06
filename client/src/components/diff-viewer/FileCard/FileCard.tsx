@@ -49,6 +49,7 @@ export function FileCard({
   commenting,
   scrollToLine,
   findings,
+  onOpenFinding,
 }: {
   file: PrFile;
   commenting?: DiffCommentApi;
@@ -59,6 +60,9 @@ export function FileCard({
   /** Smart Diff — this file's findings (line + severity), rendered as an
      inline badge on each matching line. */
   findings?: SmartDiffFinding[];
+  /** Smart Diff — clicking the header's "N findings" badge jumps to that
+     finding's card in the Findings tab. */
+  onOpenFinding?: (findingId: string) => void;
 }) {
   const t = useTranslations("shell");
   const [open, setOpen] = React.useState(
@@ -106,6 +110,19 @@ export function FileCard({
             <Icon.MessageSquare size={12} />
             {commentCount}
           </span>
+        )}
+        {findings && findings.length > 0 && (
+          <button
+            type="button"
+            style={s.findingsBadgeBtn}
+            onClick={(e) => {
+              e.stopPropagation(); // don't also toggle the card open/closed
+              onOpenFinding?.(findings[0]!.id);
+            }}
+          >
+            <Icon.AlertTriangle size={12} />
+            {findings.length} finding{findings.length === 1 ? "" : "s"}
+          </button>
         )}
       </div>
       {open && (
