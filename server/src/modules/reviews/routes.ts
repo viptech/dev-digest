@@ -14,6 +14,7 @@ import { ReviewService } from './service.js';
  *   POST   /pulls/:id/intent/refresh                          → force-reclassify PR intent (bypasses head_sha cache)
  *   GET    /runs/:id/events                                    → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                                     → the single-document RunTrace
+ *   GET    /runs/:id/findings                                   → the review + findings produced by that run (by run_id alone)
  *   GET    /pulls/:id/reviews                                  → persisted reviews + findings for a PR
  *   POST   /findings/:id/(accept|dismiss)                      → finding actions
  */
@@ -147,6 +148,18 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     const trace = await service.getRunTrace(req.params.id);
     if (!trace) throw new NotFoundError('Run trace not found');
     return trace;
+  });
+
+  // ---- Findings for a run, keyed by run_id alone (no pull id needed) ------
+  // Additive read for MCP's get_findings(run_id): reviews.run_id is populated
+  // independently of pr_id, so this resolves without going through
+  // agent_runs/pull_id. 404 covers both "run still in flight, no review
+  // persisted yet" and "run_id doesn't exist" identically.
+  app.get('/runs/:id/findings', { schema: { params: IdParams } }, async (req) => {
+    await getContext(container, req);
+    const review = await service.findingsForRun(req.params.id);
+    if (!review) throw new NotFoundError('Run findings not found');
+    return review;
   });
 
   // ---- Reads --------------------------------------------------------------

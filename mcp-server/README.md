@@ -1,0 +1,130 @@
+# `@devdigest/mcp-server` — devdigest-mcp
+
+A local, stdio-transport [MCP](https://modelcontextprotocol.io) server that lets
+Claude Code / Claude Desktop drive DevDigest's existing Fastify API (`server/`,
+port `3001`) through 5 read-mostly tools, without duplicating DevDigest's
+business logic. It is a thin client: every tool either resolves flat scalar
+args (`repo`, `pr`, `agent`) to internal UUIDs and calls the API over `fetch`,
+or (for `get_blast_radius`) is a documented stub with no backing route yet.
+
+## Tools
+
+| Tool | Purpose |
+|---|---|
+| `list_agents` | List configured review agents (id, name, provider, model, enabled). Call first to discover valid `agent` names. |
+| `run_agent_on_pull_request` | Start a review run for `repo` + `pr` + `agent`, poll up to ~60s, return `{ verdict, score, findings }` (or `{ run_id, status: 'running' }` if still in progress). |
+| `get_findings` | Fetch `{ verdict, score, findings }` for an already-completed run by `run_id`. |
+| `get_conventions` | Fetch already-extracted coding conventions for a repo. Read-only — never triggers new extraction. |
+| `get_blast_radius` | **Not implemented yet.** Always returns a stub error (after validating `repo`/`pr`) — no `/blast` route exists on the API yet. |
+
+## Prerequisites
+
+- The DevDigest API running locally (`./scripts/dev.sh` from the repo root, or
+  `cd server && pnpm dev`) — defaults to `http://localhost:3001`.
+- Node.js (for `npx`/`tsx`) and this package's dependencies installed:
+
+  ```sh
+  cd mcp-server
+  npm install
+  ```
+
+## Not started by `./scripts/dev.sh`
+
+This package is deliberately **not** wired into the root dev script — booting
+the rest of the app (Postgres, `server/`, `client/`) never starts this MCP
+server as a side effect. It only runs when an MCP client (Claude Code, Claude
+Desktop) spawns it over stdio per its own config (see below), or when you run
+it manually (`npm start`). Registering/deregistering it with your MCP client
+is the on/off switch — see "Configuring Claude Code / Claude Desktop" below.
+
+## Configuring Claude Code / Claude Desktop
+
+**Use `start.sh`, not a raw `npx tsx`/`tsx` command.** `tsx` resolves this
+package's `tsconfig.json` `paths` alias (`@devdigest/shared`) relative to the
+spawned process's **working directory**, not the entry file's location. Some
+MCP clients don't let you set that working directory at all — confirmed on
+Claude Code: `claude mcp add` has no `--cwd` flag, and `claude mcp add-json`
+silently drops a `cwd` field from the stored config (verified by inspecting
+`~/.claude.json` after adding one). Without the right cwd, startup fails with
+`ERR_MODULE_NOT_FOUND: Cannot find package '@devdigest/shared'` and the MCP
+client reports a generic `-32000: Connection closed` — no hint that cwd was
+the cause. `start.sh` (`cd "$(dirname "$0")" && exec ./node_modules/.bin/tsx
+src/index.ts`) sidesteps this entirely by fixing its own cwd first, so it
+works regardless of what cwd the client spawns it with.
+
+**Claude Code**, local scope (private to you, not committed, not shared via
+`.mcp.json`):
+
+```sh
+claude mcp add devdigest -s local -e DEVDIGEST_API_URL=http://localhost:3001 \
+  -- "/absolute/path/to/dev-digest/mcp-server/start.sh"
+claude mcp get devdigest   # should show "✔ Connected"
+```
+
+Remove it when done: `claude mcp remove devdigest -s local`.
+
+**Claude Desktop** (`claude_desktop_config.json`) — same idea, point `command`
+at the absolute path to `start.sh`, no `args` needed:
+
+```json
+{
+  "mcpServers": {
+    "devdigest": {
+      "command": "/absolute/path/to/dev-digest/mcp-server/start.sh",
+      "env": {
+        "DEVDIGEST_API_URL": "http://localhost:3001"
+      }
+    }
+  }
+}
+```
+
+(Desktop's config format does document a `cwd` field, and it may well honor
+it correctly — but `start.sh` makes the entry work identically everywhere
+without depending on that, so there's no reason to rely on it.)
+
+Equivalently, `npm start` runs the same `tsx src/index.ts` entry point (see
+`package.json`'s `start` script) — useful for a quick manual check that the
+process boots without errors (it will sit waiting on stdio, so run it with a
+real MCP client, not standalone in a terminal, to actually exercise a tool).
+
+**On-demand only, not always-on:** avoid adding this to the repo's shared
+`.mcp.json` (that auto-connects for every Claude Code session in this repo,
+for every teammate). Prefer registering/removing it per session with the CLI
+(see the exact `claude mcp add ... start.sh` command above), or add it once
+under `--scope local`/`user` and toggle it off between uses via `/mcp` inside
+a Claude Code session (check `claude mcp --help` / `/mcp` for the exact flags
+in your installed version — the CLI surface evolves).
+
+## `DEVDIGEST_API_URL`
+
+Every request goes through `src/http-client.ts`, which reads
+`process.env.DEVDIGEST_API_URL` and falls back to `http://localhost:3001` when
+unset. Set it in the MCP config's `env` block (as above) to point this server
+at a different host/port — e.g. a non-default `pnpm dev` port, or a remote
+deployment. No auth headers are sent (the API's `LocalNoAuthProvider` always
+resolves the same local workspace/user, so there is nothing to authenticate
+locally).
+
+## Development
+
+```sh
+npm install       # install deps
+npm run typecheck # tsc --noEmit
+npm test          # vitest run — unit tests only, no real network/API needed
+npm start         # tsx src/index.ts — runs the server over stdio
+```
+
+Contracts (`Agent`, `Repo`, `PrMeta`, `Finding`, `ReviewRecord`, …) are
+imported from the server's vendored shared package via a tsconfig path alias
+(`@devdigest/shared` → `../server/src/vendor/shared/index.ts`) — no separate
+copy is kept here (see root `INSIGHTS.md`'s note on contract-copy drift; this
+package deliberately avoids adding a third one).
+
+## Known limitation
+
+`get_blast_radius` is a firm, documented stub — the underlying `/blast` route
+and `repo-intel`'s `getBlastRadius()` facade aren't wired up yet (planned for
+a later course lesson, see root `README.md`'s roadmap, L04). It still
+validates `repo`/`pr` first so a bad input gets a specific error instead of
+being masked by the generic "not implemented" message.

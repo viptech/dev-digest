@@ -234,3 +234,44 @@ PROMPT_LOG_VERBOSE === 'true' && parsed.NODE_ENV !== 'production'`),
 Доказ: server/src/modules/agents/routes.ts:34-45 (`provider: Provider` —
 required, без `.optional()`), server/test/helpers/runs.ts:17-30
 (`waitForPrRuns` — таймаут, а не помилка, коли рядків нема зовсім)
+
+## 2026-08-06 · decision
+**`reviews.workspace_id` уже лежить на самому рядку review — не треба
+протягувати `workspaceId` через `ReviewService.findingsForRun(runId)`**
+Додаючи `GET /runs/:id/findings` (лукап review+findings по самому `run_id`,
+без join через `agent_runs`/`pull_id`), треба той самий agent-name lookup, що
+й у `reviewsForPull` (`agents.getById(workspaceId, agentId)`), а `workspaceId`
+у викликача (роута) немає — і не повинно бути, весь сенс роута в тому, щоб
+працювати від голого `run_id`. Рішення: `workspaceId` береться з уже
+знайденого рядка (`review.workspaceId`), а не з параметра методу — сигнатура
+лишається `findingsForRun(runId: string)`, роут лишається справді unscoped-by-
+design.
+Доказ: server/src/modules/reviews/service.ts:234-244 (`this.agents.getById(review.workspaceId, review.agentId)`),
+server/src/db/schema/reviews.ts:11-13 (`workspaceId` — required колонка на `reviews`)
+
+## 2026-08-06 · gotcha
+**`IdParams` (`z.string().uuid()`) валідує `:id` роута ще ДО хендлера — тест
+на "невідомий id" з не-UUID рядком отримає 422, а не очікувані 404**
+Для `GET /runs/:id/findings` (і будь-якого іншого `:id`-роута на `IdParams`)
+герметичний `app.inject()`-тест, що перевіряє 404-гілку "id не знайдено",
+мусить використовувати UUID-подібний рядок навіть для "невідомого"
+значення — інакше запит взагалі не доходить до сервісу/репозиторію,
+падає на zod-валідації params і повертає 422 `validation_error`.
+Доказ: server/src/modules/_shared/schemas.ts:11 (`IdParams = z.object({ id:
+z.string().uuid() })`), server/test/reviews-findings-by-run.test.ts (UUID-
+подібний `UNKNOWN_RUN_ID` замість довільного рядка)
+
+## 2026-08-06 · decision
+**Герметичний (без Postgres) тест на HTTP-роут можливий через мінімальний
+фейковий `Db`, якщо одночасно підмінити `overrides.auth`**
+`buildApp({db, overrides})` дозволяє підсунути фейковий `Db`, що реалізує
+лише ТОЧНІ ланцюжки `select().from(table).where()...`, які реально викликає
+роут під тестом — усе інше (напр. boot-time `reapStaleRunningRuns()`) можна
+безпечно проігнорувати/кинути помилку, бо цей викоп обгорнутий у try/catch
+(non-fatal warn) в `app.ts`. Але без підміни `overrides.auth` кожен роут, що
+викликає `getContext()`, впаде на `LocalNoAuthProvider`'s реальних запитах
+до `users`/`workspaces` — підміни на фейковий `AuthProvider` теж потрібна.
+Доказ: server/src/app.ts:80-85 (try/catch навколо `reapStaleRuns()`),
+server/src/adapters/auth/local.ts:20-37 (`LocalNoAuthProvider` реально ходить
+у `db.select()`), server/test/reviews-findings-by-run.test.ts (fakeDb +
+`overrides: { auth }`)

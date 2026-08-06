@@ -78,6 +78,23 @@ export async function getReview(db: Db, reviewId: string): Promise<ReviewRow | u
   return row;
 }
 
+/**
+ * The review (+ its findings) produced by a given agent_run, if one was
+ * persisted. `reviews.run_id` is populated independently of `pr_id` at
+ * insert time (see run-executor.ts), so this resolves straight from a bare
+ * run_id with no join through agent_runs/pull_id — mirrors `reviewsForPull`'s
+ * shape, just for a single review keyed by run_id instead of a PR's list.
+ */
+export async function getReviewByRunId(
+  db: Db,
+  runId: string,
+): Promise<{ review: ReviewRow; findings: FindingRow[] } | undefined> {
+  const [review] = await db.select().from(t.reviews).where(eq(t.reviews.runId, runId)).limit(1);
+  if (!review) return undefined;
+  const findings = await db.select().from(t.findings).where(eq(t.findings.reviewId, review.id));
+  return { review, findings };
+}
+
 /** Delete a whole review (one agent's run) + its findings (cascade), scoped
  *  to the workspace. Returns false if not found in the workspace. */
 export async function deleteReview(
