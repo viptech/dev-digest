@@ -99,18 +99,6 @@ export function FileCard({
         <span className="mono" style={s.filePath}>
           {file.path}
         </span>
-        <span className="mono tnum" style={s.fileStat}>
-          <span style={s.addText}>+{file.additions}</span>{" "}
-          <span style={s.delText}>−{file.deletions}</span>
-        </span>
-        {commentCount > 0 && (
-          <span
-            style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}
-          >
-            <Icon.MessageSquare size={12} />
-            {commentCount}
-          </span>
-        )}
         {findings && findings.length > 0 && (
           <button
             type="button"
@@ -123,6 +111,18 @@ export function FileCard({
             <Icon.AlertTriangle size={12} />
             {findings.length} finding{findings.length === 1 ? "" : "s"}
           </button>
+        )}
+        <span className="mono tnum" style={s.fileStat}>
+          <span style={s.addText}>+{file.additions}</span>{" "}
+          <span style={s.delText}>−{file.deletions}</span>
+        </span>
+        {commentCount > 0 && (
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}
+          >
+            <Icon.MessageSquare size={12} />
+            {commentCount}
+          </span>
         )}
       </div>
       {open && (
