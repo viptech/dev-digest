@@ -139,3 +139,98 @@ ExtractBody.optional()`, а існуючі виклики в тесті були
 репо, не лише в місцях, які сам таск торкається.
 Доказ: server/test/conventions-file-guard.test.ts:64 (виклик тепер
 явно `service.extract('ws1', 'repo1', 'llm')`)
+
+## 2026-08-03 · gotcha
+**`PrDetail.linked_issue` НІКОЛИ не персистується в БД — це live-фетч лише в
+`GET /pulls/:id`, а не поле на `pull_requests`**
+План Intent Layer стверджував, що лінкований issue "already resolved at
+ingestion time... persisted on PrDetail.linked_issue" — і план цитував саме
+рядок `octokit.ts:118` як доказ персистентності. Насправді `linked_issue`
+збирається виключно всередині обробника `GET /pulls/:id` (виклик
+`gh.getPullRequest(...)` прямо в роуті, не при імпорті PR) і ніде не
+записується в `pull_requests`/окрему таблицю. Будь-який фоновий процес (як
+`ReviewRunExecutor`, що не проходить через цей HTTP-роут) не має лінкованого
+issue "безкоштовно" з рядка БД — його потрібно фетчити наживо через
+`container.github()`, обов'язково best-effort (немає токена / офлайн →
+деградація до `undefined`, не throw).
+Доказ: server/src/modules/pulls/routes.ts:222-223 (live-фетч у роуті) vs
+відсутність `linkedIssue`/`linked_issue` колонки в
+server/src/db/schema/pulls.ts
+
+## 2026-08-03 · gotcha
+**Додавання required-полів (`confidence`/`source`) до `Intent` контракту
+ламає готовий fixture-тест `Intent.parse(...)` — компілятор цього не ловить**
+`server/test/contracts.test.ts` мав `Intent.parse({ intent, in_scope,
+out_of_scope })` без `confidence`/`source` — це компілювалось (бо тест не
+типізований проти нового `z.object`, а викликає `.parse` на рантаймовому
+значенні), але падало б на рантаймі з ZodError після розширення схеми
+required-полями. `tsc` тут безсилий: ловиться лише прогоном тестів.
+Перевіряй `grep` фікстур/фікстур-білдерів контракту, який розширюєш required
+полями, а не лише типи, що на нього спираються.
+Доказ: server/test/contracts.test.ts:68-76 (фікстуру доповнено
+`confidence: 'high', source: 'description'` після розширення `Intent` в
+server/src/vendor/shared/contracts/brief.ts:9-25)
+
+## 2026-08-03 · decision
+**"Local-only debug toggle" реалізовано як hard gate в `loadConfig`, а не
+як просто задокументоване правило "не вмикай у проді"**
+`PROMPT_LOG_VERBOSE` (детальний per-section розпис у структурованому
+логі складання промпта) обчислюється як `parsed.PROMPT_LOG_VERBOSE ===
+'true' && parsed.NODE_ENV !== 'production'` прямо у `loadConfig` —
+помилково виставлена змінна оточення в проді фізично не може увімкнути
+verbose-режим, це не покладається на дисципліну деплою. Патерн вартий
+повторного використання для будь-якого майбутнього "тільки локально"
+прапорця: гейт у самій функції парсингу конфіга, не коментар поруч зі
+змінною.
+Доказ: server/src/platform/config.ts:79 (`promptLogVerbose: parsed.
+PROMPT_LOG_VERBOSE === 'true' && parsed.NODE_ENV !== 'production'`),
+перевірено тестом server/test/config.test.ts:24-28 (`NODE_ENV:
+'production'` → `false` навіть при `PROMPT_LOG_VERBOSE: 'true'`)
+
+## 2026-08-04 · gotcha
+**Зміна дефолтного провайдера в `FEATURE_MODELS` може непомітно зламати
+герметичність `*.it.test.ts`, і це видно не одразу**
+Зміна `FEATURE_MODELS['review_intent'].defaultProvider` з `'openai'` на
+`'openrouter'` (`server/src/vendor/shared/contracts/platform.ts:53-60`)
+зламала герметичність усіх `server/test/*.it.test.ts`, що запускають
+рев'ю через `POST /pulls/:id/review`: ці тести мокають лише
+`overrides.llm.openai` (бо саме такий provider у тестового review-агента),
+а `review_intent` раніше ТЕЖ був `openai` — тобто класифікація intent
+випадково потрапляла під той самий мок. Після зміни дефолту
+`container.llm('openrouter')` (`server/src/platform/container.ts:163-179`)
+почав провалюватись до РЕАЛЬНОЇ побудови провайдера на будь-якій машині, де
+в `~/.devdigest/secrets.json`/`process.env` є справжній
+`OPENROUTER_API_KEY` — це дало реальні ~8-10с мережеві виклики всередині
+"герметичного" Testcontainers-тесту й нестабільні падіння в
+`server/test/reviews-skills.it.test.ts`, бо дефолтний 10с таймаут
+`waitForPrRuns` (`server/test/helpers/runs.ts:17`) встигав спрацювати
+раніше, ніж run доходив до термінального статусу (`trace.prompt_assembly`
+лишався `undefined`). Виправлено додаванням явного
+`openrouter: new MockLLMProvider(...)` поруч з `openai`/`anthropic` у
+кожному `it.test.ts`, що тригерить рев'ю
+(`reviews-skills.it.test.ts`, `agent-stats.it.test.ts`, `reviews.it.test.ts`).
+Правило на майбутнє: будь-яка зміна дефолтного провайдера в
+`FEATURE_MODELS` вимагає звірки з llm-моками у ВСІХ `it.test.ts`, не лише
+з тестами самої фічі — прогалина в моку не видно, доки на машині випадково
+не виявиться справжній ключ саме для цього провайдера.
+Доказ: server/src/platform/container.ts:163-179 (`buildLlm` — падає в
+реальний провайдер, коли `overrides.llm[id]` відсутній), server/test/reviews-skills.it.test.ts
+(додано `openrouter` мок після виправлення)
+
+## 2026-08-06 · gotcha
+**Невалідний `POST /agents` у Testcontainers-тесті провалюється МОВЧКИ й
+маскується під "run ніколи не завершується" (10с таймаут `waitForPrRuns`)**
+Пропущене required-поле `provider` в тілі `POST /agents` (схема
+`CreateAgentBody`) валиться на Zod-валідації з 400 — `app.inject(...).json()`
+повертає error-об'єкт без `id`. Наступний
+`POST /pulls/:id/review payload:{agentId: undefined}` серіалізується у JSON
+БЕЗ ключа `agentId` (бо `JSON.stringify` дропає `undefined`-значення), тобто
+`resolveTargets` кидає `invalid_run_request` — жодного `agent_runs` рядка не
+створюється. `waitForPrRuns(db, prId, {expected:1})` в цьому випадку не бачить
+ЖОДНОГО рядка (не лише незавершеного) і чесно чекає весь `timeoutMs` (10с)
+перш ніж повернутись — симптом виглядає як "run досі виконується", а не як
+"агент не створився". Перевіряй `agent.id` одразу після `POST /agents` у
+новому тесті, а не лише в кінці ланцюжка.
+Доказ: server/src/modules/agents/routes.ts:34-45 (`provider: Provider` —
+required, без `.optional()`), server/test/helpers/runs.ts:17-30
+(`waitForPrRuns` — таймаут, а не помилка, коли рядків нема зовсім)

@@ -92,6 +92,13 @@
       "when": 1785681015976,
       "tag": "0012_brave_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785787670728,
+      "tag": "0013_black_nico_minoru",
+      "breakpoints": true
     }
   ]
 }

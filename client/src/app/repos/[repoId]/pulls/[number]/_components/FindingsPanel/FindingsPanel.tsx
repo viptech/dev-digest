@@ -22,17 +22,33 @@ export function FindingsPanel({
   prId,
   repoFullName,
   headSha,
+  targetFindingId = null,
+  targetFindingNonce = 0,
 }: {
   findings: FindingRecord[];
   prId: string;
   repoFullName?: string | null;
   headSha?: string | null;
+  /** Jump target from outside (a Smart Diff finding badge) — this finding's
+   *  card force-expands + scrolls into view once it's rendered. */
+  targetFindingId?: string | null;
+  targetFindingNonce?: number;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
   const [hideLow, setHideLow] = React.useState(false);
   const [focusIdx, setFocusIdx] = React.useState(0);
   const [activeSeverities, setActiveSeverities] = React.useState<Set<Severity>>(new Set());
+
+  // A jump target must be visible regardless of whatever filter was active —
+  // clear them so the targeted card is guaranteed to render.
+  React.useEffect(() => {
+    if (targetFindingId) {
+      setHideLow(false);
+      setActiveSeverities(new Set());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetFindingId, targetFindingNonce]);
 
   const counts = React.useMemo(() => severityCounts(findings), [findings]);
   const shown = React.useMemo(
@@ -97,6 +113,8 @@ export function FindingsPanel({
               f={f}
               focused={i === focusIdx}
               defaultExpanded={i === 0}
+              forceFocus={f.id === targetFindingId}
+              focusNonce={targetFindingNonce}
               pending={action.isPending}
               repoFullName={repoFullName}
               headSha={headSha}

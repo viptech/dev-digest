@@ -18,7 +18,26 @@ export const s = {
     padding: 8,
     whiteSpace: "pre-wrap",
   } as React.CSSProperties,
-  footer: { display: "flex", alignItems: "center", gap: 10 } as React.CSSProperties,
+  footer: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  } as React.CSSProperties,
+  badges: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+  } as React.CSSProperties,
+  actions: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+  } as React.CSSProperties,
   error: {
     fontSize: 12,
     color: "var(--crit)",

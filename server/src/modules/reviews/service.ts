@@ -1,12 +1,14 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, PrIntentRecord, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
-import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
+import { type ReviewDto, type ReviewDtoFinding, toPrIntentRecord } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
+import { loadDiff } from './diff-loader.js';
+import { IntentClassificationService } from './intent-service.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -139,6 +141,52 @@ export class ReviewService {
 
   private publish(runId: string, kind: RunEventKind, msg: string, data?: unknown) {
     return this.container.runBus.publish(runId, kind, msg, data);
+  }
+
+  /**
+   * The PR's persisted intent classification, if any — a standalone read so
+   * the client can cache/invalidate it independently of the whole PR detail
+   * payload (which also embeds `intent`, kept for the initial page load).
+   */
+  async getIntent(workspaceId: string, prId: string): Promise<{ intent: PrIntentRecord | null }> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const persisted = await this.repo.getIntent(prId);
+    return { intent: persisted ? toPrIntentRecord(prId, persisted) : null };
+  }
+
+  /**
+   * Manual re-classification — bypasses the `headSha` cache unconditionally.
+   * For the case the automatic pre-work cache check can't cover: a reviewer
+   * edits the PR description (or a linked issue/plan changes) WITHOUT a new
+   * commit, so `headSha` is unchanged but the classifier's input isn't.
+   * Synchronous (unlike `runReview`'s fire-and-forget) — it's one cheap call,
+   * not N agent runs, so the caller can just await the fresh result.
+   */
+  async refreshIntent(workspaceId: string, prId: string, logger?: Logger): Promise<{ intent: PrIntentRecord }> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repo = await this.repo.getRepo(pull.repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+
+    const diff = await loadDiff(this.container, this.repo, workspaceId, pull, repo);
+    const intentSvc = new IntentClassificationService(this.container, this.repo);
+    const outcome = await intentSvc.classify(
+      workspaceId,
+      pull,
+      { id: repo.id, owner: repo.owner, name: repo.name },
+      diff,
+      logger,
+      { force: true },
+    );
+
+    const persisted = {
+      ...outcome.intent,
+      providerUsed: outcome.providerUsed,
+      modelUsed: outcome.modelUsed,
+      headSha: pull.headSha,
+    };
+    return { intent: toPrIntentRecord(prId, persisted) };
   }
 
   // ===========================================================================

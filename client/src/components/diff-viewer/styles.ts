@@ -31,6 +31,21 @@ export const s = {
   fileStat: { fontSize: 12 } satisfies CSSProperties,
   addText: { color: "var(--code-add-text)" } satisfies CSSProperties,
   delText: { color: "var(--code-del-text)" } satisfies CSSProperties,
+  /** Smart Diff's clickable "N findings" badge — part of the file's own
+   *  header row (inside the card), not a separate element above it. */
+  findingsBadgeBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "3px 9px",
+    borderRadius: 5,
+    fontSize: 12,
+    fontWeight: 600,
+    border: "1px solid var(--warn)",
+    background: "var(--warn-bg)",
+    color: "var(--warn)",
+    cursor: "pointer",
+  } satisfies CSSProperties,
   fileBody: {
     borderTop: "1px solid var(--border)",
     padding: "8px 0",

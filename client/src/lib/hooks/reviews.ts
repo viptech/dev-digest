@@ -8,11 +8,13 @@ import { api, API_BASE } from "../api";
 import { notify } from "../toast";
 import type {
   FindingActionKind,
+  PrIntentRecord,
   PrReviewComment,
   ReviewRecord,
   ReviewRunResponse,
   RunEvent,
   RunSummary,
+  SmartDiff,
 } from "@devdigest/shared";
 
 // ---- Active (in-flight) runs — server-side source of truth ----
@@ -86,6 +88,18 @@ export function useDeleteReview(prId: string | null | undefined) {
   });
 }
 
+// ---- Smart Diff (Files changed tab, "Smart order" toggle) ----
+/** Files grouped by risk role (core/wiring/boilerplate) + the latest review's
+   findings joined in per file. Purely deterministic on the server — no LLM
+   call, so this is a plain cached GET like `usePrReviews`. */
+export function useSmartDiff(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["smart-diff", prId],
+    queryFn: () => api.get<SmartDiff>(`/pulls/${prId}/smart-diff`),
+    enabled: !!prId,
+  });
+}
+
 // ---- Inline review comments on the "Files changed" tab (proxied to GitHub) --
 /** Existing GitHub PR review comments, fetched live. */
 export function usePrComments(prId: string | null | undefined) {
@@ -131,6 +145,33 @@ export function useRunReview() {
       }),
     onSuccess: (_d, { prId }) => {
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
+    },
+  });
+}
+
+// ---- PR intent (standalone GET, decoupled from PR detail) ----
+// `initialIntent` — the `intent` already embedded in PrDetail (GET /pulls/:id)
+// — seeds the cache so the Overview tab doesn't show a loading flash on first
+// paint; React Query still revalidates against GET /pulls/:id/intent in the
+// background (default staleTime is 0).
+export function useIntent(prId: string | null | undefined, initialIntent?: PrIntentRecord | null) {
+  return useQuery({
+    queryKey: ["intent", prId],
+    queryFn: () => api.get<{ intent: PrIntentRecord | null }>(`/pulls/${prId}/intent`).then((r) => r.intent),
+    enabled: !!prId,
+    initialData: initialIntent,
+  });
+}
+
+// ---- Force-reclassify PR intent (bypasses the head_sha cache) ----
+// For the case the automatic recompute-on-new-commit can't cover: the user
+// edited the PR description (or a linked issue/plan) without a new push.
+export function useRefreshIntent(prId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ intent: PrIntentRecord }>(`/pulls/${prId}/intent/refresh`),
+    onSuccess: (res) => {
+      qc.setQueryData(["intent", prId], res.intent);
     },
   });
 }

@@ -73,6 +73,16 @@ d('conventions extraction (Testcontainers pg)', () => {
               ConventionExtraction: EXTRACTION,
             },
           }),
+          // conventions defaults to openrouter (cheap flash-class model, no
+          // OpenAI key required) — mock it too, independent of which provider
+          // a given test cares about, or extraction falls through to a REAL
+          // provider construction.
+          openrouter: new MockLLMProvider('openrouter', {
+            structuredBySchema: {
+              ConventionFileSelection: { files: ['src/service.ts'] },
+              ConventionExtraction: EXTRACTION,
+            },
+          }),
         },
       },
     });
@@ -128,6 +138,19 @@ d('conventions extraction (Testcontainers pg)', () => {
   });
 
   it('drops candidates whose evidence_line is out of range', async () => {
+    const extractionWithBadLine = {
+      candidates: [
+        EXTRACTION.candidates[0],
+        {
+          category: 'naming',
+          rule: 'A rule whose cited evidence line does not exist in the file.',
+          evidence_path: 'src/service.ts',
+          evidence_line: 9999,
+          evidence_snippet: 'this line does not exist',
+          confidence: 0.9,
+        },
+      ],
+    };
     const app = await buildApp({
       config: config(),
       db: pg.handle.db,
@@ -138,19 +161,14 @@ d('conventions extraction (Testcontainers pg)', () => {
           openai: new MockLLMProvider('openai', {
             structuredBySchema: {
               ConventionFileSelection: { files: ['src/service.ts'] },
-              ConventionExtraction: {
-                candidates: [
-                  EXTRACTION.candidates[0],
-                  {
-                    category: 'naming',
-                    rule: 'A rule whose cited evidence line does not exist in the file.',
-                    evidence_path: 'src/service.ts',
-                    evidence_line: 9999,
-                    evidence_snippet: 'this line does not exist',
-                    confidence: 0.9,
-                  },
-                ],
-              },
+              ConventionExtraction: extractionWithBadLine,
+            },
+          }),
+          // conventions defaults to openrouter — mock it too (see appWith()).
+          openrouter: new MockLLMProvider('openrouter', {
+            structuredBySchema: {
+              ConventionFileSelection: { files: ['src/service.ts'] },
+              ConventionExtraction: extractionWithBadLine,
             },
           }),
         },

@@ -7,9 +7,49 @@ import type {
   UnifiedDiff,
 } from '@devdigest/shared';
 import { Review as ReviewSchema } from '@devdigest/shared';
-import { assemblePrompt } from '../prompt.js';
+import { assemblePrompt, type PromptSectionMeta } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
+
+/**
+ * Intent Layer scope filter — DETERMINISTIC, runs after grounding, only
+ * meaningful when the model actually saw a `## Intent` section (otherwise
+ * every `in_scope` is `undefined` and this is a no-op: `!== false` keeps it).
+ *
+ * Policy: non-critical out-of-scope findings are dropped entirely (pure
+ * noise relative to what this PR is for); a CRITICAL out-of-scope finding is
+ * never silently dropped (per INJECTION_GUARD — intent can never zero out a
+ * real defect) but IS collapsed to exactly one signal, so N duplicate
+ * "this unrelated file also has a problem" comments don't spam the review.
+ */
+function filterByScope(findings: Finding[]): {
+  kept: Finding[];
+  dropped: { finding: Finding; reason: string }[];
+} {
+  const inScope = findings.filter((f) => f.in_scope !== false);
+  const outOfScope = findings.filter((f) => f.in_scope === false);
+  if (outOfScope.length === 0) return { kept: inScope, dropped: [] };
+
+  const dropped: { finding: Finding; reason: string }[] = outOfScope
+    .filter((f) => f.severity !== 'CRITICAL')
+    .map((finding) => ({
+      finding,
+      reason: 'out of scope (non-critical) — filtered per Intent scope',
+    }));
+
+  const serious = outOfScope
+    .filter((f) => f.severity === 'CRITICAL')
+    .sort((a, b) => b.confidence - a.confidence);
+  const [signal, ...extraSerious] = serious;
+  for (const finding of extraSerious) {
+    dropped.push({
+      finding,
+      reason: 'out of scope (critical) — collapsed to one signal per Intent scope',
+    });
+  }
+
+  return { kept: signal ? [...inScope, signal] : inScope, dropped };
+}
 
 /**
  * reviewPullRequest — the review engine entry point.
@@ -71,6 +111,10 @@ export interface ReviewInput {
   /** PR author's description/body (untrusted; truncated + delimiter-wrapped in
       the prompt). Empty/undefined → section omitted. */
   prDescription?: string;
+  /** Synthesized PR intent (Intent Layer), already formatted (see
+      `formatIntentForPrompt`); untrusted, delimiter-wrapped in the prompt.
+      Empty/undefined → section omitted. */
+  intent?: string;
   /** Task framing line, e.g. "Review PR #482 …". */
   task?: string;
   /** Override the structured-output retry budget. */
@@ -97,12 +141,22 @@ export interface ReviewOutcome {
   review: Review;
   /** Human-readable grounding summary, e.g. "3/4 passed". */
   grounding: string;
-  /** Findings dropped by grounding, with reasons (for logs / "never go silent"). */
+  /**
+   * Findings dropped by grounding OR the Intent Layer scope filter, with
+   * reasons (for logs / "never go silent"). `reason` text distinguishes the
+   * two ("out of scope..." vs. grounding's citation-miss reasons).
+   */
   dropped: { finding: Finding; reason: string }[];
   /** Which path ran. */
   mode: ReviewMode;
   /** Prompt assembly (for the run trace). Single-pass: the one call; map-reduce: the whole-diff assembly. */
   assembly: PromptAssembly;
+  /**
+   * Safe, content-free per-section sizing for the SAME call `assembly` reflects
+   * (single-pass: the one call; map-reduce: the whole-diff default) — for
+   * structured logging. Never includes section text, only name/source/length.
+   */
+  sections: PromptSectionMeta[];
   /** Per-chunk labels (for the run trace's tool_calls). */
   chunks: { label: string }[];
   tokensIn: number;
@@ -135,11 +189,14 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     callers: input.callers,
     repoMap: input.repoMap,
     prDescription: input.prDescription,
+    intent: input.intent,
     task: input.task,
   };
 
   // Whole-diff assembly is the trace default; overwritten below for single-pass.
-  let assembly: PromptAssembly = assemblePrompt({ ...promptParts, diff: input.diff.raw }).assembly;
+  const wholeDiffAssembly = assemblePrompt({ ...promptParts, diff: input.diff.raw });
+  let assembly: PromptAssembly = wholeDiffAssembly.assembly;
+  let sections: PromptSectionMeta[] = wholeDiffAssembly.sections;
 
   const chunks =
     mode === 'map-reduce'
@@ -170,7 +227,10 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
       { file: chunk.label },
     );
     const a = assemblePrompt({ ...promptParts, diff: chunk.diffText });
-    if (mode === 'single-pass') assembly = a.assembly;
+    if (mode === 'single-pass') {
+      assembly = a.assembly;
+      sections = a.sections;
+    }
     const res = await input.llm.completeStructured<Review>({
       model: input.model,
       schema: ReviewSchema,
@@ -201,15 +261,28 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   }
   emit('result', `Citation grounding: ${grounding}`);
 
-  // Score is derived from the findings that SURVIVED grounding (not the model's
-  // self-reported number, and not the pre-grounding set) so the score, the
-  // findings list, and the deterministic event always agree.
+  // Intent Layer scope filter — deterministic, runs AFTER grounding, on the
+  // findings that survived it. No-op when the model never saw an Intent
+  // section (every in_scope is undefined). Never drops a CRITICAL out-of-
+  // scope finding entirely, only collapses duplicates to one signal.
+  const scoped = filterByScope(ground.kept);
+  for (const d of scoped.dropped) {
+    emit('info', `scope filter dropped "${d.finding.title}": ${d.reason}`);
+  }
+  if (scoped.dropped.length > 0) {
+    emit('result', `Scope filter: ${scoped.kept.length}/${ground.kept.length} kept`);
+  }
+
+  // Score is derived from the findings that SURVIVED grounding + scope
+  // filtering (not the model's self-reported number) so the score, the
+  // findings list, and the deterministic events always agree.
   return {
-    review: { ...merged, findings: ground.kept, score: scoreFromFindings(ground.kept) },
+    review: { ...merged, findings: scoped.kept, score: scoreFromFindings(scoped.kept) },
     grounding,
-    dropped: ground.dropped,
+    dropped: [...ground.dropped, ...scoped.dropped],
     mode,
     assembly,
+    sections,
     chunks: chunks.map((c) => ({ label: c.label })),
     tokensIn,
     tokensOut,

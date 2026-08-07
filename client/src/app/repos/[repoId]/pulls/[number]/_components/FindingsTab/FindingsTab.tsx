@@ -21,6 +21,11 @@ interface FindingsTabProps {
   /** owner/repo + head sha — used to deep-link a finding's file:line to GitHub. */
   repoFullName?: string | null;
   headSha?: string | null;
+  /** Jump target from outside (a Smart Diff finding badge): opens the run
+   *  that owns this finding and force-expands its card. `focusNonce` bumps
+   *  on every jump so re-clicking the same badge re-triggers the effect. */
+  focusFindingId?: string | null;
+  focusNonce?: number;
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
@@ -37,6 +42,8 @@ export function FindingsTab({
   cancelMutation,
   repoFullName,
   headSha,
+  focusFindingId = null,
+  focusNonce = 0,
   onOpenTrace,
   onDelete,
   onRunDone,
@@ -70,6 +77,15 @@ export function FindingsTab({
   const handleGoToReview = useCallback((runId: string) => {
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
+
+  // Smart Diff finding badge → open the run that owns that finding (same
+  // open+scroll mechanism as the Timeline's "go to review" above).
+  React.useEffect(() => {
+    if (!focusFindingId) return;
+    const owner = runs.find((r) => r.findings.some((f) => f.id === focusFindingId));
+    if (owner?.run_id) setTarget((p) => ({ runId: owner.run_id!, n: (p?.n ?? 0) + 1 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusFindingId, focusNonce]);
 
   return (
     <section>
@@ -165,6 +181,8 @@ export function FindingsTab({
             headSha={headSha}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            targetFindingId={focusFindingId}
+            targetFindingNonce={focusNonce}
             prRuns={prRuns}
           />
         ))

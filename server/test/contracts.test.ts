@@ -67,7 +67,13 @@ describe('AI contracts parse fixtures', () => {
 
   it('Intent / BlastRadius / Risks / PrHistory', () => {
     expect(() =>
-      Intent.parse({ intent: 'x', in_scope: ['a'], out_of_scope: ['b'] }),
+      Intent.parse({
+        intent: 'x',
+        in_scope: ['a'],
+        out_of_scope: ['b'],
+        confidence: 'high',
+        source: 'description',
+      }),
     ).not.toThrow();
     expect(() =>
       BlastRadius.parse({
@@ -109,7 +115,17 @@ describe('AI contracts parse fixtures', () => {
       groups: [
         {
           role: 'core',
-          files: [{ path: 'a.ts', additions: 84, deletions: 0, finding_lines: [28, 52] }],
+          files: [
+            {
+              path: 'a.ts',
+              additions: 84,
+              deletions: 0,
+              findings: [
+                { id: 'f1', line: 28, severity: 'WARNING' },
+                { id: 'f2', line: 52, severity: 'CRITICAL' },
+              ],
+            },
+          ],
         },
       ],
       split_suggestion: { too_big: false, total_lines: 285, proposed_splits: [] },

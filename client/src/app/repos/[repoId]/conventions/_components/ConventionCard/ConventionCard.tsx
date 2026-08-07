@@ -42,7 +42,7 @@ export function ConventionCard({
       {editing ? (
         <>
           <Textarea value={draftRule} onChange={setDraftRule} rows={3} />
-          <div style={s.footer}>
+          <div style={s.actions}>
             <Button
               kind="ghost"
               size="sm"
@@ -79,27 +79,31 @@ export function ConventionCard({
           )}
           {error && <div style={s.error}>{error}</div>}
           <div style={s.footer}>
-            {candidate.category && <Badge color="var(--text-muted)">{candidate.category}</Badge>}
-            {candidate.confidence != null && (
-              <Badge color="var(--text-secondary)">
-                {t("card.confidence")}: {Math.round(candidate.confidence * 100)}%
-              </Badge>
-            )}
-            {candidate.status === "accepted" && <Badge color="var(--ok)">{t("card.accepted")}</Badge>}
-            {candidate.status === "rejected" && <Badge color="var(--crit)">{t("card.rejected")}</Badge>}
-            <Button kind="ghost" size="sm" onClick={() => setEditing(true)} disabled={busy}>
-              {t("card.editRule")}
-            </Button>
-            {candidate.status !== "accepted" && (
-              <Button kind="secondary" size="sm" onClick={() => onSetStatus("accepted")} disabled={busy}>
-                {busy ? t("card.accepting") : t("card.acceptAsSkill")}
+            <div style={s.badges}>
+              {candidate.category && <Badge color="var(--text-muted)">{candidate.category}</Badge>}
+              {candidate.confidence != null && (
+                <Badge color="var(--text-secondary)">
+                  {t("card.confidence")}: {Math.round(candidate.confidence * 100)}%
+                </Badge>
+              )}
+              {candidate.status === "accepted" && <Badge color="var(--ok)">{t("card.accepted")}</Badge>}
+              {candidate.status === "rejected" && <Badge color="var(--crit)">{t("card.rejected")}</Badge>}
+            </div>
+            <div style={s.actions}>
+              <Button kind="ghost" size="sm" onClick={() => setEditing(true)} disabled={busy}>
+                {t("card.editRule")}
               </Button>
-            )}
-            {candidate.status !== "rejected" && (
-              <Button kind="ghost" size="sm" onClick={() => onSetStatus("rejected")} disabled={busy}>
-                {busy ? t("card.rejecting") : t("card.reject")}
-              </Button>
-            )}
+              {candidate.status !== "accepted" && (
+                <Button kind="secondary" size="sm" onClick={() => onSetStatus("accepted")} disabled={busy}>
+                  {busy ? t("card.accepting") : t("card.acceptAsSkill")}
+                </Button>
+              )}
+              {candidate.status !== "rejected" && (
+                <Button kind="ghost" size="sm" onClick={() => onSetStatus("rejected")} disabled={busy}>
+                  {busy ? t("card.rejecting") : t("card.reject")}
+                </Button>
+              )}
+            </div>
           </div>
         </>
       )}

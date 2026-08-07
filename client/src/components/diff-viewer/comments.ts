@@ -108,6 +108,31 @@ export function partitionThreads(
 // ---- styles (layout only; cards/inputs/buttons reuse @devdigest/ui) ----
 export const cs = {
   rowWrap: { position: "relative" } satisfies CSSProperties,
+  /** Smart Diff's scroll-to-finding target — a transient outline so the
+     clicked line is unambiguous once scrolled into view. */
+  highlightRow: {
+    outline: "2px solid var(--accent)",
+    outlineOffset: "-1px",
+  } satisfies CSSProperties,
+  /** Smart Diff's inline per-line severity badge (e.g. "warning", "suggestion"),
+     rendered at the end of a finding's line — color filled in per-severity via
+     `SEV` (@devdigest/ui) at the call site. All-longhand border (never mix the
+     `border` shorthand with a `borderColor` override on the same rerender —
+     React warns; see FindingCard/styles.ts for the same fix). */
+  findingBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: "auto",
+    marginRight: 10,
+    padding: "1px 8px",
+    borderRadius: 5,
+    borderStyle: "solid",
+    borderWidth: 1,
+    fontSize: 11,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+  } satisfies CSSProperties,
   addBtn: {
     position: "absolute",
     left: 2,

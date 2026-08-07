@@ -121,3 +121,49 @@ _components/RunTraceDrawer` — лише 6 `../`, бо ціль сама леж�
 цілі.
 Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/StatsTab/StatsTab.tsx:6-7
 (`../../../../../../../lib/hooks/agents` проти `../../../../../../repos/[repoId]/pulls/[number]/_components/RunTraceDrawer`)
+
+## 2026-08-04 · gotcha
+**`diff-viewer` не мав ЖОДНОГО механізму scroll-to-line/highlight до Smart Diff — не було що "перевикористати", довелось додавати з нуля в `FileCard`/`CodeLine`**
+Плани, що посилаються на "reuse the existing scroll/highlight primitives" у
+`@/components/diff-viewer`, мали на увазі майбутню фічу, не факт: до Smart
+Diff `CodeLine`/`FileCard` не мали жодного `ref`/`scrollIntoView`/`highlight`
+пропу — `grep -n "scrollIntoView" client/src/components/diff-viewer` не
+знаходив нічого. Довелось додати мінімальний `highlight?: boolean` пропс у
+`CodeLine` (з `useRef` + `useEffect(() => ref.current?.scrollIntoView(...))`)
+і `scrollToLine?: number | null` у `FileCard` (форсує `open=true` і рахує
+`highlight` для рядка з відповідним `ln.newNo`), а не переписувати diff-рендер
+з нуля. Також `FileCard` не експортувався з публічного `diff-viewer/index.ts`
+(лише `DiffViewer` + `DiffCommentApi`) — довелось розширити експорт, коли
+з'явився другий викликач (`SmartDiffViewer`, що рендерить `FileCard` напряму
+для групування по ролях, а не через `DiffViewer`).
+Доказ: client/src/components/diff-viewer/CodeLine/CodeLine.tsx:17,29-35;
+client/src/components/diff-viewer/FileCard/FileCard.tsx:36,51-53;
+client/src/components/diff-viewer/index.ts:2 (новий `export { FileCard }`)
+
+## 2026-08-06 · gotcha
+**jsdom у цьому проєкті не реалізує `scrollIntoView` — будь-який ref-based
+scroll-effect кине `TypeError`, поки компонент не протестований end-to-end**
+`CodeLine`/`ReviewRunAccordion` роками викликали `ref.current?.scrollIntoView(...)`
+без жодного полiфілу, і це не спливало, бо жоден існуючий тест насправді не
+доводив рендер до точки, де `highlight`/`targetRunId` стає truthy для
+змонтованого елемента (напр. `SmartDiffViewer.test.tsx` клікав бейдж, але
+`prFile()` мав `patch: null` → рядок з потрібним `ln.newNo` просто не
+рендерився). Перший тест, що дійсно домагається кліку/фокусу на змонтованому
+вузлі (нова картка `FindingCard` з `forceFocus`), одразу впав з
+`cardRef.current?.scrollIntoView is not a function`. Фікс — той самий
+патерн, що вже є для `ResizeObserver`: global-стаб у test setup, а не мок у
+кожному тестовому файлі окремо.
+Доказ: client/src/test/setup.ts (доданий стаб `Element.prototype.scrollIntoView`)
+
+## 2026-08-06 · decision
+**Прив'язка Smart Diff "N findings" бейджа до Findings tab, а не до
+скролу в diff, вимагала `id` у `SmartDiffFinding` — самого `line`+`severity`
+не досить**
+Щоб клік по бейджу розгортав КОНКРЕТНУ картку в Findings tab (а не просто
+гортав diff), потрібно було адресувати finding за його реальним id, не лише
+за номером рядка (кілька findings можуть теоретично лежати на одному рядку).
+Контракт `SmartDiffFinding` довелось розширити полем `id` синхронно в
+server- і client-копіях — легко забути оновити одну з двох при такій зміні
+(вендор-дублювання схем, не спільний пакет).
+Доказ: server/src/vendor/shared/contracts/brief.ts (`SmartDiffFinding`),
+client/src/vendor/shared/contracts/brief.ts (та ж схема)

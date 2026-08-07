@@ -61,8 +61,8 @@ export function ConventionsView() {
             <p style={s.subtitle}>{t("page.subtitle")}</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>
                 {t("page.samplingModeLabel")}
               </span>
               <SelectInput

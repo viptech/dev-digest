@@ -48,6 +48,9 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /** Synthesized PR intent (Intent Layer), formatted for the prompt; null when
+      classification was skipped, cached-empty, or failed. */
+  intent: z.string().nullish(),
   user: z.string(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;
@@ -58,6 +61,17 @@ export const MemoryPulled = z.object({
 });
 export type MemoryPulled = z.infer<typeof MemoryPulled>;
 
+/** The intent-classification call's own cost — computed once per PR and
+ *  shared across every queued agent, so it's tracked separately here rather
+ *  than folded into (or omitted from) each agent's own stats. */
+export const IntentStats = z.object({
+  duration_ms: z.number().int(),
+  tokens_in: z.number().int(),
+  tokens_out: z.number().int(),
+  cost_usd: z.number().nullish(),
+});
+export type IntentStats = z.infer<typeof IntentStats>;
+
 export const RunStats = z.object({
   duration_ms: z.number().int(),
   tokens_in: z.number().int(),
@@ -67,6 +81,9 @@ export const RunStats = z.object({
   cost_usd: z.number().nullish(),
   findings: z.number().int(),
   grounding: z.string(),
+  /** Present only on the run(s) whose trace carries the shared pre-work stats
+      (intent classification ran once per PR, not once per agent). */
+  intent: IntentStats.nullish(),
 });
 export type RunStats = z.infer<typeof RunStats>;
 

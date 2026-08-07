@@ -31,6 +31,8 @@ export function ReviewRunAccordion({
   headSha,
   targetRunId = null,
   targetNonce = 0,
+  targetFindingId = null,
+  targetFindingNonce = 0,
   prRuns,
 }: {
   review: ReviewRecord;
@@ -42,6 +44,10 @@ export function ReviewRunAccordion({
    *  (driven from the Timeline: clicking an agent name navigates here). */
   targetRunId?: string | null;
   targetNonce?: number;
+  /** Forwarded to this run's FindingsPanel — a jump target from outside
+   *  (a Smart Diff finding badge) that force-expands the matching card. */
+  targetFindingId?: string | null;
+  targetFindingNonce?: number;
   /** The PR's run history (timeline) — matched by run_id to surface this run's
    *  cost/tokens on the VerdictBanner. Absent → no match → no cost line. */
   prRuns?: RunSummary[];
@@ -163,6 +169,8 @@ export function ReviewRunAccordion({
             prId={prId}
             repoFullName={repoFullName}
             headSha={headSha}
+            targetFindingId={targetFindingId}
+            targetFindingNonce={targetFindingNonce}
           />
         </div>
       )}

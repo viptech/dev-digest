@@ -7,6 +7,7 @@ import type {
   GitHubClient,
   PrReviewComment,
   FindingsSummary,
+  PrIntentRecord,
 } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
@@ -15,6 +16,7 @@ import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
 import { buildFindingsSummary } from './findings-summary.js';
+import { toPrIntentRecord } from '../reviews/helpers.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -215,6 +217,13 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       .where(eq(t.repos.id, pr.repoId));
     if (!repo) throw new NotFoundError('Repo not found');
 
+    // Intent Layer — persisted classification (if any), for the OverviewTab's
+    // intent card. Best-effort: never fails the PR detail request.
+    const persistedIntent = await container.reviewRepo.getIntent(pr.id).catch(() => undefined);
+    const intent: PrIntentRecord | null = persistedIntent
+      ? toPrIntentRecord(pr.id, persistedIntent)
+      : null;
+
     // Local-first: refresh detail from GitHub when a token is configured;
     // otherwise serve the persisted files/commits/body (seeded or previously
     // imported) so PR detail works offline.
@@ -258,7 +267,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         })
         .where(eq(t.pullRequests.id, pr.id));
 
-      return { ...detail, id: pr.id };
+      return { ...detail, id: pr.id, intent };
     } catch (err) {
       app.log.warn({ err }, 'GitHub PR detail refresh skipped (no token / offline); serving persisted detail');
       const files = await container.db.select().from(t.prFiles).where(eq(t.prFiles.prId, pr.id));
@@ -290,6 +299,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
           author: c.author,
           committed_at: c.committedAt?.toISOString() ?? null,
         })),
+        intent,
       };
     }
   });

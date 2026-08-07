@@ -3,6 +3,8 @@
 "use client";
 
 import React from "react";
+import { Icon, SEV } from "@devdigest/ui";
+import type { Severity } from "@/lib/types";
 import { commentTargetFor, type CommentThread, type DiffCommentApi, cs } from "../comments";
 import { type Line } from "../helpers";
 import { s, lineRowFor, lineSignFor } from "../styles";
@@ -14,14 +16,29 @@ export function CodeLine({
   path,
   threads,
   commenting,
+  highlight,
+  finding,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
+  /** Smart Diff's "N findings" badge scroll target — true for the one line
+     this row should scroll into view and briefly highlight for. */
+  highlight?: boolean;
+  /** Smart Diff — this line's (worst) finding severity, if any, rendered as
+     an inline severity badge next to the line text. */
+  finding?: Severity;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
+  const rowRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (highlight && rowRef.current) {
+      rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlight]);
 
   if (ln.kind === "hunk") {
     return (
@@ -37,11 +54,21 @@ export function CodeLine({
 
   return (
     <div
+      ref={rowRef}
       style={cs.rowWrap}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={lineRowFor(ln.kind)}>
+      <div
+        style={{
+          ...lineRowFor(ln.kind),
+          ...(highlight ? cs.highlightRow : null),
+          // Smart Diff — a colored left rail on the exact finding line,
+          // matching the badge's severity color (independent of the
+          // scroll-to highlight outline above).
+          ...(finding ? { borderLeft: `3px solid ${SEV[finding].c}` } : null),
+        }}
+      >
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button
@@ -62,6 +89,12 @@ export function CodeLine({
         <span className="mono" style={s.lineText}>
           {ln.text || " "}
         </span>
+        {finding && (
+          <span style={{ ...cs.findingBadge, borderColor: SEV[finding].c, background: SEV[finding].bg, color: SEV[finding].c }}>
+            {React.createElement(Icon[SEV[finding].icon], { size: 11 })}
+            {SEV[finding].label.toLowerCase()}
+          </span>
+        )}
       </div>
 
       {commenting &&

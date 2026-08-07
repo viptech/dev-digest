@@ -5,7 +5,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
-import type { PrFile } from "@/lib/types";
+import type { PrFile, Severity, SmartDiffFinding } from "@/lib/types";
 import { AUTO_EXPAND_MAX_LINES } from "../constants";
 import { parsePatch, type Line } from "../helpers";
 import {
@@ -19,6 +19,20 @@ import { s, chevronFor } from "../styles";
 import { CodeLine } from "../CodeLine";
 import { OutdatedComments } from "../OutdatedComments";
 
+/** Highest-severity-wins ordering for when a line has more than one finding. */
+const SEVERITY_RANK: Record<Severity, number> = { CRITICAL: 3, WARNING: 2, SUGGESTION: 1 };
+
+/** Smart Diff — new-line-number → worst severity, for CodeLine's inline badge. */
+function findingByLine(findings: SmartDiffFinding[] | undefined): Map<number, Severity> {
+  const m = new Map<number, Severity>();
+  if (!findings) return m;
+  for (const f of findings) {
+    const existing = m.get(f.line);
+    if (!existing || SEVERITY_RANK[f.severity] > SEVERITY_RANK[existing]) m.set(f.line, f.severity);
+  }
+  return m;
+}
+
 /** Threads anchored to a given parsed line (RIGHT=new, LEFT=old). */
 function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): CommentThread[] {
   if (matched.size === 0) return [];
@@ -30,12 +44,37 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+export function FileCard({
+  file,
+  commenting,
+  scrollToLine,
+  findings,
+  onOpenFinding,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  /** Smart Diff's clickable "N findings" badge — the new-side line number to
+     scroll this card open to and highlight. Forces the card open even if it
+     would otherwise auto-collapse (large file). */
+  scrollToLine?: number | null;
+  /** Smart Diff — this file's findings (line + severity), rendered as an
+     inline badge on each matching line. */
+  findings?: SmartDiffFinding[];
+  /** Smart Diff — clicking the header's "N findings" badge jumps to that
+     finding's card in the Findings tab. */
+  onOpenFinding?: (findingId: string) => void;
+}) {
   const t = useTranslations("shell");
   const [open, setOpen] = React.useState(
     (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
   );
+  // A finding badge click always wants to see the line, regardless of the
+  // file's auto-expand default.
+  React.useEffect(() => {
+    if (scrollToLine != null) setOpen(true);
+  }, [scrollToLine]);
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
+  const findingByLineMap = React.useMemo(() => findingByLine(findings), [findings]);
 
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
@@ -60,6 +99,19 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
         <span className="mono" style={s.filePath}>
           {file.path}
         </span>
+        {findings && findings.length > 0 && (
+          <button
+            type="button"
+            style={s.findingsBadgeBtn}
+            onClick={(e) => {
+              e.stopPropagation(); // don't also toggle the card open/closed
+              onOpenFinding?.(findings[0]!.id);
+            }}
+          >
+            <Icon.AlertTriangle size={12} />
+            {findings.length} finding{findings.length === 1 ? "" : "s"}
+          </button>
+        )}
         <span className="mono tnum" style={s.fileStat}>
           <span style={s.addText}>+{file.additions}</span>{" "}
           <span style={s.delText}>−{file.deletions}</span>
@@ -85,6 +137,8 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
                 path={file.path}
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}
+                highlight={scrollToLine != null && ln.newNo === scrollToLine}
+                finding={ln.newNo != null ? findingByLineMap.get(ln.newNo) : undefined}
               />
             ))
           )}

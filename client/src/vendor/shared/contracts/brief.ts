@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity } from './findings.js';
 
 /**
  * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
@@ -6,10 +7,23 @@ import { z } from 'zod';
  */
 
 // ---- Intent ----
+/** Explicit structural confidence — not a prose caveat folded into `intent`. */
+export const IntentConfidence = z.enum(['high', 'low']);
+export type IntentConfidence = z.infer<typeof IntentConfidence>;
+
+/** Provenance: which signal category actually drove the classification.
+ *  'inferred' is the synthesized-from-indirect-signals case. */
+export const IntentSource = z.enum(['description', 'linked_issue', 'plan_spec', 'inferred']);
+export type IntentSource = z.infer<typeof IntentSource>;
+
 export const Intent = z.object({
   intent: z.string(),
   in_scope: z.array(z.string()),
   out_of_scope: z.array(z.string()),
+  confidence: IntentConfidence,
+  source: IntentSource,
+  /** The resolved plan/spec path or cited URL that informed the intent, if any. */
+  plan_ref: z.string().nullish(),
 });
 export type Intent = z.infer<typeof Intent>;
 
@@ -81,12 +95,22 @@ export type PrHistory = z.infer<typeof PrHistory>;
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
+/** One finding anchored to a line, for the inline per-line severity badge.
+ *  `id` is the underlying finding row's id — lets the client jump from a
+ *  Smart Diff badge straight to that finding's card in the Findings tab. */
+export const SmartDiffFinding = z.object({
+  id: z.string(),
+  line: z.number().int(),
+  severity: Severity,
+});
+export type SmartDiffFinding = z.infer<typeof SmartDiffFinding>;
+
 export const SmartDiffFile = z.object({
   path: z.string(),
   pseudocode_summary: z.string().nullish(),
   additions: z.number().int(),
   deletions: z.number().int(),
-  finding_lines: z.array(z.number().int()),
+  findings: z.array(SmartDiffFinding),
 });
 export type SmartDiffFile = z.infer<typeof SmartDiffFile>;
 

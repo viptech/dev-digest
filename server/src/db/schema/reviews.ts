@@ -52,6 +52,16 @@ export const prIntent = pgTable('pr_intent', {
   intent: text('intent').notNull(),
   inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  /** Explicit classifier-emitted confidence — not a prose caveat inside `intent`. */
+  confidence: text('confidence', { enum: ['high', 'low'] }).notNull(),
+  /** Which signal category actually drove the result (provenance). */
+  source: text('source', { enum: ['description', 'linked_issue', 'plan_spec', 'inferred'] }).notNull(),
+  /** Resolved provider/model that produced this classification (cost auditing). */
+  providerUsed: text('provider_used').notNull(),
+  modelUsed: text('model_used').notNull(),
+  /** Cache key — recomputed only when the PR's head_sha has moved on. */
+  headSha: text('head_sha').notNull(),
+  createdAt: now(),
 });
 
 export const prBrief = pgTable('pr_brief', {

@@ -1,6 +1,6 @@
 import type { Container } from '../../platform/container.js';
 import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import { reviewPullRequest, countBlockers, formatIntentForPrompt } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -8,6 +8,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { IntentClassificationService } from './intent-service.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -105,6 +106,52 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // Intent Layer — shared pre-work, once per PR, cached by head_sha. Failure
+    // here must NEVER block the review: unlike diff loading (mandatory), a
+    // classifier failure/timeout is logged via runLog.info (not .error, to
+    // avoid implying a broken run) and every agent simply omits `## Intent`.
+    let intentText: string | undefined;
+    let intentStats: RunTrace['stats']['intent'];
+    try {
+      const intentSvc = new IntentClassificationService(this.container, this.repo);
+      const t0 = Date.now();
+      runLog.info('Classifying PR intent…');
+      const outcome = await intentSvc.classify(
+        workspaceId,
+        pull,
+        { id: repo.id, owner: repo.owner, name: repo.name },
+        diff,
+        logger,
+      );
+      intentText = formatIntentForPrompt(outcome.intent);
+      intentStats = outcome.stats;
+      runLog.info(
+        `Intent classified (${outcome.intent.confidence} confidence, source=${outcome.intent.source}) — ${Date.now() - t0}ms`,
+      );
+      // Same safe, structured prompt-assembly log as the main review call
+      // (see below) — for the classifier's OWN prompt. Two distinct calls,
+      // two distinct log lines, both name/source/length/model only, never
+      // content. Zero-cost/no-op on a cache hit (outcome.sections is empty).
+      if (outcome.sections.length > 0) {
+        runLog.info('Prompt assembled', {
+          // Pre-work is shared across every queued run for this PR (fanned
+          // out into each one's Live Log/trace) — correlate by prId, same as
+          // the fan-out ctx below, rather than picking one arbitrary runId.
+          prId: pull.id,
+          call: 'intent-classification',
+          model: outcome.modelUsed,
+          sectionCount: outcome.sections.length,
+          totalChars: outcome.sections.reduce((n, s) => n + s.chars, 0),
+          totalApproxTokens: outcome.sections.reduce((n, s) => n + s.approxTokens, 0),
+          tokensIn: outcome.stats.tokens_in,
+          tokensOut: outcome.stats.tokens_out,
+          ...(this.container.config.promptLogVerbose ? { sections: outcome.sections } : {}),
+        });
+      }
+    } catch (err) {
+      runLog.info(`Intent classification skipped: ${(err as Error).message}`);
+    }
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -112,7 +159,17 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(
+          workspaceId,
+          pull,
+          repo,
+          diff,
+          agent,
+          runId,
+          runLog,
+          intentText,
+          intentStats,
+        );
         logger?.info(
           {
             runId,
@@ -144,6 +201,10 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    /** Intent Layer — already formatted for the prompt (shared across every
+     *  agent in this batch); undefined when classification was skipped/failed. */
+    intentText?: string,
+    intentStats?: RunTrace['stats']['intent'],
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -215,6 +276,9 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Intent Layer — untrusted, delimiter-wrapped by assemblePrompt. Omitted
+        // when classification was skipped/failed (same omit-when-empty contract).
+        ...(intentText ? { intent: intentText } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -223,6 +287,27 @@ export class ReviewRunExecutor {
         },
       });
       const { tokensIn, tokensOut, costUsd, grounding } = outcome;
+
+      // Safe, structured prompt-assembly log — section name/source/length and
+      // the resolved model, correlated by runId (already in runLog's context,
+      // repeated here explicitly so it's greppable straight off the data
+      // payload). NEVER includes section content, the diff, or spec text —
+      // `outcome.sections` only ever carries name/source/chars/approxTokens
+      // (see PromptSectionMeta). The full per-section array only appears when
+      // `PROMPT_LOG_VERBOSE=true` locally (forced off in production); the
+      // aggregate totals are logged either way.
+      runLog.info('Prompt assembled', {
+        runId,
+        call: 'review',
+        model: agent.model,
+        mode: outcome.mode,
+        sectionCount: outcome.sections.length,
+        totalChars: outcome.sections.reduce((n, s) => n + s.chars, 0),
+        totalApproxTokens: outcome.sections.reduce((n, s) => n + s.approxTokens, 0),
+        tokensIn,
+        tokensOut,
+        ...(this.container.config.promptLogVerbose ? { sections: outcome.sections } : {}),
+      });
 
       const keptFindings = outcome.review.findings;
 
@@ -282,6 +367,11 @@ export class ReviewRunExecutor {
           cost_usd: costUsd,
           findings: findingRows.length,
           grounding,
+          // Classification ran ONCE and is shared across every queued agent —
+          // recorded here (not duplicated per-agent-cost) since each run gets
+          // its own persisted trace and this is the simplest place a reader
+          // can find "what did the shared pre-work cost".
+          intent: intentStats ?? null,
         },
         prompt_assembly: outcome.assembly,
         tool_calls: outcome.chunks.map((c) => ({

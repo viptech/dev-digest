@@ -69,7 +69,7 @@ flowchart TB
     polling["polling<br/>/repos/:id/poll"]
   end
   subgraph Review["Review & runs"]
-    reviews["reviews<br/>/pulls/:id/review · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
+    reviews["reviews<br/>/pulls/:id/review · /pulls/:id/intent/refresh · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
   end
   subgraph Agents["Agents"]
     agents["agents<br/>/agents · /agents/:id"]
@@ -99,6 +99,7 @@ flowchart TB
 | `DEVDIGEST_CLONE_DIR` | `./clones` | imported-repo checkouts (git-ignored) |
 | `LOG_LEVEL` | `info` (`silent` in test) | pino level |
 | `NODE_ENV` | `development` | `test` → silent logs + global rate-limit disabled |
+| `PROMPT_LOG_VERBOSE` | `false` | adds the full per-section prompt-assembly breakdown to the structured log line (name/source/length only, never content); **forced `false` whenever `NODE_ENV=production`**, regardless of this var — local debugging only |
 
 Secrets (API keys, `GITHUB_TOKEN`) are **not** part of `AppConfig` — they go
 through `SecretsProvider` (`~/.devdigest/secrets.json`, mode `0600`, with

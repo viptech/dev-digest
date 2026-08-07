@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
 import { Severity, FindingCategory } from './findings.js';
+import { PrIntentRecord } from './review-api.js';
 
 /**
  * Platform / scaffolding DTOs owned by F1:
@@ -53,8 +54,11 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: 'review_intent',
     label: 'PR Review · Intent',
     description: 'Derives a PR’s intent and scope before review.',
-    defaultProvider: 'openai',
-    defaultModel: 'gpt-4.1',
+    // Deliberately a cheap flash-class OpenRouter model, not the review-grade
+    // default other features use — this classification is a small, cheap,
+    // separately-modeled step (root repo lab spec), same tier as `onboarding`.
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
   },
   {
     id: 'risk_brief',
@@ -74,8 +78,11 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     id: 'conventions',
     label: 'Conventions',
     description: 'Extracts coding conventions from the repo.',
-    defaultProvider: 'openai',
-    defaultModel: 'gpt-5.4',
+    // Cheap flash-class OpenRouter default so extraction works out of the box
+    // without an OpenAI key — same tier as `onboarding`/`review_intent`.
+    // Users who want a stronger model can override this in Settings.
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
   },
 ];
 
@@ -232,6 +239,8 @@ export const PrDetail = PrMeta.extend({
   files: z.array(PrFile),
   commits: z.array(PrCommit),
   linked_issue: IssueMeta.nullish(),
+  /** Persisted Intent Layer classification for this PR, if one exists. */
+  intent: PrIntentRecord.nullish(),
 });
 export type PrDetail = z.infer<typeof PrDetail>;
 

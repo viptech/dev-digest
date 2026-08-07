@@ -27,6 +27,8 @@ export function FindingCard({
   f,
   focused,
   defaultExpanded,
+  forceFocus,
+  focusNonce,
   onAction,
   pending,
   repoFullName,
@@ -35,6 +37,12 @@ export function FindingCard({
   f: FindingRecord;
   focused?: boolean;
   defaultExpanded?: boolean;
+  /** True when an external jump (e.g. a Smart Diff finding badge) targets
+   *  this exact card — expands it and scrolls it into view. */
+  forceFocus?: boolean;
+  /** Bumped on every jump so the effect re-fires even when `forceFocus` was
+   *  already true (re-clicking the same badge). */
+  focusNonce?: number;
   onAction?: (action: FindingActionKind, reply?: string) => void;
   pending?: boolean;
   repoFullName?: string | null;
@@ -42,6 +50,14 @@ export function FindingCard({
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (forceFocus) {
+      setExpanded(true);
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceFocus, focusNonce]);
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
     repoFullName && headSha
@@ -52,7 +68,7 @@ export function FindingCard({
   const muted = accepted || dismissed;
 
   return (
-    <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
+    <div ref={cardRef} data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
       <div onClick={() => setExpanded((e) => !e)} style={s.header}>
         <div style={s.badgeWrap}>
           <SeverityBadge severity={f.severity as Severity} compact />
