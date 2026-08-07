@@ -8,6 +8,7 @@ export default defineConfig({
       // mcp-server/tsconfig.json's "paths" alias — see reviewer-core/vitest.config.ts
       // for the same pattern).
       '@devdigest/shared': path.resolve(__dirname, '../server/src/vendor/shared'),
+      '@devdigest/reviewer-core': path.resolve(__dirname, '../reviewer-core/src'),
     },
   },
   test: {

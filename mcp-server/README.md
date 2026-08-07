@@ -119,6 +119,43 @@ deployment. No auth headers are sent (the API's `LocalNoAuthProvider` always
 resolves the same local workspace/user, so there is nothing to authenticate
 locally).
 
+## Pre-push CLI: `devdigest review --mode working`
+
+Runs the SAME Structured Reviewer engine (`reviewPullRequest`,
+`@devdigest/reviewer-core`) and the same domain logic the web UI uses for a
+PR, against your local git working tree — before you even open a PR.
+
+```sh
+cd mcp-server
+./bin/devdigest-review.sh --mode working --agent "Security Reviewer"
+# or, for local dev without a global install:
+npm run review:working -- --agent "Security Reviewer"
+```
+
+`--mode working` diffs staged + unstaged changes to already-tracked files
+(`git diff HEAD`) — brand-new, never-`git add`ed files are **not** included;
+stage them first if they should be reviewed. Only `--mode working` is
+implemented; `--mode staged`/`--mode branch` are reserved for later.
+
+Requires the DevDigest API running locally (for the agent's config —
+`GET /agents`) and an `OPENROUTER_API_KEY` configured (checked via the same
+`server/src/adapters/secrets/local.ts` this whole app uses — never a second
+secrets reader — falling back to the environment). Only `provider:
+'openrouter'` agents are supported today; `openai`/`anthropic` agents fail
+with a clear message pointing at an openrouter alternative.
+
+**Exit codes**: `0` review ran clean (no `CRITICAL` finding, or nothing to
+review) · `1` review ran, at least one `CRITICAL` finding · `2` the review
+couldn't run at all (bad args, not a git repo, unknown agent, unsupported
+provider, missing key, request failure). Full `--help` output documents this
+same contract.
+
+`bin/devdigest-review.sh` exists for the same cwd reason `start.sh` does —
+`tsx` needs its own cwd = `mcp-server/` to resolve this package's path
+aliases, but the CLI itself needs your original cwd to find the git repo
+being reviewed. The wrapper captures your shell's cwd into
+`DEVDIGEST_CLI_CWD` before `cd`-ing, so both work correctly at once.
+
 ## Development
 
 ```sh
