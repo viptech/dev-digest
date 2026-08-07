@@ -30,4 +30,22 @@ describe("VerdictBanner (smoke)", () => {
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText(/1 findings · 1 blockers/)).toBeInTheDocument();
   });
+
+  it("renders per-severity badges instead of the count/blockers text when findingsSummary is provided", () => {
+    renderWithIntl(
+      <VerdictBanner
+        verdict="request_changes"
+        summary="Hardcoded secret introduced."
+        score={42}
+        findingsCount={1}
+        blockers={1}
+        findingsSummary={{
+          counts: { CRITICAL: 1, WARNING: 0, SUGGESTION: 0 },
+          items: [],
+        }}
+      />,
+    );
+    expect(screen.getByTestId("pr-findings-badge-CRITICAL")).toHaveTextContent("1");
+    expect(screen.queryByText(/1 findings · 1 blockers/)).not.toBeInTheDocument();
+  });
 });

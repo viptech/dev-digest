@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
-import { Severity, FindingCategory } from './findings.js';
+import { Severity, FindingCategory, FindingsSummary } from './findings.js';
 import { PrIntentRecord } from './review-api.js';
 
 /**
@@ -161,30 +161,6 @@ export type Repo = z.infer<typeof Repo>;
 // ---- Pull requests ----
 export const PrStatus = z.enum(['needs_review', 'reviewed', 'stale', 'open', 'closed', 'merged']);
 export type PrStatus = z.infer<typeof PrStatus>;
-
-// ---- Findings summary (list endpoint's per-PR severity breakdown) ----
-export const FindingsSummaryItem = z.object({
-  id: z.string(),
-  severity: Severity,
-  category: FindingCategory,
-  title: z.string(),
-  file: z.string(),
-  start_line: z.number().int(),
-  end_line: z.number().int(),
-  confidence: z.number().min(0).max(1),
-  rationale: z.string(),
-});
-export type FindingsSummaryItem = z.infer<typeof FindingsSummaryItem>;
-
-export const FindingsSummary = z.object({
-  counts: z.object({
-    CRITICAL: z.number().int(),
-    WARNING: z.number().int(),
-    SUGGESTION: z.number().int(),
-  }),
-  items: z.array(FindingsSummaryItem),
-});
-export type FindingsSummary = z.infer<typeof FindingsSummary>;
 
 export const PrMeta = z.object({
   id: z.string().nullish(),
