@@ -77,9 +77,14 @@ export interface BlastResult {
   /** "METHOD /path" (via extractEndpoints / file_facts) — flat union. */
   impactedEndpoints: string[];
   /**
-   * Per-caller-file precomputed facts, so consumers (blast) can attribute
-   * endpoints/crons to the changed symbol whose callers live in that file.
-   * Present on the persistent (non-degraded) path; absent otherwise.
+   * Per-CHANGED-FILE precomputed facts: for each changed file, the union of
+   * endpoints/crons found in that file's 2-hop reverse-import reachable set
+   * (BFS_DEPTH hops via `reverseImportersWithinHops`, including the changed
+   * file itself) — so consumers (blast) can attribute endpoints/crons to the
+   * changed symbol declared in that file, even when the HTTP route sits two
+   * hops away (shared helper -> service -> route file). Keyed by the CHANGED
+   * file's path, NOT the caller file's path. Present on the persistent
+   * (non-degraded/partial) path; absent on the ripgrep/degraded fallback.
    */
   factsByFile?: Record<string, { endpoints: string[]; crons: string[] }>;
   degraded?: boolean;

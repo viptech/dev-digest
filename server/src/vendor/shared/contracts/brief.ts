@@ -28,6 +28,15 @@ export const Intent = z.object({
 export type Intent = z.infer<typeof Intent>;
 
 // ---- Blast radius ----
+/** Why a `BlastRadius` result is degraded — mirrors repo-intel's own
+ *  `DegradedReason` (server/src/modules/repo-intel/types.ts), re-declared
+ *  here as the wire contract's own enum so this file stays the single
+ *  source of truth for the HTTP boundary. */
+export const BlastDegradedReason = z.enum([
+  'flag_off', 'index_failed', 'index_partial', 'repo_too_large', 'no_data',
+]);
+export type BlastDegradedReason = z.infer<typeof BlastDegradedReason>;
+
 export const ChangedSymbol = z.object({
   name: z.string(),
   file: z.string(),
@@ -54,6 +63,8 @@ export const BlastRadius = z.object({
   changed_symbols: z.array(ChangedSymbol),
   downstream: z.array(DownstreamImpact),
   summary: z.string(),
+  degraded: z.boolean().optional(),
+  reason: BlastDegradedReason.optional(),
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
 

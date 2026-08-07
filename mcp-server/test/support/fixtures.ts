@@ -1,5 +1,6 @@
 import type {
   Agent,
+  BlastRadius,
   ConventionCandidate,
   PrMeta,
   Repo,
@@ -118,6 +119,22 @@ export function findingRecordFixture(
     in_scope: null,
     trifecta_components: null,
     evidence: null,
+    ...overrides,
+  };
+}
+
+export function blastRadiusFixture(overrides: Partial<BlastRadius> = {}): BlastRadius {
+  return {
+    changed_symbols: [{ file: 'src/payments/retry.ts', name: 'retryWithBackoff', kind: 'function' }],
+    downstream: [
+      {
+        symbol: 'retryWithBackoff',
+        callers: [{ name: 'chargeCard', file: 'src/payments/service.ts', line: 42 }],
+        endpoints_affected: ['POST /payments/charge'],
+        crons_affected: [],
+      },
+    ],
+    summary: '1 symbol(s) changed, 1 caller(s), 1 endpoint(s) potentially affected',
     ...overrides,
   };
 }

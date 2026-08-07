@@ -275,3 +275,52 @@ z.string().uuid() })`), server/test/reviews-findings-by-run.test.ts (UUID-
 server/src/adapters/auth/local.ts:20-37 (`LocalNoAuthProvider` реально ходить
 у `db.select()`), server/test/reviews-findings-by-run.test.ts (fakeDb +
 `overrides: { auth }`)
+
+## 2026-08-07 · fix
+**`repo-intel`'s `tryPersistentBlast` капало caller'и ГЛОБАЛЬНО (`.slice(0,
+MAX_CALLERS_PER_SYMBOL)` на весь змерджений масив), а не per-`viaSymbol` —
+PR, що чіпає 2+ експортованих символи, міг лишити один символ зовсім без
+caller'ів**
+Симптом непомітний доти, доки PR не зачепить 2+ символи одночасно з великим
+фан-аутом на один з них — тоді другий символ тихо голодує (0 caller'ів у
+відповіді, хоча вони реально є в індексі). Фікс: групувати `callerRows` за
+`viaSymbol` ПЕРЕД сортуванням+зрізом, капати кожну групу окремо на
+`MAX_CALLERS_PER_SYMBOL`, і лише потім зливати назад у плаский масив.
+Регресійний тест навмисно будує 25+25 caller'ів на два символи, щоб довести:
+до фіксу глобальний зріз на 40 рядків лишав 20 ЗАГАЛОМ (не по 20 на символ).
+Доказ: server/src/modules/repo-intel/service.ts:381-395 (групування за
+`viaSymbol` перед `.slice(0, MAX_CALLERS_PER_SYMBOL)`), server/test/repo-intel-blast-fixes.test.ts
+
+## 2026-08-07 · decision
+**`BlastResult.factsByFile` перекладено з "caller file → facts" на "ЗМІНЕНИЙ
+файл → facts об'єднані по 2-hop reverse-import walk" — стара семантика
+пропускала ендпоінт, що знаходиться за 2 імпорти від зміненого файлу**
+Стара логіка юнила `file_facts` лише для файлів, що НАПРЯМУ викликають
+змінений символ (`getResolvedCallers`'s `fromPath`). Ланцюжок "спільний
+хелпер → сервіс → route-файл" (2 hops) НІКОЛИ не спрацьовував: route-файл не
+є прямим caller'ом, лише caller транзитивно імпортується ним. Новий
+`reverseImportersWithinHops(edges, [changedFile], BFS_DEPTH)`
+(`pipeline/reverse-importers.ts`) рахує reverse-BFS від САМОГО зміненого
+файлу (не від caller-файлів), а `factsByFile` тепер ключується зміненим
+файлом. Підтверджено нуль інших споживачів старого кейінгу (лише
+`repo-intel-facade-degraded.test.ts` торкався методу, і не перевіряв
+`factsByFile`) — безпечно змінити семантику без downstream-міграції.
+Доказ: server/src/modules/repo-intel/service.ts:397-430, server/src/modules/repo-intel/types.ts:79-88
+(оновлений doc comment), server/test/repo-intel-blast-fixes.test.ts (2-hop кейс)
+
+## 2026-08-07 · gotcha
+**`RepoIntelRepository.getResolvedCallers` INNER JOIN-ить `file_rank` — файл
+без рядка в `file_rank` мовчки випадає з відповіді, а не повертається з
+`rank: 0`**
+У `blast.it.test.ts`-подібному інтеграційному тесті (seed через реальні
+`insertSymbols`/`insertReferences`/`replaceEdges`/`resolveReferences`) легко
+забути, що КОЖЕН файл, який є caller'ом (`references.from_path`), мусить
+мати відповідний рядок `file_rank` — інакше `getResolvedCallers` поверне []
+для цього caller'а, і виглядатиме так, ніби `resolveReferences` не
+відпрацював, хоча `decl_file` насправді резолвнувся правильно. Симптом:
+"чому blast повертає 0 caller'ів, хоча references явно є в таблиці" —
+дебажиться довше, ніж мало б, бо помилка не в join-умові на references, а в
+ВІДСУТНЬОМУ file_rank рядку.
+Доказ: server/src/modules/repo-intel/repository.ts:516-523 (`.innerJoin(t.fileRank, ...)`),
+server/test/blast.it.test.ts (кожен з трьох fixture-файлів отримує явний
+`replaceFileRank` рядок саме через цю пастку)

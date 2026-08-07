@@ -6,8 +6,7 @@ port `3001`) through 6 read-mostly tools, without duplicating DevDigest's
 business logic. It is a thin client: every tool takes the internal ids
 (`agent_id`, `pr_id`, `repo_id` — as returned by `list_agents`/`list_pulls` or
 copied from the DevDigest studio URL) and calls the API over `fetch` directly,
-no name/number resolution step; `get_blast_radius` is a documented stub with
-no backing route yet.
+no name/number resolution step.
 
 ## Tools
 
@@ -18,7 +17,7 @@ no backing route yet.
 | `run_agent_on_pr` | Start a review run for `agent_id` + `pr_id`, poll up to ~60s, return `{ verdict, score, findings }` (or `{ run_id, status: 'running' }` if still in progress). |
 | `get_findings` | Fetch findings for a PR by `pr_id`, grouped one entry per review run (a PR reviewed by several agents gets several entries), not a single flat list. |
 | `get_conventions` | Fetch already-extracted coding conventions for a repo, by `repo_id`. Read-only — never triggers new extraction. |
-| `get_blast_radius` | **Not implemented yet.** Always returns a stub error (after validating `pr_id`) — no `/blast` route exists on the API yet. |
+| `get_blast_radius` | Fetch the blast radius for a PR by `pr_id`: changed symbols, their callers (file:line), and potentially affected HTTP endpoints/crons — computed from the repo's persistent code index, no LLM call. |
 
 **Note on `list_pulls`:** the course's lab notes (`README.md`'s roadmap,
 `04-hands-on-lab.md:22`) deliberately skip a `list_prs` tool, reasoning that
@@ -135,10 +134,3 @@ imported from the server's vendored shared package via a tsconfig path alias
 copy is kept here (see root `INSIGHTS.md`'s note on contract-copy drift; this
 package deliberately avoids adding a third one).
 
-## Known limitation
-
-`get_blast_radius` is a firm, documented stub — the underlying `/blast` route
-and `repo-intel`'s `getBlastRadius()` facade aren't wired up yet (planned for
-a later course lesson, see root `README.md`'s roadmap, L04). It still
-validates `repo`/`pr` first so a bad input gets a specific error instead of
-being masked by the generic "not implemented" message.
