@@ -96,3 +96,91 @@ smoke-тестуванні одного single-pass прогону на неве
 Доказ: mcp-server/src/tools/run-agent-on-pull-request.ts:25
 (`POLL_TIMEOUT_MS = 60_000`), ручний прогін через MCP SDK `Client` +
 `StdioClientTransport` проти живого `http://localhost:3001`
+
+## 2026-08-07 · decision
+**Спростовує дизайн-рішення від 2026-08-06 (owner/name + PR-номер + agent-name,
+з client-side резолвом): 3 з 5 тулів переписані на прямі id (`agent_id`,
+`pr_id`, `repo_id`) — саме такий контракт вимагає сценарій курсу для MCP
+Inspector**
+Файл `mcp-server/src/resolvers.ts` (client-side резолв "owner/name"/PR-номера/
+agent-name → internal UUID через `GET /repos`+`GET /repos/:id/pulls`+
+`GET /agents`) і його тест повністю видалені — жоден з 5 тулів більше не
+резолвить назви, кожен приймає готовий id. `run_agent_on_pull_request` →
+`run_agent_on_pr(agent_id, pr_id)`, `get_conventions(repo)` → `get_conventions
+(repo_id)`, `get_blast_radius(repo, pr)` → `get_blast_radius(pr_id)`. Записи
+вище (2026-08-06, "PR identification", "Agent resolution key",
+`resolvePull`'s `PrMeta.id` gotcha) описують СТАРИЙ дизайн — файли, на які
+вони посилаються (`resolvers.ts`, `run-agent-on-pull-request.ts`), більше не
+існують; лишені як історичний запис, не як актуальна довідка.
+Доказ: mcp-server/src/tools/run-agent-on-pr.ts, mcp-server/src/tools/
+get-conventions.ts:29-32 (`repo_id: z.string().trim().min(1)`),
+mcp-server/src/tools/get-blast-radius.ts:15-18 (`pr_id` only) — `git log
+--diff-filter=D -- mcp-server/src/resolvers.ts` показує видалення
+
+## 2026-08-07 · gotcha
+**`get_findings(pr_id)` мусив читати `GET /pulls/:id/reviews`, а не новий
+`GET /runs/:id/findings` з 2026-08-06 — перший УЖЕ повертає "знахідки,
+згруповані по прогонах", другий віддає лише один прогін за `run_id`**
+`ReviewService.reviewsForPull` вже реалізує рівно ту форму відповіді, яку
+вимагає сценарій лабораторної ("get_findings приймає pr_id, повертає знахідки
+згруповані по reviews, не єдиним плоским списком") — масив `ReviewDto[]`, по
+одному запису на кожен агент/прогін. `GET /runs/:id/findings` (доданий
+2026-08-06 саме під run_id-варіант `get_findings`) лишається корисним
+внутрішньо — `run_agent_on_pr` викликає його одразу після старту ОДНОГО
+конкретного прогону, де `run_id` вже відомий — але для самого `get_findings`
+це була не та форма.
+Доказ: server/src/modules/reviews/routes.ts:166-169 (`GET /pulls/:id/reviews`),
+server/src/modules/reviews/service.ts:208-221 (`reviewsForPull`),
+mcp-server/src/tools/get-findings.ts (`http.get(`/pulls/${pr_id}/reviews`)`)
+
+## 2026-08-07 · gotcha
+**`ConventionsService.list()` не перевіряє існування репо — синтаксично
+валідний, але неіснуючий `repoId` мовчки повертає `[]`, невідрізненне від
+"репо є, конвенцій ще нема"; окремого `GET /repos/:id` теж нема**
+`conventions/service.ts`'s `list()` одразу йде в `repo.listByRepo(...)` без
+перевірки, чи існує репо в цьому workspace — на відміну від `reviewsForPull`
+(яка кидає `NotFoundError`, якщо `pull` не знайдено). У `repos/routes.ts` є
+лише `GET /repos` (список), `POST /repos`, `POST /repos/:id/refresh` — жодного
+single-repo GET. Щоб зберегти гарантію "невідомий id → зрозуміла помилка",
+`get_conventions`-тул спершу листить `GET /repos` і сам звіряє `repo_id` у
+списку, перш ніж іти в `/repos/:id/conventions`.
+Доказ: server/src/modules/conventions/service.ts:34-37 (`async list` — без
+`NotFoundError`), server/src/modules/repos/routes.ts (немає `GET /repos/:id`),
+mcp-server/src/tools/get-conventions.ts:57-65 (client-side перевірка через
+`GET /repos`)
+
+## 2026-08-07 · gotcha
+**Юніт-тест тула, що викликає `tool.handler(...)` напряму, обходить
+zod-парсинг вхідної схеми MCP SDK — перевірка `.trim()`/coercion на рівні
+схеми такого виклику не бачить**
+`server.registerTool(name, config, handler)` сам парсить аргументи через
+`config.inputSchema` ПЕРЕД викликом `handler` — у реальному використанні
+`handler` ніколи не бачить непідрізаний рядок. Прямий виклик
+`tool.handler({repo_id: '  repo-1  '})` у тесті це обходить: `handler` не
+робить власного trim, тож такий тест нічого не перевіряє (спостережено як
+провальний тест: `expected true to be undefined` — бо репо з пробілами в id
+не знайшлось). Правильна перевірка — парсити саму схему:
+`z.object(getConventionsInputSchema).parse({repo_id: '  repo-1  '})`.
+Доказ: mcp-server/src/tools/get-conventions.ts:29-32 (`repo_id:
+z.string().trim().min(1)`), mcp-server/test/tools/get-conventions.test.ts
+(тест "input schema trims..." парсить схему напряму, не через `tool.handler`)
+
+## 2026-08-07 · decision
+**Додано 6-й тул, `list_pulls(repo_id)` — лабораторна свідомо не додає
+`list_prs`, але це рішення не покриває внутрішній `pr_id`, який реально
+потрібен решті тулів**
+`04-hands-on-lab.md:22`'s аргумент ("`gh`/GitHub MCP вже дають список PR")
+вірний лише для GitHub-ідентичності PR (`owner/repo#number`) — жоден з них не
+знає внутрішній DevDigest `pr_id` (UUID з таблиці `pull_requests`), який
+вимагають `run_agent_on_pr`/`get_findings`/`get_blast_radius`. Без окремого
+тула єдиний спосіб дістати `pr_id` — вручну відкрити Studio UI, навіть якщо
+агент уже знає (напр. від GitHub MCP), що PR існує. `list_pulls` навмисно
+тонкий: жодної фільтрації за назвою/автором, жодного `list_repos` (та частина
+аргументу лабораторної й далі актуальна) — лише `GET /repos/:id/pulls` +
+опційний `open_only` (відкидає `merged`/`closed`). Живою перевіркою через
+Inspector CLI підтверджено: `list_pulls(repo_id, open_only=true)` на
+`viptech/dev-digest` коректно відфільтрував 2 змерджені PR, лишивши 4 зі
+статусами `needs_review`/`reviewed`/`stale`.
+Доказ: mcp-server/src/tools/list-pulls.ts, mcp-server/src/index.ts (6-й
+`server.registerTool`), server/src/modules/pulls/status.ts (`status` —
+derived review-freshness для відкритих PR, не сире GitHub-значення)

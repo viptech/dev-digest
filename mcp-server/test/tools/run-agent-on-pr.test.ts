@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { ReviewRunResponse } from '@devdigest/shared';
-import { createRunAgentOnPullRequestTool } from '../../src/tools/run-agent-on-pull-request.js';
+import { createRunAgentOnPrTool } from '../../src/tools/run-agent-on-pr.js';
+import { ApiError } from '../../src/http-client.js';
 import { fakeHttp, instantClock } from '../support/fake-http.js';
-import { agentFixture, prFixture, repoFixture, reviewRecordFixture, runSummaryFixture } from '../support/fixtures.js';
+import { reviewRecordFixture, runSummaryFixture } from '../support/fixtures.js';
 
 const REVIEW_RUN_RESPONSE: ReviewRunResponse = {
   pr_id: 'pr-1',
@@ -10,24 +11,24 @@ const REVIEW_RUN_RESPONSE: ReviewRunResponse = {
   reviews: [],
 };
 
-describe('run_agent_on_pull_request tool', () => {
-  it('happy path: resolves, starts a run, polls to done, returns shaped findings', async () => {
+describe('run_agent_on_pr tool', () => {
+  it('happy path: starts a run by agent_id/pr_id, polls to done, returns shaped findings', async () => {
     const http = fakeHttp({
       get: (path) => {
-        if (path === '/repos') return [repoFixture()];
-        if (path === '/repos/repo-1/pulls') return [prFixture()];
-        if (path === '/agents') return [agentFixture()];
         if (path === '/pulls/pr-1/runs') return [runSummaryFixture({ status: 'done' })];
         if (path === '/runs/run-1/findings') return reviewRecordFixture();
         throw new Error(`unexpected GET ${path}`);
       },
-      post: (path) => {
-        if (path === '/pulls/pr-1/review') return REVIEW_RUN_RESPONSE;
+      post: (path, body) => {
+        if (path === '/pulls/pr-1/review') {
+          expect(body).toEqual({ agentId: 'agent-1' });
+          return REVIEW_RUN_RESPONSE;
+        }
         throw new Error(`unexpected POST ${path}`);
       },
     });
-    const tool = createRunAgentOnPullRequestTool({ http, clock: instantClock() });
-    const result = await tool.handler({ repo: 'acme/payments-api', pr: 482, agent: 'Security Reviewer' });
+    const tool = createRunAgentOnPrTool({ http, clock: instantClock() });
+    const result = await tool.handler({ agent_id: 'agent-1', pr_id: 'pr-1' });
 
     expect(result.isError).toBeUndefined();
     const output = result.structuredContent as { verdict: string | null; score: number | null };
@@ -35,29 +36,35 @@ describe('run_agent_on_pull_request tool', () => {
     expect(output.score).toBe(40);
   });
 
-  it('not-found path: an unresolvable agent fails fast, before POSTing a review', async () => {
+  it('not-found path: an unknown agent_id fails with a forward-leading message, before polling', async () => {
     const http = fakeHttp({
-      get: (path) => {
-        if (path === '/repos') return [repoFixture()];
-        if (path === '/repos/repo-1/pulls') return [prFixture()];
-        if (path === '/agents') return [];
-        throw new Error(`unexpected GET ${path}`);
+      post: () => {
+        throw new ApiError({ status: 404, body: { error: { message: 'Agent not found' } } });
       },
     });
-    const tool = createRunAgentOnPullRequestTool({ http, clock: instantClock() });
-    const result = await tool.handler({ repo: 'acme/payments-api', pr: 482, agent: 'nope' });
+    const tool = createRunAgentOnPrTool({ http, clock: instantClock() });
+    const result = await tool.handler({ agent_id: 'nope', pr_id: 'pr-1' });
 
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toMatch(/call list_agents/);
-    expect(http.post).not.toHaveBeenCalled();
+  });
+
+  it('not-found path: an unknown pr_id fails with a forward-leading message, before polling', async () => {
+    const http = fakeHttp({
+      post: () => {
+        throw new ApiError({ status: 404, body: { error: { message: 'Pull request not found' } } });
+      },
+    });
+    const tool = createRunAgentOnPrTool({ http, clock: instantClock() });
+    const result = await tool.handler({ agent_id: 'agent-1', pr_id: 'nope' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toMatch(/studio URL/);
   });
 
   it('running/timeout branch: returns {status: "running", hint}, NOT an error', async () => {
     const http = fakeHttp({
       get: (path) => {
-        if (path === '/repos') return [repoFixture()];
-        if (path === '/repos/repo-1/pulls') return [prFixture()];
-        if (path === '/agents') return [agentFixture()];
         if (path === '/pulls/pr-1/runs') return [runSummaryFixture({ status: 'running' })];
         throw new Error(`unexpected GET ${path}`);
       },
@@ -66,8 +73,8 @@ describe('run_agent_on_pull_request tool', () => {
         throw new Error(`unexpected POST ${path}`);
       },
     });
-    const tool = createRunAgentOnPullRequestTool({ http, clock: instantClock() });
-    const result = await tool.handler({ repo: 'acme/payments-api', pr: 482, agent: 'Security Reviewer' });
+    const tool = createRunAgentOnPrTool({ http, clock: instantClock() });
+    const result = await tool.handler({ agent_id: 'agent-1', pr_id: 'pr-1' });
 
     expect(result.isError).toBeUndefined();
     const output = result.structuredContent as { run_id: string; status: string; hint: string };
@@ -79,9 +86,6 @@ describe('run_agent_on_pull_request tool', () => {
   it('failed/cancelled branch: returns isError with the run\'s error, no findings to fetch', async () => {
     const http = fakeHttp({
       get: (path) => {
-        if (path === '/repos') return [repoFixture()];
-        if (path === '/repos/repo-1/pulls') return [prFixture()];
-        if (path === '/agents') return [agentFixture()];
         if (path === '/pulls/pr-1/runs') {
           return [runSummaryFixture({ status: 'failed', error: 'LLM crashed mid-run' })];
         }
@@ -92,8 +96,8 @@ describe('run_agent_on_pull_request tool', () => {
         throw new Error(`unexpected POST ${path}`);
       },
     });
-    const tool = createRunAgentOnPullRequestTool({ http, clock: instantClock() });
-    const result = await tool.handler({ repo: 'acme/payments-api', pr: 482, agent: 'Security Reviewer' });
+    const tool = createRunAgentOnPrTool({ http, clock: instantClock() });
+    const result = await tool.handler({ agent_id: 'agent-1', pr_id: 'pr-1' });
 
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toMatch(/LLM crashed mid-run/);

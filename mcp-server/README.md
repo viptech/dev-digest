@@ -2,20 +2,34 @@
 
 A local, stdio-transport [MCP](https://modelcontextprotocol.io) server that lets
 Claude Code / Claude Desktop drive DevDigest's existing Fastify API (`server/`,
-port `3001`) through 5 read-mostly tools, without duplicating DevDigest's
-business logic. It is a thin client: every tool either resolves flat scalar
-args (`repo`, `pr`, `agent`) to internal UUIDs and calls the API over `fetch`,
-or (for `get_blast_radius`) is a documented stub with no backing route yet.
+port `3001`) through 6 read-mostly tools, without duplicating DevDigest's
+business logic. It is a thin client: every tool takes the internal ids
+(`agent_id`, `pr_id`, `repo_id` — as returned by `list_agents`/`list_pulls` or
+copied from the DevDigest studio URL) and calls the API over `fetch` directly,
+no name/number resolution step; `get_blast_radius` is a documented stub with
+no backing route yet.
 
 ## Tools
 
 | Tool | Purpose |
 |---|---|
-| `list_agents` | List configured review agents (id, name, provider, model, enabled). Call first to discover valid `agent` names. |
-| `run_agent_on_pull_request` | Start a review run for `repo` + `pr` + `agent`, poll up to ~60s, return `{ verdict, score, findings }` (or `{ run_id, status: 'running' }` if still in progress). |
-| `get_findings` | Fetch `{ verdict, score, findings }` for an already-completed run by `run_id`. |
-| `get_conventions` | Fetch already-extracted coding conventions for a repo. Read-only — never triggers new extraction. |
-| `get_blast_radius` | **Not implemented yet.** Always returns a stub error (after validating `repo`/`pr`) — no `/blast` route exists on the API yet. |
+| `list_agents` | List configured review agents (id, name, provider, model, enabled). Call first to discover a valid `agent_id`. |
+| `list_pulls` | List PRs for a repo, by `repo_id`. Call this to discover a valid `pr_id` — `gh`/GitHub MCP know GitHub's own PR numbers, never DevDigest's internal `pr_id`. `open_only:true` drops merged/closed PRs. |
+| `run_agent_on_pr` | Start a review run for `agent_id` + `pr_id`, poll up to ~60s, return `{ verdict, score, findings }` (or `{ run_id, status: 'running' }` if still in progress). |
+| `get_findings` | Fetch findings for a PR by `pr_id`, grouped one entry per review run (a PR reviewed by several agents gets several entries), not a single flat list. |
+| `get_conventions` | Fetch already-extracted coding conventions for a repo, by `repo_id`. Read-only — never triggers new extraction. |
+| `get_blast_radius` | **Not implemented yet.** Always returns a stub error (after validating `pr_id`) — no `/blast` route exists on the API yet. |
+
+**Note on `list_pulls`:** the course's lab notes (`README.md`'s roadmap,
+`04-hands-on-lab.md:22`) deliberately skip a `list_prs` tool, reasoning that
+`gh`/GitHub MCP already list PRs. That holds for GitHub's own PR identity
+(owner/repo#number) but not for DevDigest's internal `pr_id` — the id every
+other tool here actually needs — which neither `gh` nor GitHub MCP can ever
+know. Without `list_pulls`, getting a `pr_id` requires a human to open the
+Studio UI first, even when an agent already knows a PR exists (e.g. from
+GitHub MCP). This tool closes exactly that gap and nothing else — no
+title/author filtering, no repo listing (that part of the course's reasoning
+still applies to `list_repos`, so it's not added here).
 
 ## Prerequisites
 

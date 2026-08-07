@@ -46,7 +46,7 @@ export function createListAgentsTool(http: HttpClient = httpClient) {
     config: {
       title: 'List Agents',
       description:
-        "List all configured review agents in this workspace (id, name, provider, model, and whether each is enabled). Read-only, no arguments. Call this first to discover valid agent names before calling run_agent_on_pull_request — its agent argument must match one of the names returned here.",
+        "List all configured review agents in this workspace (id, name, provider, model, and whether each is enabled). Read-only, no arguments. Call this first to get a valid agent_id for run_agent_on_pr.",
       inputSchema: listAgentsInputSchema,
       outputSchema: listAgentsOutputSchema,
       annotations: { readOnlyHint: true, idempotentHint: true },

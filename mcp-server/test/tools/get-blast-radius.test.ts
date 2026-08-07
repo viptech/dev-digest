@@ -1,32 +1,36 @@
 import { describe, it, expect } from 'vitest';
 import { createGetBlastRadiusTool } from '../../src/tools/get-blast-radius.js';
+import { ApiError } from '../../src/http-client.js';
 import { fakeHttp } from '../support/fake-http.js';
-import { prFixture, repoFixture } from '../support/fixtures.js';
+import { prFixture } from '../support/fixtures.js';
 
 describe('get_blast_radius tool', () => {
-  it('happy path (repo/pr resolve): still always returns the documented stub error', async () => {
+  it('happy path (pr_id resolves): still always returns the documented stub error', async () => {
     const http = fakeHttp({
       get: (path) => {
-        if (path === '/repos') return [repoFixture()];
-        if (path === '/repos/repo-1/pulls') return [prFixture()];
+        if (path === '/pulls/pr-1') return prFixture();
         throw new Error(`unexpected path ${path}`);
       },
     });
     const tool = createGetBlastRadiusTool(http);
-    const result = await tool.handler({ repo: 'acme/payments-api', pr: 482 });
+    const result = await tool.handler({ pr_id: 'pr-1' });
 
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toMatch(/not implemented yet/);
-    expect(http.get).toHaveBeenCalledTimes(2); // /repos + /repos/:id/pulls — no other HTTP call.
+    expect(http.get).toHaveBeenCalledTimes(1); // only /pulls/:id — no other HTTP call.
   });
 
-  it('not-found path: a bad repo surfaces the specific resolution error, not the generic stub', async () => {
-    const http = fakeHttp({ get: () => [] });
+  it('not-found path: a bad pr_id surfaces the specific resolution error, not the generic stub', async () => {
+    const http = fakeHttp({
+      get: () => {
+        throw new ApiError({ status: 404, body: {} });
+      },
+    });
     const tool = createGetBlastRadiusTool(http);
-    const result = await tool.handler({ repo: 'nope/nope', pr: 1 });
+    const result = await tool.handler({ pr_id: 'nope' });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toMatch(/not found among connected repos/);
+    expect(result.content[0]!.text).toMatch(/not found/);
     expect(result.content[0]!.text).not.toMatch(/not implemented yet/);
   });
 });

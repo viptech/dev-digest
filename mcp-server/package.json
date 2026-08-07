@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Local stdio MCP server exposing 5 tools (list_agents, run_agent_on_pull_request, get_findings, get_conventions, get_blast_radius) over the DevDigest API (server/, port 3001), for Claude Code/Desktop.",
+  "description": "Local stdio MCP server exposing 6 tools (list_agents, list_pulls, run_agent_on_pr, get_findings, get_conventions, get_blast_radius) over the DevDigest API (server/, port 3001), for Claude Code/Desktop.",
   "scripts": {
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
