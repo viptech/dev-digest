@@ -70,6 +70,11 @@ export class ReviewRepository {
     return reviewRepo.getReview(this.db, reviewId);
   }
 
+  /** The review (+ findings) produced by a given agent_run, if persisted. */
+  getReviewByRunId(runId: string): Promise<{ review: ReviewRow; findings: FindingRow[] } | undefined> {
+    return reviewRepo.getReviewByRunId(this.db, runId);
+  }
+
   /** In-flight runs for a PR (status='running') — the server-side source of
    *  truth for "which agents are running now". Joined with the agent name. */
   activeRunsForPull(

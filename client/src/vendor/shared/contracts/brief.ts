@@ -1,10 +1,51 @@
 import { z } from 'zod';
-import { Severity } from './findings.js';
+import { Severity, Verdict, FindingsSummary } from './findings.js';
 
 /**
  * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
  * Smart Diff. Composed into PrBrief.
  */
+
+// ---- PR Brief review rollup (deterministic — see PrBriefSnapshot below) ----
+/**
+ * Verdict/score/blockers/summary from the PR's single most-recently-created
+ * review (same "latest wins" precedent `PrMeta.score` already uses for the
+ * PR list, `pulls/routes.ts`'s "newest-first, first-seen-wins") — not an
+ * aggregate across every agent that has reviewed the PR. `verdict` is
+ * recomputed from that review's own blockers/findings count, never read from
+ * the `reviews.verdict` column (that column is the model's own self-report —
+ * see `reviewer-core/review/reduce.ts` — and is not trusted for this).
+ * `cost_usd`/`tokens_in`/`tokens_out` are the exception: summed across EVERY
+ * run ever for the PR, mirroring `PrMeta.cost_usd`'s existing "every review
+ * pass, not just latest" semantics — a deliberately different row-set than
+ * verdict/score/findings/blockers.
+ *
+ * `findings_summary` is the SAME `buildFindingsSummary()` output the PR list
+ * already computes for its FINDINGS column (`pulls/findings-summary.ts`),
+ * built from this same latest review's findings — so the Brief card's
+ * per-severity badges can never disagree with what the list shows for this
+ * PR (no separate/redundant total count field).
+ */
+export const PrBriefReviewRollup = z.object({
+  verdict: Verdict,
+  score: z.number().int(),
+  findings_summary: FindingsSummary,
+  blockers_count: z.number().int(),
+  summary: z.string().nullable(),
+  cost_usd: z.number().nullable(),
+  tokens_in: z.number().int().nullable(),
+  tokens_out: z.number().int().nullable(),
+});
+export type PrBriefReviewRollup = z.infer<typeof PrBriefReviewRollup>;
+
+/**
+ * `GET /pulls/:id/brief`. `review_rollup` is `null` when the PR has never
+ * been reviewed (mirrors `PrIntentRecord | null`).
+ */
+export const PrBriefSnapshot = z.object({
+  review_rollup: PrBriefReviewRollup.nullable(),
+});
+export type PrBriefSnapshot = z.infer<typeof PrBriefSnapshot>;
 
 // ---- Intent ----
 /** Explicit structural confidence — not a prose caveat folded into `intent`. */
@@ -28,6 +69,15 @@ export const Intent = z.object({
 export type Intent = z.infer<typeof Intent>;
 
 // ---- Blast radius ----
+/** Why a `BlastRadius` result is degraded — mirrors repo-intel's own
+ *  `DegradedReason` (server/src/modules/repo-intel/types.ts), re-declared
+ *  here as the wire contract's own enum so this file stays the single
+ *  source of truth for the HTTP boundary. */
+export const BlastDegradedReason = z.enum([
+  'flag_off', 'index_failed', 'index_partial', 'repo_too_large', 'no_data',
+]);
+export type BlastDegradedReason = z.infer<typeof BlastDegradedReason>;
+
 export const ChangedSymbol = z.object({
   name: z.string(),
   file: z.string(),
@@ -54,6 +104,8 @@ export const BlastRadius = z.object({
   changed_symbols: z.array(ChangedSymbol),
   downstream: z.array(DownstreamImpact),
   summary: z.string(),
+  degraded: z.boolean().optional(),
+  reason: BlastDegradedReason.optional(),
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
 

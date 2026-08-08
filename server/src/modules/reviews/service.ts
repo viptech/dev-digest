@@ -224,4 +224,22 @@ export class ReviewService {
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {
     return this.repo.getRunTrace(runId);
   }
+
+  /**
+   * The review (+ findings) produced by a given agent_run, keyed by run_id
+   * alone — no pull/workspace id required from the caller (see
+   * `getReviewByRunId`'s doc comment). Undefined if no review was persisted
+   * for that run yet (still running, or the run_id doesn't exist).
+   */
+  async findingsForRun(runId: string): Promise<ReviewDto | undefined> {
+    const found = await this.repo.getReviewByRunId(runId);
+    if (!found) return undefined;
+    const { review, findings } = found;
+    let agentName: string | null = null;
+    if (review.agentId) {
+      const a = await this.agents.getById(review.workspaceId, review.agentId);
+      if (a) agentName = a.name;
+    }
+    return reviewToDto(review, findings, agentName);
+  }
 }

@@ -1,0 +1,26 @@
+{
+  "name": "@devdigest/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local stdio MCP server exposing 6 tools (list_agents, list_pulls, run_agent_on_pr, get_findings, get_conventions, get_blast_radius) over the DevDigest API (server/, port 3001), for Claude Code/Desktop. Also ships a pre-push CLI, `devdigest review --mode working`.",
+  "bin": {
+    "devdigest-review": "./bin/devdigest-review.sh"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "review:working": "tsx src/cli/review-working.ts --mode working",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

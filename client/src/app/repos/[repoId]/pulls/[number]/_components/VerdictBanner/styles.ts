@@ -50,4 +50,11 @@ export const s = {
     color: "var(--text-muted)",
     letterSpacing: "0.04em",
   } satisfies CSSProperties,
+  /** Separates the score gauge/label from the cost line when they're grouped
+   *  into one right-side block (`groupScoreWithCost`). */
+  scoreDivider: {
+    width: "100%",
+    borderTop: "1px solid var(--border)",
+    margin: "4px 0",
+  } satisfies CSSProperties,
 } as const;

@@ -54,6 +54,7 @@ import {
 } from './constants.js';
 import { runFullIndex, type IndexPayload } from './pipeline/full.js';
 import { runIncremental } from './pipeline/incremental.js';
+import { reverseImportersWithinHops, isTestFile } from './pipeline/reverse-importers.js';
 
 /**
  * GLOBALS allowlist — common JS/TS builtins + runtime that appear as bare
@@ -319,6 +320,13 @@ export class RepoIntelService implements RepoIntel {
     const state = await this.repo.tryGetIndexState(repoId);
     if (!state || (state.status !== 'full' && state.status !== 'partial')) return null;
 
+    // Bug #3 fix: a 'partial' index is still servable, but it's an honest
+    // degraded signal — never silently reported as `degraded: false`.
+    const degradedFields: Pick<BlastResult, 'degraded' | 'reason'> =
+      state.status === 'partial'
+        ? { degraded: true, reason: 'index_partial' }
+        : { degraded: false, reason: undefined };
+
     // Changed symbols = declared in a changed file. Skip the qualified
     // `Class.method` dual-emit (the bare form already covers the name).
     const declRows = await this.repo.getSymbolRows(repoId, changedFiles);
@@ -335,7 +343,7 @@ export class RepoIntelService implements RepoIntel {
       nameSet.add(s.name);
     }
     if (nameSet.size === 0) {
-      return { changedSymbols, callers: [], impactedEndpoints: [], degraded: false };
+      return { changedSymbols, callers: [], impactedEndpoints: [], ...degradedFields };
     }
 
     // Resolved cross-file callers.
@@ -351,7 +359,7 @@ export class RepoIntelService implements RepoIntel {
       else symsByFile.set(s.path, [s]);
     }
 
-    const callers: BlastCallerRow[] = [];
+    const rawCallers: BlastCallerRow[] = [];
     const seenCaller = new Set<string>();
     for (const c of callerRows) {
       const enclosing =
@@ -361,7 +369,7 @@ export class RepoIntelService implements RepoIntel {
       const key = `${c.fromPath}|${enclosing}|${c.toSymbol}`;
       if (seenCaller.has(key)) continue;
       seenCaller.add(key);
-      callers.push({
+      rawCallers.push({
         file: c.fromPath,
         symbol: enclosing,
         viaSymbol: c.toSymbol,
@@ -369,24 +377,77 @@ export class RepoIntelService implements RepoIntel {
         rank: c.rank,
       });
     }
+
+    // Bug #1 fix: MAX_CALLERS_PER_SYMBOL is a cap PER viaSymbol, not a global
+    // cap over the merged array — a PR touching 2+ exported symbols must not
+    // let one symbol's callers starve another's.
+    const callersByViaSymbol = new Map<string, BlastCallerRow[]>();
+    for (const c of rawCallers) {
+      const arr = callersByViaSymbol.get(c.viaSymbol);
+      if (arr) arr.push(c);
+      else callersByViaSymbol.set(c.viaSymbol, [c]);
+    }
+    const callers: BlastCallerRow[] = [];
+    for (const group of callersByViaSymbol.values()) {
+      group.sort((a, b) => b.rank - a.rank);
+      callers.push(...group.slice(0, MAX_CALLERS_PER_SYMBOL));
+    }
     callers.sort((a, b) => b.rank - a.rank);
 
-    // Precomputed facts per caller file (endpoints + crons), so consumers can
-    // attribute them to the changed symbol whose callers live in that file.
-    const facts = await this.repo.getFileFacts(repoId, callerFiles);
+    // Bug #2 fix: HTTP-endpoint impact is a 2-hop reverse-import-graph walk
+    // FROM EACH CHANGED FILE (not a union over direct caller files) — this is
+    // the only way to catch "shared helper -> service -> route file" (2 hops).
+    //
+    // Test files are excluded from the reachable set before it's used for
+    // endpoint/cron facts: `*.test.ts`/`*.it.test.ts` files routinely import
+    // `app.ts` just to build a test harness (e.g. `buildApp()` +
+    // `app.inject({...})`), so a 2-hop walk otherwise pulls in every
+    // integration test that happens to import the app entry point. Once
+    // included, `extractEndpoints()`'s `routeObjRe` (matched against a plain
+    // `{ method: 'POST', url: '/x' }` object shape, not a specific
+    // `app.route(...)` receiver) false-positives on `app.inject({ method:
+    // 'POST', url: '/agents' })` test calls, misattributing every endpoint a
+    // test happens to exercise as "impacted" by the changed symbol —
+    // confirmed against real data (server/test/agents-versions.it.test.ts's
+    // own assertions leaking into ReviewService's blast radius).
+    const edges = await this.repo.getEdges(repoId);
+    const changedFileSet = [...new Set(changedSymbols.map((s) => s.file))];
+    const reachableByChangedFile = new Map<string, string[]>();
+    const allFactFiles = new Set<string>();
+    for (const file of changedFileSet) {
+      const reachable = [...reverseImportersWithinHops(edges, [file], BFS_DEPTH)].filter((f) => !isTestFile(f));
+      const files = [file, ...reachable];
+      reachableByChangedFile.set(file, files);
+      for (const f of files) allFactFiles.add(f);
+    }
+
+    const facts = await this.repo.getFileFacts(repoId, [...allFactFiles]);
+    const factsByPath = new Map(facts.map((f) => [f.filePath, f]));
     const endpoints = new Set<string>();
+    // Keyed by the CHANGED file (not the caller file) — see types.ts's
+    // `BlastResult.factsByFile` doc comment for why the keying changed.
     const factsByFile: Record<string, { endpoints: string[]; crons: string[] }> = {};
-    for (const f of facts) {
-      factsByFile[f.filePath] = { endpoints: f.endpoints, crons: f.crons };
-      for (const e of f.endpoints) endpoints.add(e);
+    for (const [changedFile, files] of reachableByChangedFile) {
+      const fileEndpoints = new Set<string>();
+      const fileCrons = new Set<string>();
+      for (const f of files) {
+        const fact = factsByPath.get(f);
+        if (!fact) continue;
+        for (const e of fact.endpoints) {
+          fileEndpoints.add(e);
+          endpoints.add(e);
+        }
+        for (const c of fact.crons) fileCrons.add(c);
+      }
+      factsByFile[changedFile] = { endpoints: [...fileEndpoints], crons: [...fileCrons] };
     }
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers,
       impactedEndpoints: [...endpoints],
       factsByFile,
-      degraded: false,
+      ...degradedFields,
     };
   }
 

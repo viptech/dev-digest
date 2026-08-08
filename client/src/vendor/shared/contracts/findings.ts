@@ -97,3 +97,34 @@ export const FindingAction = z.object({
   reply: z.string().optional(),
 });
 export type FindingAction = z.infer<typeof FindingAction>;
+
+/**
+ * Findings summary (PR-list FINDINGS column + PR Brief's per-severity
+ * badges — both `pulls/findings-summary.ts` and `brief.ts` build this from
+ * the same `buildFindingsSummary()` helper). Lives here, not in `platform.ts`
+ * (where it originally lived) or `brief.ts`, specifically to avoid a circular
+ * import: `platform.ts` → `review-api.ts` → `brief.ts`, so `brief.ts` cannot
+ * import from `platform.ts` without a cycle.
+ */
+export const FindingsSummaryItem = z.object({
+  id: z.string(),
+  severity: Severity,
+  category: FindingCategory,
+  title: z.string(),
+  file: z.string(),
+  start_line: z.number().int(),
+  end_line: z.number().int(),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+});
+export type FindingsSummaryItem = z.infer<typeof FindingsSummaryItem>;
+
+export const FindingsSummary = z.object({
+  counts: z.object({
+    CRITICAL: z.number().int(),
+    WARNING: z.number().int(),
+    SUGGESTION: z.number().int(),
+  }),
+  items: z.array(FindingsSummaryItem),
+});
+export type FindingsSummary = z.infer<typeof FindingsSummary>;
