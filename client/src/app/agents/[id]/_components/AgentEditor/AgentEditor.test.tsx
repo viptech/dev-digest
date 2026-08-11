@@ -9,6 +9,11 @@ import { ToastProvider } from "../../../../../lib/toast";
 vi.mock("../../../../../lib/hooks/agents", () => ({
   useUpdateAgent: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false, data: undefined }),
   useProviderModels: () => ({ data: [{ id: "gpt-4.1", provider: "openai" }] }),
+  useAgentContextDocs: () => ({ data: [] }),
+  useSetAgentContextDocs: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("../../../../../components/context-doc-picker", () => ({
+  ContextDocPicker: () => <div>context-doc-picker</div>,
 }));
 
 import { AgentEditor } from "./AgentEditor";
@@ -45,4 +50,15 @@ describe("A2 Agent Editor (smoke)", () => {
     expect(screen.getByText("Configuration")).toBeInTheDocument();
     expect(screen.getByText("Save agent")).toBeInTheDocument();
   });
+
+  it(
+    "renders the Context tab (SPEC-01) — regression for the bug where " +
+      "?tab=context silently fell back to config because the page's own " +
+      "VALID_TABS list wasn't kept in sync with AgentEditor's TABS",
+    () => {
+      renderWithIntl(<AgentEditor agent={AGENT} tab="context" onTab={() => {}} />);
+      expect(screen.getByText("context-doc-picker")).toBeInTheDocument();
+      expect(screen.queryByText("Configuration")).not.toBeInTheDocument();
+    },
+  );
 });

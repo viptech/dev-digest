@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../messages/en/skills.json";
+import projectContextMessages from "../../../../../messages/en/projectContext.json";
 import { SkillDrawer } from "./SkillDrawer";
 
 const createMutate = vi.fn().mockResolvedValue({ id: "new" });
@@ -25,13 +26,23 @@ vi.mock("../../../../lib/hooks/skills", () => ({
   useDeleteSkill: () => ({ mutateAsync: deleteMutate, isPending: false }),
   useImportPreview: () => ({ mutateAsync: importPreviewMutate, isPending: false }),
   useImportSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // SPEC-01 — Project context to use section. Not this test's focus; the
+  // picker itself is mocked away below (own coverage: ContextDocPicker.test.tsx).
+  useSkillContextDocs: () => ({ data: [] }),
+  useSetSkillContextDocs: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("../../../../components/context-doc-picker", () => ({
+  ContextDocPicker: () => null,
 }));
 
 afterEach(cleanup);
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+    <NextIntlClientProvider
+      locale="en"
+      messages={{ skills: messages, projectContext: projectContextMessages }}
+    >
       {ui}
     </NextIntlClientProvider>,
   );
@@ -97,5 +108,17 @@ describe("SkillDrawer", () => {
     fireEvent.click(screen.getByText("Delete"));
     expect(await screen.findByText("Could not delete this skill. Please try again.")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("edit mode: shows the Project context section with a SERIALIZES AS preview (AC-7)", () => {
+    renderWithIntl(<SkillDrawer mode="edit" skillId="s1" onClose={vi.fn()} />);
+    expect(screen.getByText("Project context")).toBeInTheDocument();
+    expect(screen.getByText("SERIALIZES AS")).toBeInTheDocument();
+    expect(screen.getByText(/## Project specifications/)).toBeInTheDocument();
+  });
+
+  it("create mode: no Project context section (skill doesn't exist yet)", () => {
+    renderWithIntl(<SkillDrawer mode="create" onClose={vi.fn()} />);
+    expect(screen.queryByText("SERIALIZES AS")).not.toBeInTheDocument();
   });
 });

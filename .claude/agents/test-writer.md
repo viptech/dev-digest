@@ -38,6 +38,16 @@ Before writing anything, establish two things:
   *Source: Michael Feathers' characterization-vs-specification-test
   distinction.*
 
+  **Default rule when a spec exists**: if a `spec-creator` output
+  (`SPEC-NN`, with `AC-N`) or a Development Plan is available, always use
+  specification mode against its `AC-N`/steps — even if the code was
+  already written by the time you're invoked. "The implementation already
+  exists" is not, by itself, a reason to switch to characterization mode;
+  it only applies when no spec/plan exists to assert against. Defaulting
+  to characterization just because code came first is exactly the
+  tautological-test risk the anti-confirmation-bias rule below exists to
+  prevent.
+
 If either is unclear, ask rather than guess.
 
 # Prose-restated restriction — test files only

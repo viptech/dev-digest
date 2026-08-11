@@ -324,3 +324,77 @@ caller'ів**
 Доказ: server/src/modules/repo-intel/repository.ts:516-523 (`.innerJoin(t.fileRank, ...)`),
 server/test/blast.it.test.ts (кожен з трьох fixture-файлів отримує явний
 `replaceFileRank` рядок саме через цю пастку)
+
+## 2026-08-11 · gotcha
+**`readClone()` не має захисту від path traversal — досі нешкідливо лише тому,
+що жоден викликач не передає client-supplied шлях**
+`readClone(clonePath, file)` робить `readFile(join(clonePath, file), 'utf8'))`
+без `path.resolve`+prefix-перевірки — шлях типу `../../../../etc/passwd` чи
+абсолютний шлях пройде як є через `join()`. Зараз це не експлуатується,
+бо єдиний споживач (`readFiles`) отримує шляхи лише з server-derived джерел
+(напр. `intent-service.ts:178` — один plan-spec шлях, знайдений regex'ом з PR
+body, не з прямого клієнтського input). Плановане SPEC-01-project-context.md
+(`docs/specs/SPEC-01-project-context.md`) стане першим викликачем, де шлях
+документа приходить від клієнта й персистується в БД — тож перш ніж
+підключати attach/detach до `readFiles`, `readClone` (або новий шар над ним)
+має валідувати: резолвлений шлях лишається під `resolve(clonePath)` і під
+одним з дозволених коренів, і на запис (attach), і повторно на кожне
+run-time читання.
+Доказ: server/src/modules/repo-intel/service.ts:840-842
+
+## 2026-08-11 · gotcha
+**`reviewer-core` вже повністю приймає `specs` end-to-end — сервер просто
+ніколи їх не заповнює, `specs_read` хардкоджений у `[]`**
+`PromptParts.specs`/`ReviewInput.specs`/`PromptAssembly.specs` існують і
+`assemblePrompt()` вже рендерить кожен елемент через
+`wrapUntrusted('spec-${i}', …)` у `## Project context`
+(`reviewer-core/src/prompt.ts:141-227`) — але `ReviewRunExecutor.runOneAgent()`
+ніколи не передає `specs` у виклик `reviewPullRequest({...})`
+(server/src/modules/reviews/run-executor.ts:261-288), і `RunTrace.specs_read`
+завжди `[]` (рядки 385, 535). `reviewer-core/README.md:32` прямо документує
+`specs` як "L05"-слот — тобто це не забутий баг, а свідомо незавершена робота:
+уся імплементація Project Context (SPEC-01) — на server (discovery + БД +
+проброс у `run-executor`) і client (UI), `reviewer-core` міняти не треба.
+Доказ: reviewer-core/src/prompt.ts:141-227; server/src/modules/reviews/run-executor.ts:261-288,385,535;
+reviewer-core/README.md:32
+
+## 2026-08-11 · fix
+**Спростовує частину запису від 2026-07-28: `pnpm db:migrate` теж мовчки нічого
+не робить у цьому клоні — не тільки прямий `node_modules/.bin/tsx`**
+Запис від 2026-07-28 стверджував "працює лише `pnpm db:migrate`". Перевірено
+фактично (не по коду виходу — по `\d agent_context_docs` і по
+`select created_at from drizzle.__drizzle_migrations`): після `pnpm db:migrate`
+(exit 0, "Done in 179ms") нові таблиці НЕ з'явились, і найновіший рядок у
+`__drizzle_migrations` мав дату на тиждень старішу за сьогодні — тобто
+команда справді нічого не застосувала, попри "успішний" вихід. Той самий
+CLI-entrypoint guard (`import.meta.url === file://${process.argv[1]}`,
+`server/src/db/migrate.ts:37`) ламається і через `pnpm`-обгортку в цьому шляху
+репозиторію (містить пробіл — `.../ai agent/dev-digest`), не лише при
+прямому виклику `tsx`. Спрацював лише варіант "прямий імпорт і виклик
+`runMigrations(url)`" з окремого одноразового entry-скрипта поза
+`argv[1]`-перевіркою — саме той workaround, який запис від 2026-07-28 подає
+як запасний, а не основний. Висновок: у цьому репо `pnpm db:migrate`
+**не** можна вважати надійним підтвердженням застосування міграції в жодному
+випадку — завжди перевіряй по факту (`\d <table>` / `__drizzle_migrations`
+timestamp), незалежно від того, як команда була викликана.
+Доказ: server/src/db/migrate.ts:37 (guard); перевірено 2026-08-11 —
+`__drizzle_migrations` мав 14 рядків (найновіший 2026-08-03) і після
+`pnpm db:migrate` лишився 14; зʼявився 15-й рядок (2026-08-11) лише після
+прямого `runMigrations(process.env.DATABASE_URL)` з тимчасового скрипта
+
+## 2026-08-11 · gotcha
+**Коментар "the ONLY place that touches `repos`" у `repos/repository.ts` — це
+аспіраційна, а не забезпечена правилом конвенція**
+`RepoRepository`'s doc-comment (`server/src/modules/repos/repository.ts:7`)
+каже "Every query is scoped by workspaceId... the ONLY place". На практиці
+кілька інших модулів (`repo-intel/repository.ts`, `reviews/repository.ts`)
+уже читають `t.repos` напряму зі свого власного `repository.ts` для
+join'ів/лукапів — і це нормальна, прийнята практика (кожен модуль читає
+чужу таблицю для власних потреб через СВІЙ repository-шар, а не через
+сервіс іншого модуля). Новий `project-context/repository.ts` зробив те
+саме (`getRepoForContext`). Не сприймай цей коментар як "потрібен
+крос-модульний сервіс-виклик замість прямого читання" — це про write-шлях
+(`add`/`clone`/`remove`), не про читання.
+Доказ: server/src/modules/repos/repository.ts:7; прецеденти —
+server/src/modules/repo-intel/repository.ts:136-148 (`getRepoBasics`),
+server/src/modules/project-context/repository.ts (`getRepoForContext`)

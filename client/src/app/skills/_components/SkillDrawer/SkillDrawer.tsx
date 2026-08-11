@@ -11,8 +11,11 @@ import {
   useDeleteSkill,
   useImportPreview,
   useImportSkill,
+  useSkillContextDocs,
+  useSetSkillContextDocs,
 } from "../../../../lib/hooks/skills";
-import { readFileAsText } from "./helpers";
+import { ContextDocPicker } from "../../../../components/context-doc-picker";
+import { readFileAsText, serializesAs } from "./helpers";
 import { s } from "./styles";
 
 const TYPE_OPTIONS: { value: SkillType; label: string }[] = [
@@ -32,12 +35,15 @@ export function SkillDrawer({
   onClose: () => void;
 }) {
   const t = useTranslations("skills");
+  const pc = useTranslations("projectContext");
   const { data: existing } = useSkill(mode === "edit" ? skillId : undefined);
   const create = useCreateSkill();
   const update = useUpdateSkill();
   const del = useDeleteSkill();
   const importPreview = useImportPreview();
   const importSave = useImportSkill();
+  const { data: contextDocs } = useSkillContextDocs(mode === "edit" ? skillId : undefined);
+  const setContextDocs = useSetSkillContextDocs(skillId ?? "");
 
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -166,6 +172,19 @@ export function SkillDrawer({
               <Textarea value={body} onChange={setBody} rows={14} mono />
             </FormField>
             {mode === "edit" && existing && <Badge>{t("preview.version", { version: existing.version })}</Badge>}
+            {mode === "edit" && skillId && (
+              <FormField label={pc("attachedTitle")} hint={pc("serializesAsHint")}>
+                <ContextDocPicker
+                  attachedDocs={contextDocs ?? []}
+                  onSetDocs={(docs) => setContextDocs.mutate(docs)}
+                  isSaving={setContextDocs.isPending}
+                />
+                <div style={s.serializesAs}>
+                  <div style={s.serializesAsLabel}>{pc("serializesAsTitle")}</div>
+                  <pre style={s.serializesAsCode}>{serializesAs(contextDocs ?? [])}</pre>
+                </div>
+              </FormField>
+            )}
           </>
         )}
       </div>

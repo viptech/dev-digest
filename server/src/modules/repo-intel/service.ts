@@ -27,7 +27,8 @@ import {
   langForFile,
 } from '../../adapters/astgrep/index.js';
 import { readFile } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname } from 'node:path';
+import { resolveInClone } from './path-guard.js';
 import { RepoIntelRepository, type FullSymbolRow } from './repository.js';
 import type {
   BlastCallerRow,
@@ -838,5 +839,7 @@ function enclosingSymbolName(
 }
 
 async function readClone(clonePath: string, file: string): Promise<string | null> {
-  return readFile(join(clonePath, file), 'utf8').catch(() => null);
+  const resolved = resolveInClone(clonePath, file);
+  if (!resolved) return null;
+  return readFile(resolved, 'utf8').catch(() => null);
 }

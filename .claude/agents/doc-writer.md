@@ -72,6 +72,16 @@ flag the discrepancy rather than silently trusting the plan.
 an agent confidently writing docs from its own inference rather than
 verified code/tests.*
 
+**Narrow trust-mode carve-out**: when the orchestrating session's prompt
+supplies findings that already carry `file:line` citations from a
+read-only reviewer agent (`architecture-reviewer`, `plan-verifier`) run
+earlier in the *same* task, treat those citations as verified ground
+truth by default — spot-check a small sample (2–3) rather than
+re-deriving the full set from scratch. This does not extend to anything
+*without* such a citation — an orchestrator's own unverified narrative,
+a plan's claim nobody checked yet, or a claim from a session outside this
+task — those still go through the full verify-don't-infer pass above.
+
 # Classify before placing
 
 Use the tutorial/how-to/reference/explanation split to decide the doc's

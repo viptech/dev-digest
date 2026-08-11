@@ -132,6 +132,17 @@ What the reviewer actually sends to the model is assembled in
 - **Grounding is mandatory.** Every finding must cite a line that exists in the
   diff or it is dropped (`groundFindings`), and the score is recomputed from the
   surviving findings — the model's self-reported score is ignored.
+- **Project Context (SPEC-01, L05) is manual, always-on, and multi-repo.** An
+  agent or a skill can have `.md` documents attached from `specs/`/`docs/`/
+  `insights/` in **any** connected repo (`modules/project-context/`) — never
+  gated by the `repo_intel` toggle above, since it's a separate, explicit
+  opt-in per attachment, not auto-enrichment. Each attached document is read
+  from its **own** bound repo at run time (`buildProjectContextDigest` in
+  `modules/reviews/run-executor.ts`), not the reviewed PR's repo — attaching a
+  spec from repo A while reviewing a PR in repo B is the intended, supported
+  case. Content rides the same `wrapUntrusted()`/`INJECTION_GUARD` path as the
+  diff — no separate defense mechanism. See
+  [`docs/specs/SPEC-01-project-context.md`](../docs/specs/SPEC-01-project-context.md).
 
 ## Testing
 

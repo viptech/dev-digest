@@ -5,10 +5,15 @@ import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { REVIEW_STRATEGY } from './constants.js';
+import {
+  REVIEW_STRATEGY,
+  MAX_CONTEXT_DOC_CHARS,
+  MAX_CONTEXT_DOCS_TOTAL_CHARS,
+} from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { IntentClassificationService } from './intent-service.js';
+import { categorizePath } from '../project-context/discovery.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -243,6 +248,11 @@ export class ReviewRunExecutor {
       const repoMap = repoIntelOn ? await this.buildRepoMapDigest(pull.repoId, runLog) : undefined;
       const rankNote = repoIntelOn ? await this.buildRankNote(pull.repoId, diff, runLog) : '';
 
+      // SPEC-01 — manual per-agent/per-skill attachment, ALWAYS on (never
+      // gated by the repo_intel toggle above — separate slot, separate
+      // opt-in unit: the user attaches docs explicitly per agent/skill).
+      const projectContext = await this.buildProjectContextDigest(agent, runLog);
+
       const task = taskLine(pull) + rankNote;
 
       // A1 — resolve this agent's linked, ENABLED skills into ordered body
@@ -273,6 +283,9 @@ export class ReviewRunExecutor {
         ...(repoMap ? { repoMap } : {}),
         // A1 — linked+enabled skill bodies, same omit-when-empty contract.
         ...(skillBodies.length ? { skills: skillBodies } : {}),
+        // SPEC-01 — attached specs, same omit-when-empty contract.
+        // `assemblePrompt` already wraps each entry with `wrapUntrusted()`.
+        ...(projectContext ? { specs: projectContext.specs } : {}),
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
@@ -382,7 +395,7 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        specs_read: projectContext?.specsRead ?? [],
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -480,6 +493,99 @@ export class ReviewRunExecutor {
       runLog.info(`repo map: repoIntel failed — ${(err as Error).message}`);
       return undefined;
     }
+  }
+
+  /**
+   * SPEC-01 (Project Context) — resolve the agent's manually-attached `.md`
+   * documents (AC-9/AC-10) and read each from its OWN bound repo (AC-11:
+   * `doc.repoId`, never `pull.repoId` — cross-repo context is the intended,
+   * supported case). Best-effort/omit-when-empty, same contract as
+   * `buildCallersDigest`/`buildRepoMapDigest` — NEVER gated by the
+   * per-agent `repo_intel` toggle (this is a separate, always-on manual-
+   * attachment slot, not repo-intel auto-enrichment).
+   *
+   * Each entry is prefixed with `### <owner>/<name> — <path>` (AC-13) before
+   * becoming one `ReviewInput.specs[i]` element — `assemblePrompt` already
+   * wraps it with `wrapUntrusted()` into `## Project context`, no
+   * `reviewer-core` change needed. `specsRead` mirrors what actually made it
+   * in (post size-cap truncation/omission), formatted `"<owner>/<name>:<path>"`
+   * (AC-16).
+   */
+  private async buildProjectContextDigest(
+    agent: AgentRow,
+    runLog: RunLogger,
+  ): Promise<{ specs: string[]; specsRead: string[] } | undefined> {
+    let docs;
+    try {
+      docs = await this.container.projectContext.resolveAgentContext(agent.id);
+    } catch (err) {
+      runLog.info(`project context: resolution failed — ${(err as Error).message}`);
+      return undefined;
+    }
+    if (docs.length === 0) return undefined;
+
+    // AC-15 defense-in-depth: re-check the "under one of the configured
+    // roots" half immediately before read (the clone-escape half is already
+    // covered generically by the now-hardened readClone/readFiles below —
+    // this re-check only needs the roots half, per the plan's step 5.3).
+    const valid = docs.filter((d) => {
+      if (categorizePath(d.path)) return true;
+      runLog.info(`project context: ${d.owner}/${d.name}:${d.path} outside allowed roots — dropped`);
+      return false;
+    });
+    if (valid.length === 0) return undefined;
+
+    // Read once per distinct repo (AC-11) — a failing repo's docs are
+    // skipped, not fatal to the whole digest (AC-12).
+    const byRepo = new Map<string, { paths: string[] }>();
+    for (const d of valid) {
+      const g = byRepo.get(d.repoId) ?? { paths: [] };
+      g.paths.push(d.path);
+      byRepo.set(d.repoId, g);
+    }
+    const contentByKey = new Map<string, string>();
+    for (const [repoId, g] of byRepo) {
+      try {
+        const files = await this.container.repoIntel.readFiles(repoId, g.paths);
+        for (const f of files) contentByKey.set(`${repoId}:${f.path}`, f.content);
+      } catch (err) {
+        runLog.info(`project context: reading repo ${repoId} failed — ${(err as Error).message}`);
+      }
+    }
+
+    const specs: string[] = [];
+    const specsRead: string[] = [];
+    let totalChars = 0;
+    for (const d of valid) {
+      const content = contentByKey.get(`${d.repoId}:${d.path}`);
+      if (content === undefined) {
+        // Renamed/deleted in ITS OWN bound repo — AC-12, best-effort skip.
+        runLog.info(`project context: ${d.owner}/${d.name}:${d.path} not found — skipped`);
+        continue;
+      }
+      let body = content;
+      let truncated = false;
+      if (body.length > MAX_CONTEXT_DOC_CHARS) {
+        body = body.slice(0, MAX_CONTEXT_DOC_CHARS);
+        truncated = true;
+      }
+      if (totalChars + body.length > MAX_CONTEXT_DOCS_TOTAL_CHARS) {
+        runLog.info(
+          `project context: aggregate budget reached — stopping before ${d.owner}/${d.name}:${d.path}`,
+        );
+        break; // never counted as "actually added" — omitted from specs AND specsRead
+      }
+      totalChars += body.length;
+      const note = truncated ? '\n\n[truncated — exceeds per-document limit]' : '';
+      specs.push(`### ${d.owner}/${d.name} — ${d.path}\n${body}${note}`);
+      specsRead.push(`${d.owner}/${d.name}:${d.path}`);
+    }
+
+    if (specs.length === 0) return undefined;
+    runLog.info(
+      `project context: ${specs.length} document(s) attached, ${totalChars} char(s) (~${Math.ceil(totalChars / 4)} token(s))`,
+    );
+    return { specs, specsRead };
   }
 
   /**

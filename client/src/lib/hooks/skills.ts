@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Skill, SkillType } from "@devdigest/shared";
+import type { Skill, SkillContextDocLink, SkillType } from "@devdigest/shared";
 
 export function useSkills() {
   return useQuery({
@@ -60,6 +60,28 @@ export function useDeleteSkill() {
     onSuccess: (_d, id) => {
       qc.invalidateQueries({ queryKey: ["skills"] });
       qc.removeQueries({ queryKey: ["skill", id] });
+    },
+  });
+}
+
+// ---- Project Context (SPEC-01) — Skill drawer "Project context to use" ---
+
+export function useSkillContextDocs(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-context-docs", skillId],
+    queryFn: () => api.get<SkillContextDocLink[]>(`/skills/${skillId}/context-docs`),
+    enabled: !!skillId,
+  });
+}
+
+/** Replace the whole ordered set of attached docs for a skill (AC-7). */
+export function useSetSkillContextDocs(skillId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (docs: { repo_id: string; path: string }[]) =>
+      api.post<SkillContextDocLink[]>(`/skills/${skillId}/context-docs`, { docs }),
+    onSuccess: (data) => {
+      qc.setQueryData(["skill-context-docs", skillId], data);
     },
   });
 }

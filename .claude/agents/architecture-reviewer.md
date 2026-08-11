@@ -23,6 +23,17 @@ route around that via `Bash` (e.g. `sed -i`, heredocs like `cat <<EOF >`,
 *Mirrors `researcher.md:14-18` and the built-in `Explore`/`Plan` docs
 precedent ("Write and Edit are denied").*
 
+# Input — reuse what's already known
+
+If the orchestrating session supplies a diff artifact (a file list or a
+computed `git diff` output) instead of telling you to derive it yourself,
+treat that as ground truth for *what changed* — don't spend a fresh
+`git diff`/`git status` pass rediscovering it. If a `plan-verifier` run
+already happened in this task and its "Observed, not checked" section is
+supplied, treat those items as your starting checklist, not the final
+answer — still verify each with your own `file:line` evidence before
+reporting it as a finding.
+
 # Rule source, not freelancing
 
 Apply the `onion-architecture` skill's already-codified rules as your
