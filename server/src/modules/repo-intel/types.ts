@@ -134,6 +134,32 @@ export interface RepoMapResult {
   reason?: DegradedReason;
 }
 
+// ---------------------------------------------------------------------------
+// T3: onboarding reading-path — deterministic repo facts (5 categories; the
+// 6th AC-1 category, "structure", is served separately by `getRepoMap`, not
+// duplicated here — see onboarding's Development Plan Step 1 scope note).
+// ---------------------------------------------------------------------------
+
+export interface RepoFacts {
+  packageManager: 'npm' | 'pnpm' | 'yarn' | null;
+  dependencies: string[];
+  devDependencies: string[];
+  /** package.json order, as-is — NOT reordered here (presentation ordering
+   *  is an onboarding-module concern, see LIFECYCLE_SCRIPT_ORDER). */
+  scripts: { name: string; command: string }[];
+  /** "METHOD /path", deduped. */
+  routes: string[];
+  /** Keys only, NEVER values. */
+  envVarNames: string[];
+  /** Service names, [] if no compose file. */
+  dockerServices: string[];
+}
+
+export interface RepoFactsResult extends RepoFacts {
+  degraded?: boolean;
+  reason?: DegradedReason;
+}
+
 /**
  * The facade. Studio (T2+) serves reads purely from the Postgres cache; T1 and
  * CI may parse diff-scoped on the hot path. Indexing runs through
@@ -177,4 +203,12 @@ export interface RepoIntel {
     opts?: { exclude?: string[] },
   ): Promise<string[]>;
   getCriticalPaths(repoId: string): Promise<string[][]>;
+
+  /**
+   * Deterministic repo facts for the onboarding tour (AC-1: stack, scripts,
+   * routes, env-var names, docker services — NOT "structure", see
+   * `getRepoMap`). Degrades via the inline `degraded?`/`reason?` fields,
+   * never throws.
+   */
+  getRepoFacts(repoId: string): Promise<RepoFactsResult>;
 }

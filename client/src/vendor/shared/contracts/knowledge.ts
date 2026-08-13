@@ -32,19 +32,59 @@ export const OnboardingLink = z.object({
 });
 export type OnboardingLink = z.infer<typeof OnboardingLink>;
 
+export const OnboardingTask = z.object({
+  title: z.string(),
+  path: z.string(),
+  complexity: z.enum(['low', 'medium', 'high']),
+});
+export type OnboardingTask = z.infer<typeof OnboardingTask>;
+
+export const OnboardingCommand = z.object({
+  cmd: z.string(),
+  comment: z.string().optional(),
+});
+export type OnboardingCommand = z.infer<typeof OnboardingCommand>;
+
 export const OnboardingSection = z.object({
   kind: z.string(),
   title: z.string(),
   body: z.string(), // markdown
   diagram: z.string().nullish(), // mermaid
   links: z.array(OnboardingLink),
+  tasks: z.array(OnboardingTask).optional(),
+  commands: z.array(OnboardingCommand).optional(),
 });
 export type OnboardingSection = z.infer<typeof OnboardingSection>;
 
+// Bounded, deliberately duplicated enum of the reasons a tour can degrade —
+// mirrors server-only `DegradedReason` (repo-intel/types.ts) PLUS the new
+// 'llm_call_failed' value AC-9 introduces (not a repo-intel concept, so it
+// can't just re-export that type). Same "small, deliberate duplication
+// across a package boundary" spirit as other cross-boundary literal unions.
+export const OnboardingDegradedReason = z.enum([
+  'flag_off',
+  'index_failed',
+  'index_partial',
+  'repo_too_large',
+  'no_data',
+  'llm_call_failed',
+]);
+export type OnboardingDegradedReason = z.infer<typeof OnboardingDegradedReason>;
+
 export const Onboarding = z.object({
   sections: z.array(OnboardingSection),
+  degraded: z.boolean().optional(),
+  degraded_reason: OnboardingDegradedReason.nullish(),
 });
 export type Onboarding = z.infer<typeof Onboarding>;
+
+// Wire-level response wrapper both routes return (GET/POST) — ISO timestamp,
+// from the DB row on GET, or "now" on a transient degraded POST response
+// that was never persisted.
+export const OnboardingResponse = Onboarding.extend({
+  generated_at: z.string(),
+});
+export type OnboardingResponse = z.infer<typeof OnboardingResponse>;
 
 // ---- Eval ----
 export const EvalPerTrace = z.object({
