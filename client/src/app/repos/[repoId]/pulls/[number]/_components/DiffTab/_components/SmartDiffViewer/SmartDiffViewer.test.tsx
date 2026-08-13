@@ -165,4 +165,35 @@ describe("SmartDiffViewer", () => {
     fireEvent.click(screen.getByRole("button", { name: /Boilerplate/i }));
     expect(screen.getByText("package-lock.json")).toBeInTheDocument();
   });
+
+  it("SPEC-04 AC-20 — a focusFile pointing into the still-collapsed boilerplate group auto-expands that group and renders/scrolls to its file", () => {
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    mockSmartDiff = smartDiff();
+    const { rerender } = renderWithIntl(
+      <SmartDiffViewer
+        prId="pr-1"
+        files={[prFile({ path: "src/service.ts" }), prFile({ path: "src/index.ts" }), prFile({ path: "package-lock.json" })]}
+      />,
+    );
+
+    // Starts collapsed, per the "starts boilerplate collapsed" test above —
+    // no click on the group header this time, only a focusFile prop change.
+    expect(screen.queryByText("package-lock.json")).not.toBeInTheDocument();
+
+    rerender(
+      <NextIntlClientProvider locale="en" messages={{ shell: shellMessages }}>
+        <SmartDiffViewer
+          prId="pr-1"
+          files={[prFile({ path: "src/service.ts" }), prFile({ path: "src/index.ts" }), prFile({ path: "package-lock.json" })]}
+          focusFile={{ path: "package-lock.json", line: null, n: 1 }}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    // The group auto-expanded — its file is now rendered — and the matching
+    // FileCard's own card-level scrollIntoView fired (block: "start").
+    expect(screen.getByText("package-lock.json")).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ block: "start" }));
+    spy.mockRestore();
+  });
 });
