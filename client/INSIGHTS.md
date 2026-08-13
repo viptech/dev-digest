@@ -227,3 +227,38 @@ var(--text-primary)` і т.д.) — та сама мапа коректна в �
 Доказ: client/src/vendor/ui/styles.css (`@plugin "@tailwindcss/typography";`
 і `.dd-md` блок з `--tw-prose-*`), client/src/vendor/ui/primitives/Markdown.tsx
 (спрощено до `className="dd-md prose max-w-none"`, без `components` пропу)
+
+## 2026-08-13 · gotcha
+**`<Markdown>` без `rehype-raw` НЕ видаляє сирий HTML з тексту — перетворює
+його на видимий текстовий вузол, а не на реальний DOM-елемент**
+`react-markdown` v9's `post()` transform (`skipHtml` за замовчуванням
+`false`) конвертує mdast-вузли типу `'raw'` у `{type: 'text', value:
+node.value}`, а не дропає і не парсить їх у справжні DOM-теги. Тобто
+рядок body типу `"...<script>alert(1)</script>..."`, переданий у
+`<Markdown>` без жодного санітайзера, рендериться як буквальний видимий
+текст `<script>alert(1)</script>` (жодного реального `<script>`-елемента в
+DOM, `container.querySelector('script')` — `null`), а не зникає і не
+виконується. Це підтверджує, що XSS-захист для LLM-згенерованого `body`
+(SPEC-03 T5, stored-XSS NFR) не потребує ручного екранування на клієнті —
+дефолтна поведінка `Markdown`-компонента вже безпечна.
+Доказ: client/node_modules/react-markdown/lib/index.js:354-359 (`transform`:
+`node.type === 'raw'` → `parent.children[index] = {type: 'text', value:
+node.value}` коли `skipHtml` falsy); тест
+client/src/app/repos/[repoId]/onboarding/_components/OnboardingTourPage/OnboardingTourPage.test.tsx
+("renders a literal <script> in the body as visible, inert text")
+
+## 2026-08-13 · gotcha
+**`messages/en/onboarding.json`'s `generate.title` і `generate.cta` — буквально
+однаковий рядок ("Generate onboarding tour") → `getByText` ламається на
+"multiple elements found" в порожньому стані**
+`EmptyState` рендерить `title` окремим `<div>` і `cta` окремою кнопкою; коли
+обидва пропси отримують однаковий переклад, в DOM одночасно опиняються два
+елементи з ідентичним текстом. Непомітно з коду компонента — видно лише при
+спробі написати `screen.getByText(...)` в тесті на порожній стан. Фікс:
+`screen.getAllByText(...)` з перевіркою довжини (2) для перевірки самого
+факту наявності тексту, і `screen.getByRole("button", {name: ...})` замість
+`getByText`, коли потрібно саме клікнути по кнопці.
+Доказ: client/messages/en/onboarding.json:18,20 (`generate.title` і
+`generate.cta` — однаковий рядок); тест
+client/src/app/repos/[repoId]/onboarding/_components/OnboardingTourPage/OnboardingTourPage.test.tsx
+("shows the 30–60s / ~5,000 tokens copy in the empty state")
