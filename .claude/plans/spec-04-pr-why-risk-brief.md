@@ -48,7 +48,7 @@ nobody downstream has to guess what belongs in which commit:
 | 3 | Code — server module | `implementer` | One commit: `server/src/modules/brief/{risk-brief,grounding,constants,repository}.ts` + extended `service.ts`/`routes.ts` (T4/T5/T6). Suggested message: `feat(brief): risk-brief LLM generation + POST /pulls/:id/brief (SPEC-04 T4/T5/T6)`. |
 | 4 | Code — client hook + PrBriefCard | `implementer` | One commit: `lib/hooks/brief.ts` mutation + extended `PrBriefCard.tsx` (T7/T8). Suggested message: `feat(brief): generate/regenerate brief — hook + card (SPEC-04 T7/T8)`. |
 | 5 | Code — IntentAndRiskCard rename + risks | `implementer` | One commit, **rename tracked as a rename, not delete+add** (`git mv`): `IntentCard/` → `IntentAndRiskCard/` + risk chips render (T9). Suggested message: `feat(brief): rename IntentCard to IntentAndRiskCard, render brief.risks (SPEC-04 T9)`. |
-| 6 | Code — ReviewFocusCard + cross-tab focus wiring | `implementer` | One commit, deliberately isolated because it touches a different subtree (`components/diff-viewer/**`) than the rest of the client work: new `ReviewFocusCard/`, `page.tsx`'s new `focusFile` state + `onOpenFile`, `DiffTab`/`SmartDiffViewer`/`DiffViewer` threading a focus target down to `FileCard`'s already-declared-but-never-wired `scrollToLine` prop (T10). Suggested message: `feat(brief): ReviewFocusCard + click-to-file navigation into Files changed (SPEC-04 T10)`. |
+| 6 | Code — ReviewFocusCard + cross-tab focus wiring | `implementer` | One commit, deliberately isolated because it touches a different subtree (`components/diff-viewer/**`) than the rest of the client work: new `ReviewFocusCard/`, `page.tsx`'s new `focusFile` state + `onOpenFile`, `DiffTab`/`SmartDiffViewer`/`DiffViewer` threading a focus target down to a NEW `focus: {line, n}` prop on `FileCard`/`CodeLine` (extending, not just calling, the existing but never-wired `scrollToLine` plumbing — T10). Suggested message: `feat(brief): ReviewFocusCard + click-to-file navigation into Files changed (SPEC-04 T10)`. |
 | 7 | Tests — AC-driven | `test-writer` | Own commit(s), written from the SPEC's AC-1–AC-21 text (not from the implementer's code) — the AC-5/AC-6/NFR-HIGH injection-regression fixture plus any AC coverage gaps the implementer's collateral tests missed. Suggested message: `test(brief): AC-driven acceptance coverage incl. injection regression (SPEC-04)`. |
 | 8 | Review — architecture | `architecture-reviewer` | No commit of its own; findings feed back to `implementer` (fix commits tagged `fix(brief): address architecture-reviewer finding …`, up to 3 rounds per `sdd-implement`). |
 | 9 | Verifier | `plan-verifier` | No commit — produces the AC → task → test → commit matrix as its returned report. Archiving it is a separate, explicit `docs(specs): SPEC-04 verifier report` commit if the user wants it — not implied by this plan. |
@@ -160,10 +160,12 @@ Step 1:
   it in the commit-3 PR description as a known, accepted, precedented risk,
   don't silently add defaults nobody asked for.
 - **`pnpm db:migrate` cannot be trusted by exit code alone**
-  (root `INSIGHTS.md` 2026-08-11 gotcha, re-verified against
-  `server/src/db/migrate.ts:37` unchanged) — after generating T2's
-  migration, confirm it actually applied via `\d pr_brief` or a
-  `__drizzle_migrations` timestamp check, never by "exit 0" alone.
+  (`server/INSIGHTS.md:361-383`, 2026-08-11 fix entry, re-verified against
+  `server/src/db/migrate.ts:37` unchanged — NOT root `INSIGHTS.md`'s own
+  2026-08-11 entry, which is an unrelated note about agents-README section
+  ordering) — after generating T2's migration, confirm it actually applied
+  via `\d pr_brief` or a `__drizzle_migrations` timestamp check, never by
+  "exit 0" alone.
 - **Vendor-copy duplication risk** (root `INSIGHTS.md` 2026-07-31 entry,
   re-verified: `server/src/vendor/shared/contracts/brief.ts` and
   `client/src/vendor/shared/contracts/brief.ts` are confirmed
@@ -191,17 +193,32 @@ Step 1:
   beyond T1–T12) — worth a one-line callout in the commit-3 PR description
   and a candidate `engineering-insights` entry after this feature ships,
   not a task here.
-- **`FileCard`'s `scrollToLine`/`highlight` mechanism is fully plumbed but
-  currently has NO caller** (re-verified: `FileCard.tsx:50,59,74-75,140`
-  declares and consumes `scrollToLine`, and `CodeLine.tsx:28,38-41` has the
-  `scrollIntoView` effect keyed off `highlight` — but neither
-  `DiffViewer.tsx:14-32` nor `SmartDiffViewer.tsx:28,73-79` passes
-  `scrollToLine` to any `FileCard` today). This is good news for T10, not a
-  blocker: the scroll/highlight primitive already exists end-to-end and
-  only needs a caller — T10 is "thread a `{path, line}` target down to it",
-  not "build scroll-to-line from scratch". Don't go looking for an existing
-  "after-comment-submit" caller to extend — there isn't one; this plan's
-  characterization in the task brief was imprecise on that point.
+- **`FileCard`'s `scrollToLine`/`highlight` mechanism is plumbed for the
+  LINE case only, has NO caller today, and does NOT cover the file-level
+  scroll AC-20 actually needs (cross-model review findings B2+B3,
+  correcting this plan's own earlier claim)** — re-verified:
+  `FileCard.tsx:50,59,74-75,140` declares/consumes `scrollToLine` and its
+  effect is `if (scrollToLine != null) setOpen(true)` (`FileCard.tsx:74-75`,
+  literal code — with `undefined`, the card does NOT open), and
+  `CodeLine.tsx:28,38-41` has a `scrollIntoView` effect keyed off
+  `highlight`/a per-line `ref`, but neither `DiffViewer.tsx:14-32` nor
+  `SmartDiffViewer.tsx:28,73-79` passes `scrollToLine` today, AND
+  `FileCard` itself has NO ref/scroll of its own — the ONLY existing
+  `scrollIntoView` call in this subtree lives inside `CodeLine`, scoped to
+  one rendered line. AC-20 requires scrolling to the FILE regardless of
+  whether a specific `line` is known (a `review_focus` item can be
+  path-only, `line: null`) — the current mechanism has no path to do that.
+  T10 (Step 10) therefore does MORE than "supply a previously-unsupplied
+  prop": it adds a NEW `focus?: {line: number | null; n: number}` prop to
+  `FileCard`, a `ref` on `FileCard`'s own root element, and a
+  `scrollIntoView` effect AT THE FILE-CARD LEVEL keyed on `focus.n` (not
+  on `focus.line`, and not reusing `highlight`'s existing per-line effect
+  for this purpose — see Step 10 for why the nonce matters). `CodeLine`
+  keeps its existing per-line `highlight` prop for the specific-line case,
+  now driven by `focus.line` when present. This IS new work inside
+  `FileCard.tsx`/`CodeLine.tsx`, not just new callers — correcting this
+  plan's earlier, inaccurate "no changes needed inside FileCard.tsx/
+  CodeLine.tsx" claim.
 - **`BlastService.build` needs `repoId`, not just `prId`**
   (`blast/service.ts:20`, confirmed) — T4's blast-summary input collection
   must fetch/know `pull.repoId` (already available from the `PullRow` the
@@ -264,16 +281,60 @@ Step 1:
   (blast is never truncated for the prompt either, per the spec's Inputs
   section). AC-6's known universe is the FULL `pr_files.path` set alone
   (endpoints excluded, per the spec's own explicit AC-6 text).
-- **INJECTION_GUARD wiring pattern (resolved here, not literal in the
-  spec)**: `renderPrompt('risk-brief.system.md', {...})` renders only the
-  template's own instruction text; the module-level system message actually
-  sent to the LLM is `renderedTemplate + '\n\n' + INJECTION_GUARD` — mirrors
-  how `reviewer-core/src/prompt.ts`'s own `assemblePrompt` appends
-  `INJECTION_GUARD` to the end of the agent's system prompt (not
-  interpolated as a `{{var}}` inside the template body). `risk-brief.system.md`
-  itself must NOT contain its own inline security paragraph (unlike
+- **Untrusted-content wrapping is NOT limited to title/description/issue/
+  specs — intent and the blast summary must be wrapped too (cross-model
+  review finding M1, resolved).** The first draft of this plan classified
+  the intent record and blast summary as "server-computed structured data
+  ... NOT wrapped", mirroring `onboarding/service.ts`'s `buildFactsBlock`.
+  That's wrong for THIS input set: `reviewer-core/src/prompt.ts:85-93`
+  documents, in so many words, that synthesized PR intent is untrusted
+  because it is "derived BY an LLM from untrusted PR text ... so it never
+  becomes trusted just because a model produced it", and `assemblePrompt`
+  wraps it accordingly (`prompt.ts:166-169`, `wrapUntrusted('intent', ...)`).
+  The SAME file also wraps repo-derived structural content — `repo-map`
+  (`prompt.ts:174`) and `callers` (`prompt.ts:178-179`) — via
+  `wrapUntrusted`, i.e. "derived from our own repo, not typed by the PR
+  author" is not, on its own, grounds for leaving something unwrapped in
+  this codebase's established convention. T4 (Step 4 below) therefore
+  wraps: the intent record (reusing `formatIntentForPrompt` from
+  `@devdigest/reviewer-core`, then `wrapUntrusted('intent', ...)`) and the
+  blast summary string (`wrapUntrusted('blast', ...)`). Left genuinely
+  UNWRAPPED: the purely numeric/path diff-stats section
+  (`additions`/`deletions`/`filesCount` + the capped file
+  path/additions/deletions list) — numbers and bare paths carry no prose
+  an injected instruction could hide inside, the same reasoning
+  `onboarding`'s own `buildFactsBlock` facts block (names/paths/numbers
+  only) already relies on for ITS unwrapped section.
+- **INJECTION_GUARD wiring pattern + AC-2's "including the system prompt"
+  (both resolved here, cross-model review findings B5 + M2).** Single
+  owner, single measurement point — no other file in this plan appends the
+  guard or recomputes this budget: `risk-brief.ts`'s `callBrief` (Step 4)
+  is the ONE place that appends `INJECTION_GUARD` — it receives an
+  already-rendered `systemPrompt` (the `risk-brief.system.md` template
+  text, no guard yet) as a plain string parameter and does
+  `` `${systemPrompt}\n\n${INJECTION_GUARD}` `` internally, immediately
+  before the `completeStructured` call — mirrors how
+  `reviewer-core/src/prompt.ts:142`'s own `assemblePrompt` appends the
+  guard to the end of the system message, never interpolated as a
+  `{{var}}` inside the template body. `risk-brief.system.md` itself must
+  NOT contain its own inline security paragraph (unlike
   `onboarding.system.md`'s pre-existing one, flagged above as a gap this
-  feature does not repeat).
+  feature does not repeat). AC-2's literal text says the 8000-token budget
+  covers the input "включно з системним промптом" — since
+  `risk-brief.system.md` takes no per-PR interpolation (a fixed template,
+  Step 4.4), its rendered length plus `INJECTION_GUARD`'s fixed length is
+  effectively constant across every call; `assembleBriefInput` (Step 4)
+  receives that already-rendered template string as a parameter and
+  includes `template.length + 2 + INJECTION_GUARD.length` in its own
+  `Math.ceil(.../4)` budget check alongside `userMessage.length` — not
+  `userMessage.length` alone. Both `wrapUntrusted` and `INJECTION_GUARD`
+  are imported directly from `@devdigest/reviewer-core` in `risk-brief.ts`
+  (cross-model review finding m5) — NOT via the `platform/prompt.js` shim,
+  which re-exports `assemblePrompt`/`wrapUntrusted` but NOT
+  `INJECTION_GUARD` (confirmed, `platform/prompt.ts:6-11`); same
+  direct-import precedent `intent-service.ts` already uses for
+  `PromptSectionMeta` (`intent-service.ts:3`), so this isn't a new import
+  style for this codebase.
 
 ## Skills the implementer will use
 
@@ -417,20 +478,26 @@ repeated here.
 1. `server/src/modules/brief/constants.ts`:
    ```ts
    /** Hard overall input budget (AC-2) — ceil(chars/4), same fallback
-    *  heuristic every non-repo-intel prompt path in this codebase uses. */
+    *  heuristic every non-repo-intel prompt path in this codebase uses.
+    *  Covers userMessage.length PLUS the rendered system prompt
+    *  (risk-brief.system.md + INJECTION_GUARD) — AC-2's own text says
+    *  "включно з системним промптом" (see Constraints). */
    export const MAX_BRIEF_INPUT_TOKENS = 8000;
 
    /** Per-section char caps — sized so the SUM of every section at its own
-    *  cap stays comfortably under MAX_BRIEF_INPUT_TOKENS*4 chars even when
-    *  every section is simultaneously maxed (~18,000 of the ~32,000-char
-    *  budget at worst case), leaving headroom for diff-stats/blast/intent
-    *  (all small, structured, not separately capped) and the system prompt
-    *  itself — no section needs a defensive suffix-truncation pass in the
-    *  common case; MAX_BRIEF_INPUT_TOKENS is the safety net, not the
-    *  primary control. */
+    *  cap, PLUS the ~fixed system-prompt+guard overhead, stays comfortably
+    *  under MAX_BRIEF_INPUT_TOKENS*4 chars even when every section is
+    *  simultaneously maxed — no section needs a defensive suffix-
+    *  truncation pass in the common case; MAX_BRIEF_INPUT_TOKENS is the
+    *  safety net, not the primary control. */
    export const MAX_BRIEF_DESCRIPTION_CHARS = 4000; // mirrors intent-service's own PR-body handling order of magnitude
    export const MAX_BRIEF_ISSUE_BODY_CHARS = 3000;  // mirrors intent-service's MAX_PLAN_SPEC_CHARS
    export const MAX_BRIEF_SPECS_CHARS = 8000;        // shared pool across ALL attached specs combined, mirrors onboarding's MAX_CONTEXT_DOC_CHARS order of magnitude
+
+   /** Intent is LLM-derived prose (`intent`/`in_scope[]`/`out_of_scope[]`),
+    *  not bounded anywhere upstream — cap it explicitly here rather than
+    *  assume it's "small" (cross-model review finding m8). */
+   export const MAX_BRIEF_INTENT_CHARS = 2000;
 
    /** Very large PRs (edge case): list at most this many changed files by
     *  path/additions/deletions in the diff-stats input; PRs with more files
@@ -447,10 +514,16 @@ repeated here.
    import type { Risk, ReviewFocusItem } from '@devdigest/shared';
 
    /** AC-5: an ungrounded file_ref is filtered out of that risk's array; if
-    *  the array empties out, the WHOLE risk is dropped. */
+    *  the array empties out, the WHOLE risk is dropped. `f.trim()` before
+    *  matching — endpoint entries are `"METHOD /path"` strings the model
+    *  must reproduce byte-for-byte (cross-model review finding m9); a
+    *  trailing/leading space shouldn't cost an otherwise-correct citation
+    *  its grounding. `knownUniverse` itself is built pre-trimmed by the
+    *  caller (Step 5), so this is a defensive normalization on the model's
+    *  side only. */
    export function groundRisks(risks: Risk[], knownUniverse: Set<string>): Risk[] {
      return risks
-       .map((r) => ({ ...r, file_refs: r.file_refs.filter((f) => knownUniverse.has(f)) }))
+       .map((r) => ({ ...r, file_refs: r.file_refs.filter((f) => knownUniverse.has(f.trim())) }))
        .filter((r) => r.file_refs.length > 0);
    }
 
@@ -458,37 +531,71 @@ repeated here.
     *  unlike onboarding's links/tasks, a pathless review_focus row has no
     *  useful click target at all). */
    export function groundReviewFocus(items: ReviewFocusItem[], changedPaths: Set<string>): ReviewFocusItem[] {
-     return items.filter((i) => changedPaths.has(i.path));
+     return items.filter((i) => changedPaths.has(i.path.trim()));
    }
    ```
 3. `server/src/modules/brief/risk-brief.ts` — input assembly + the one LLM
-   call. Exports:
+   call. Both `wrapUntrusted` and `INJECTION_GUARD` are imported directly
+   from `@devdigest/reviewer-core` (Constraints — the `platform/prompt.js`
+   shim doesn't re-export `INJECTION_GUARD`). Exports:
    ```ts
    export interface BriefInputs {
      userMessage: string;
      knownFileRefsUniverse: Set<string>; // AC-5: pr_files.path ∪ endpoints_affected
      changedPaths: Set<string>;          // AC-6: pr_files.path only
    }
+   /** `systemPromptTemplate` is the ALREADY-RENDERED risk-brief.system.md
+    *  text (no guard yet) — passed in so the AC-2 budget check below can
+    *  account for the fixed system-prompt+guard overhead without this
+    *  function owning prompt-template rendering itself (Constraints —
+    *  callBrief owns rendering-for-sending, this function only measures). */
    export async function assembleBriefInput(
      container: Container,
      pull: PullRow,
      repoRow: { id: string; owner: string; name: string },
+     systemPromptTemplate: string,
    ): Promise<BriefInputs> { ... }
 
+   /** `systemPrompt` is the rendered template WITHOUT the guard — this
+    *  function appends `INJECTION_GUARD` itself (the ONE place that does,
+    *  Constraints) immediately before sending. Throws on failure — caller
+    *  (service.ts) catches for AC-13. */
    export async function callBrief(
      container: Container,
      args: { provider: Provider; model: string; systemPrompt: string; userMessage: string },
-   ): Promise<StructuredResult<Brief>> { ... } // throws on failure — caller (service.ts) catches
+   ): Promise<StructuredResult<Brief>> {
+     const llm = await container.llm(args.provider);
+     return llm.completeStructured<Brief>({
+       model: args.model,
+       schema: Brief,
+       schemaName: 'Brief',
+       messages: [
+         { role: 'system', content: `${args.systemPrompt}\n\n${INJECTION_GUARD}` },
+         { role: 'user', content: args.userMessage },
+       ],
+     });
+   }
    ```
    `assembleBriefInput` collects, in order, AC-1's five categories:
    - **(a) Intent** — `await container.reviewRepo.getIntent(pull.id)`
      (`PersistedIntent | undefined`); omit the section entirely when
-     absent (Edge cases: Intent is not a hard precondition).
+     absent (Edge cases: Intent is not a hard precondition). When present,
+     render it via `formatIntentForPrompt` (imported from
+     `@devdigest/reviewer-core`, the SAME formatter `assemblePrompt` uses
+     for the review prompt's own `## Intent` section — don't hand-roll a
+     second formatting function), truncate to `MAX_BRIEF_INTENT_CHARS`,
+     then wrap: `wrapUntrusted('intent', formatted)` (cross-model review
+     finding M1 — intent is LLM-derived from untrusted PR text, so it
+     stays untrusted here exactly as `reviewer-core/src/prompt.ts:85-93,166-169`
+     already treats it; see Constraints).
    - **(b) Blast summary** — `new BlastService(container, new SmartDiffRepository(container.db)).build(pull.id, pull.repoId)`
-     → take `.summary` (already a plain deterministic string, never
-     wrapped) + dedup `.downstream[].endpoints_affected` into a flat list
-     (both for the prompt AND, unioned with `changedPaths`, for
-     `knownFileRefsUniverse`).
+     → take `.summary` (a deterministic string, but WRAPPED via
+     `wrapUntrusted('blast', summary)` per M1 — repo-derived structural
+     content is wrapped elsewhere in this codebase too, e.g.
+     `prompt.ts:174,178-179`'s `repo-map`/`callers`) + dedup
+     `.downstream[].endpoints_affected` into a flat list (used for
+     `knownFileRefsUniverse`, NOT wrapped itself — see (c) below for why
+     endpoints/paths stay unwrapped).
    - **(c) Diff stats** — `pull.additions`/`pull.deletions`/`pull.filesCount`
      (aggregate, always included, never capped) + a FULL, unbounded
      `await new SmartDiffRepository(container.db).getPrFiles(pull.id)` call
@@ -497,86 +604,109 @@ repeated here.
      list is capped to `MAX_DIFF_STAT_FILES` files (sorted by
      `additions+deletions` descending), with a trailing "+N more files
      (aggregate only)" line when truncated. Map each listed file to
-     `{path, additions, deletions}` ONLY — never `.patch`.
+     `{path, additions, deletions}` ONLY — never `.patch`. This section
+     (numbers + bare paths, no prose) is the ONE deterministic section
+     left genuinely unwrapped — see the Constraints M1 entry for why that
+     distinction (numbers/paths vs. prose) is the actual line, not
+     "server-computed vs. not".
    - **(d) Linked issue** — same best-effort pattern as
      `intent-service.ts:164-171`: `try { const gh = await
      container.github(); const detail = await gh.getPullRequest({owner:
      repoRow.owner, name: repoRow.name}, pull.number); ... } catch { /* log
-     debug, continue without it */ }`.
+     debug, continue without it */ }`. Title/body wrapped individually via
+     `wrapUntrusted('linked-issue', ...)`, truncated to
+     `MAX_BRIEF_ISSUE_BODY_CHARS`.
    - **(e) Relevant specs** — resolve `agentId` from the PR's latest
      `kind==='review'` row (`container.reviewRepo.reviewsForPull(pull.id)`,
      same `.find(({review}) => review.kind === 'review')` idiom
-     `computeReviewRollup` already uses in `service.ts:50`); if no review
-     yet, skip this section entirely (Edge cases). Otherwise
-     `await container.projectContext.resolveAgentContext(agentId)`, then
-     `await container.repoIntel.readFiles(doc.repoId, [doc.path])` per
-     doc, truncated to fit the shared `MAX_BRIEF_SPECS_CHARS` pool (stop
-     adding docs once the pool is exhausted — don't error, just include
-     fewer).
-   - **Wrapping (NFR HIGH)**: title, description, linked-issue title+body,
-     and EVERY resolved spec's content are each passed through
-     `wrapUntrusted('<kind>', text)` (`platform/prompt.js` re-export of
-     `@devdigest/reviewer-core`'s `wrapUntrusted`) individually, before
-     joining into the user message — no exception for title/description
-     (the exact gap `intent-service.ts` has and this module must not
-     repeat). The deterministic `facts`-style sections (intent record,
-     blast summary, diff stats, endpoint lists) are server-computed
-     structured data (names/paths/numbers only) and are NOT wrapped — same
-     convention `onboarding/service.ts`'s `buildFactsBlock` already
-     establishes for its own facts block.
-   - **Defensive total-budget check (AC-2)**: after assembling all
-     sections, compute `Math.ceil(userMessage.length / 4)`; if it exceeds
-     `MAX_BRIEF_INPUT_TOKENS`, drop the "relevant specs" section entirely
-     first (least essential, most likely to be the culprit given its own
-     8000-char sub-pool) and recompute; log a `logger?.warn(...)` if still
-     over budget after that drop (should not happen given the per-section
-     caps, but never silently ship an over-budget prompt).
-   `callBrief` resolves `renderPrompt('risk-brief.system.md', {})` (see
-   Step 4a below), appends `\n\n${INJECTION_GUARD}` (imported from
-   `@devdigest/reviewer-core`, per the Constraints entry), and calls
-   `container.llm(provider).completeStructured({model, schema: Brief,
-   schemaName: 'Brief', messages: [{role:'system', content: systemPrompt},
-   {role:'user', content: userMessage}]})` — exactly once (AC-3), letting
-   any thrown error (network, invalid-JSON-after-repair) propagate to the
-   caller.
-4. `server/src/prompts/risk-brief.system.md` (new) — instructs the model
-   to: synthesize `what`/`why` from the provided facts (2-3 sentences
-   each, no markdown); set `risk_level` from the overall severity mix it
-   infers; populate `risks[]` using ONLY the same `kind`/`severity`
-   vocabulary the existing `Risk` schema already uses elsewhere in this
-   codebase (`kind`, `title`, `explanation`, `severity`, `file_refs` —
+     `computeReviewRollup` already uses in `service.ts:50`). **Skip this
+     section entirely when EITHER no review exists yet OR the found
+     review's `agentId` is `null`** (cross-model review finding M6 —
+     `reviews.agentId` is a nullable column, `db/schema/reviews.ts:17`,
+     `agentId: uuid('agent_id')` with no `.notNull()`; a summary-only or
+     legacy review row can have a `null` agent, and
+     `resolveAgentContext(null)` is not a call this plan defines behavior
+     for). Otherwise `await container.projectContext.resolveAgentContext(agentId)`,
+     then `await container.repoIntel.readFiles(doc.repoId, [doc.path])`
+     per doc, each wrapped via `wrapUntrusted('spec-${i}', ...)`
+     (unchanged from the spec's own Untrusted Inputs section), truncated
+     to fit the shared `MAX_BRIEF_SPECS_CHARS` pool (stop adding docs once
+     the pool is exhausted — don't error, just include fewer).
+   - **Wrapping summary (NFR HIGH)**: title, description, linked-issue
+     title+body, intent, blast summary, and EVERY resolved spec's content
+     are each passed through `wrapUntrusted('<kind>', text)` individually,
+     before joining into the user message — no exception for title/
+     description (the exact gap `intent-service.ts` has and this module
+     must not repeat) and no exception for intent/blast either (M1). Only
+     the diff-stats section (numbers + bare paths) stays unwrapped.
+   - **Defensive total-budget check (AC-2, cross-model review finding M2)**:
+     after assembling `userMessage`, compute
+     `Math.ceil((systemPromptTemplate.length + 2 + INJECTION_GUARD.length + userMessage.length) / 4)`
+     — INCLUDING the system prompt + guard, per AC-2's own "включно з
+     системним промптом" text, not `userMessage.length` alone. If it
+     exceeds `MAX_BRIEF_INPUT_TOKENS`, drop the "relevant specs" section
+     entirely first (least essential, most likely to be the culprit given
+     its own 8000-char sub-pool) and recompute; log a `logger?.warn(...)`
+     if still over budget after that drop (should not happen given the
+     per-section caps, but never silently ship an over-budget prompt).
+4. `server/src/prompts/risk-brief.system.md` (new, fixed template — no
+   `{{var}}` interpolation needed, so `renderPrompt('risk-brief.system.md', {})`
+   is called with an empty vars object) — instructs the model to:
+   synthesize `what`/`why` from the provided facts (2-3 sentences each, no
+   markdown); set `risk_level` from the overall severity mix it infers;
+   populate `risks[]` — `kind` is a short FREE-FORM string, not a closed
+   enum (`Risk.kind` is `z.string()` in the shared contract, no dictionary
+   exists anywhere in this codebase — cross-model review finding m6; give
+   2-3 illustrative examples in the template text, e.g. "security",
+   "data-loss", "breaking-change", but do not claim they're the only
+   allowed values), `title`/`explanation`/`severity` as usual, `file_refs`
    ONLY paths/endpoints literally present in the provided FACTS, never
-   invented); populate `review_focus[]` with 3-6 items, `path` ONLY from
+   invented — **when citing an endpoint (not a changed file), quote it
+   EXACTLY as given in the ENDPOINTS list, including the HTTP method and
+   path verbatim** (e.g. `GET /pulls/:id`, cross-model review finding m9 —
+   the grounding gate does an exact-string match after trimming, not a
+   fuzzy one). Populate `review_focus[]` with 3-6 items, `path` ONLY from
    the provided changed-files list, `line` only when a specific line is
    genuinely implicated (else `null`), `note` a one-sentence reason to
    look there first. Grounding rules section mirrors
    `onboarding.system.md`'s (never invent paths/endpoints) MINUS its own
-   inline security paragraph — the shared `INJECTION_GUARD` covers that
-   here (Constraints).
+   inline security paragraph — the shared `INJECTION_GUARD`, appended by
+   `callBrief` (not by this template), covers that here (Constraints).
 5. Tests (`server/src/modules/brief/risk-brief.test.ts`,
    `server/src/modules/brief/grounding.test.ts`, both hermetic — stub
    `Container` fields directly, same `conventions-file-guard.test.ts`-style
    minimal-stub pattern SPEC-03's plan used for `onboarding`):
    `grounding.test.ts` — `groundRisks` drops a single bad `file_ref` but
    keeps the risk when others remain grounded; drops the WHOLE risk when
-   every `file_ref` is ungrounded; `groundReviewFocus` drops a whole item
-   on an ungrounded `path`, keeps a grounded one untouched.
-   `risk-brief.test.ts` — title/description/issue-body/spec-content each
-   individually wrapped via `wrapUntrusted` (assert the delimiter literally
-   appears around each fragment, none unwrapped); Intent/linked-issue/
-   relevant-specs sections are each omitted (not "(empty)"-padded) when
-   their source is absent, per Edge cases; `pr_files.patch` never appears
-   anywhere in the assembled `userMessage` even when a fixture file has a
-   non-null `patch`; diff-stats file list truncates at `MAX_DIFF_STAT_FILES`
-   with the aggregate stat line always present regardless; `knownFileRefsUniverse`/
+   every `file_ref` is ungrounded; a `file_ref` with stray leading/trailing
+   whitespace still grounds against a trimmed `knownUniverse` entry (m9);
+   `groundReviewFocus` drops a whole item on an ungrounded `path`, keeps a
+   grounded one untouched.
+   `risk-brief.test.ts` — title/description/issue-body/intent/blast-
+   summary/spec-content are EACH individually wrapped via `wrapUntrusted`
+   (assert the delimiter literally appears around each fragment — this now
+   explicitly includes intent and blast, per M1, not just the four
+   originally-listed fragments); Intent is entirely omitted (not
+   wrapped-but-empty) when `getIntent` returns `undefined`, AND when a
+   review exists but its `agentId` is `null` the "relevant specs" section
+   is entirely omitted while intent/blast/diff-stats/linked-issue are
+   still assembled normally (M6); `pr_files.patch` never appears anywhere
+   in the assembled `userMessage` even when a fixture file has a non-null
+   `patch`; diff-stats file list truncates at `MAX_DIFF_STAT_FILES` with
+   the aggregate stat line always present regardless; `knownFileRefsUniverse`/
    `changedPaths` are built from the FULL `getPrFiles` result, not the
    `MAX_DIFF_STAT_FILES`-truncated prompt list (a file ranked outside the
-   cap but present in the DB still grounds a citation); the injection
-   guard is appended once, verbatim, to the system prompt actually sent;
-   `resolveFeatureModel(..., 'risk_brief')` is called (mock `container.llm`,
-   assert the resolved model id flows through); `callBrief` throwing
-   propagates uncaught (verifying `service.ts`, not this file, owns the
-   AC-13 degrade).
+   cap but present in the DB still grounds a citation); `callBrief`
+   appends `INJECTION_GUARD` to `systemPrompt` exactly once, verbatim,
+   never inside `risk-brief.system.md`'s own rendered text; the
+   `assembleBriefInput` budget check includes the passed-in
+   `systemPromptTemplate` length (a fixture with sections individually
+   under their own caps but a large enough combined system-prompt-plus-
+   guard overhead still triggers the specs-drop path — asserts M2's fix,
+   not just that a check exists); `resolveFeatureModel(..., 'risk_brief')`
+   is called (mock `container.llm`, assert the resolved model id flows
+   through, AC-3); `callBrief` throwing propagates uncaught (verifying
+   `service.ts`, not this file, owns the AC-13 degrade).
 
 ### Step 5 — T5: `BriefRepository` + extend `BriefService` → AC-8–AC-14
 
@@ -585,7 +715,24 @@ repeated here.
    export class BriefRepository {
      constructor(private db: Db) {}
      async getByPrId(prId: string): Promise<PrBriefRow | undefined> { ... } // SELECT
-     async upsert(prId: string, row: { json: Brief; providerUsed: string; modelUsed: string; headSha: string }): Promise<void> { ... } // INSERT ... ON CONFLICT (pr_id) DO UPDATE
+     /** `createdAt` is an explicit PARAMETER, not left to the column's
+      *  `.defaultNow()` — that default only fires on INSERT; on an
+      *  ON CONFLICT DO UPDATE it would silently leave the FIRST
+      *  generation's timestamp in place forever (cross-model review
+      *  finding B4). Same explicit-both-branches shape as
+      *  `onboarding/repository.ts:48-55`'s `generatedAt` parameter. */
+     async upsert(
+       prId: string,
+       row: { json: Brief; providerUsed: string; modelUsed: string; headSha: string; createdAt: Date },
+     ): Promise<void> {
+       await this.db
+         .insert(t.prBrief)
+         .values({ prId, ...row })
+         .onConflictDoUpdate({
+           target: t.prBrief.prId,
+           set: { json: row.json, providerUsed: row.providerUsed, modelUsed: row.modelUsed, headSha: row.headSha, createdAt: row.createdAt },
+         });
+     }
    }
    ```
 2. `server/src/modules/brief/service.ts`:
@@ -617,36 +764,57 @@ repeated here.
    - New `async generate(pull: PullRow, repoRow: {id,owner,name},
      workspaceId: string, logger?: Logger): Promise<PrBriefSnapshot>` (AC-9):
      1. Resolve `{provider, model}` via `resolveFeatureModel(container,
-        workspaceId, 'risk_brief')` (AC-4). (Workspace/PR ownership is
-        already enforced by `routes.ts`'s inline select BEFORE this method
-        is ever called — see Step 6; unlike onboarding, brief's existing
-        GET already puts that check in `routes.ts`, not `service.ts`, so
-        `generate` follows the SAME existing convention rather than
-        introducing a second, service-level check.)
-     2. `const inputs = await assembleBriefInput(this.container, pull,
-        repoRow);` (AC-1, AC-2).
-     3. `try { result = await callBrief(this.container, {provider, model,
-        systemPrompt: await renderPrompt(...), userMessage:
+        workspaceId, 'risk_brief')` (AC-3 — model resolution; AC-4 is the
+        SEPARATE response-schema-validation criterion, satisfied by
+        `completeStructured`'s own `toJsonSchema`/`parseWithRepair` path,
+        not by this step — cross-model review finding m4 mislabel fix).
+        (Workspace/PR ownership is already enforced by `routes.ts`'s
+        inline select BEFORE this method is ever called — see Step 6;
+        unlike onboarding, brief's existing GET already puts that check in
+        `routes.ts`, not `service.ts`, so `generate` follows the SAME
+        existing convention rather than introducing a second,
+        service-level check.)
+     2. `const systemPromptTemplate = await renderPrompt('risk-brief.system.md', {});`
+        — rendered ONCE here (Step 4's `loadPromptTemplate` caches the
+        file read, so this is cheap even though it's also effectively
+        passed forward); this is the ONE rendering call for the whole
+        `generate()` invocation, threaded into both places that need it
+        below (cross-model review finding B5 — no other renderPrompt call
+        exists in this method, no duplicate/inconsistent rendering).
+     3. `const inputs = await assembleBriefInput(this.container, pull,
+        repoRow, systemPromptTemplate);` (AC-1, AC-2 — the budget check
+        inside accounts for `systemPromptTemplate`'s length, per M2).
+     4. `try { result = await callBrief(this.container, {provider, model,
+        systemPrompt: systemPromptTemplate, userMessage:
         inputs.userMessage}); } catch (err) { logger?.warn(...); return {
         review_rollup: await this.getRollup(pull.id, workspaceId), brief:
         null, brief_generated_at: null, brief_degraded: true }; }` (AC-13 —
-        transient, never persisted).
-     4. `const groundedRisks = groundRisks(result.data.risks,
+        transient, never persisted; `callBrief` itself appends
+        `INJECTION_GUARD` to `systemPromptTemplate` before sending, per
+        Constraints — this call site never does that itself).
+     5. `const groundedRisks = groundRisks(result.data.risks,
         inputs.knownFileRefsUniverse);` `const groundedFocus =
         groundReviewFocus(result.data.review_focus, inputs.changedPaths);`
         (AC-5, AC-6, AC-7 — grounding strictly after the call, strictly
         before persistence).
-     5. `const brief: Brief = {...result.data, risks: groundedRisks,
+     6. `const brief: Brief = {...result.data, risks: groundedRisks,
         review_focus: groundedFocus};`
-     6. `const costUsd = result.costUsd;` log the AC-14 structured line:
+     7. `const costUsd = result.costUsd;` log the AC-14 structured line:
         `{prId: pull.id, call: 'brief.generate', model, tokensIn:
         result.tokensIn, tokensOut: result.tokensOut, costUsd}` — NEVER
         `brief.what`/`why`/`risks`/`review_focus` in the log object.
-     7. `await this.briefRepo.upsert(pull.id, {json: brief, providerUsed:
-        provider, modelUsed: model, headSha: pull.headSha});` (AC-10 —
-        only reached on this non-degraded, LLM-succeeded path).
-     8. Return `{review_rollup: await this.getRollup(pull.id, workspaceId),
-        brief, brief_generated_at: new Date().toISOString()}`.
+     8. `const generatedAt = new Date();` — ONE timestamp, reused in both
+        the next step and the return value (cross-model review finding B4
+        follow-through: the first draft computed `new Date()` twice,
+        independently, in steps 7 and 8 — the persisted `createdAt` and
+        the returned `brief_generated_at` could disagree by however long
+        the upsert took). `await this.briefRepo.upsert(pull.id, {json:
+        brief, providerUsed: provider, modelUsed: model, headSha:
+        pull.headSha, createdAt: generatedAt});` (AC-10 — only reached on
+        this non-degraded, LLM-succeeded path).
+     9. Return `{review_rollup: await this.getRollup(pull.id, workspaceId),
+        brief, brief_generated_at: generatedAt.toISOString()}` — the SAME
+        `generatedAt` just persisted, not a fresh `new Date()`.
 3. Tests: `server/test/brief.it.test.ts` (shared with T2/T6) — `GET`
    before any generation → `brief: null`; after a `POST`, `GET` returns
    the persisted `brief` (cache hit, AC-11 — assert the mock LLM was
@@ -701,41 +869,97 @@ repeated here.
      const qc = useQueryClient();
      return useMutation({
        mutationFn: () => api.post<PrBriefSnapshot>(`/pulls/${prId}/brief`),
-       onSuccess: (data) => qc.setQueryData(["brief", prId], data), // same precedent as useRefreshIntent
+       // A degraded Regenerate must NEVER erase a previously-good cached
+       // brief (cross-model review finding M3): full replacement via
+       // `setQueryData(key, data)` would overwrite `brief` with `null`
+       // whenever a retry fails, making a working card go blank. Merge
+       // instead — keep the OLD brief/brief_generated_at when the new
+       // response is degraded AND carries no brief of its own; always take
+       // the new `review_rollup`/`brief_degraded` as-is (both are cheap,
+       // always-fresh reads independent of the LLM call's outcome).
+       onSuccess: (data) => {
+         qc.setQueryData<PrBriefSnapshot | undefined>(["brief", prId], (old) =>
+           data.brief_degraded && data.brief === null && old?.brief
+             ? { ...data, brief: old.brief, brief_generated_at: old.brief_generated_at }
+             : data,
+         );
+       },
      });
    }
    ```
 2. Test: `client/src/lib/hooks/brief.test.ts` (new) — mocked `fetch`,
-   asserts the mutation posts to the right URL and that a successful
-   response is written into the `["brief", prId]` query cache (readable
-   back via a subsequent `useBrief` render in the same `QueryClient`).
+   asserts the mutation posts to the right URL and that a successful,
+   non-degraded response is written into the `["brief", prId]` query cache
+   verbatim (readable back via a subsequent `useBrief` render in the same
+   `QueryClient`); AND a NEW case for M3 — seed the cache with a valid
+   `brief`, then resolve the mutation with `{brief: null, brief_degraded:
+   true, ...}` — assert the cache still has the OLD `brief` value
+   afterwards, with `brief_degraded: true` merged in (not a full
+   overwrite); a degraded response when the cache had NO prior brief still
+   writes `brief: null, brief_degraded: true` as-is (nothing to preserve).
 
 ### Step 8 — T8: extend `PrBriefCard` → AC-16, AC-17, AC-21
 
-1. `PrBriefCard.tsx`: keep the existing `VerdictBanner` render of
-   `review_rollup` completely unchanged (it's independent of `brief`'s
-   state, per AC-16's own text — the deterministic rollup renders
-   whenever there's at least one review, regardless of `brief`). Add,
-   below it, a Why+Risk section with three states:
-   - **Empty** (`brief === null && !degraded`, AC-16): "No brief yet"
-     caption + a "Generate brief" button wired to `useGenerateBrief(prId)`.
-   - **Populated** (`brief` present, AC-17): a `risk_level` badge
-     (`high → var(--crit)`, `medium → var(--warn)`, `low → var(--info)` —
-     same CSS-variable convention `IntentAndRiskCard`'s severity coloring
-     will also use, Step 9) + `what`/`why` as two short paragraphs +
-     "Regenerate" button (same mutation).
-   - **Degraded** (`brief_degraded === true` on the freshest mutation
-     result — this state, like onboarding's, is necessarily NOT visible
-     after a page refresh, since a degraded result is never persisted;
-     that's an accepted, documented v1 trade-off per AC-13, not a bug to
-     route around client-side): visible "couldn't generate a brief right
-     now" message + the same "Generate brief" button to retry (AC-21) —
-     never a silently-vanishing toast.
-2. Test: extend `PrBriefCard.test.tsx` — empty state renders the CTA;
-   clicking "Generate brief" calls the mutation; populated state renders
-   the risk-level badge color + `what`/`why` text; degraded state (mock
-   `useGenerateBrief` resolving with `brief_degraded: true`) renders the
-   retry message, not a blank card.
+1. `PrBriefCard.tsx`: **remove the existing early `if (!rollup) return
+   null;` (`PrBriefCard.tsx:31`) — cross-model review finding B1, a real
+   bug in the current code this feature must fix, not just leave alone.**
+   As written today, a PR with zero reviews renders NOTHING at all, which
+   makes the Why+Risk section (and its "No brief yet"/"Generate brief" CTA,
+   AC-16) permanently unreachable for exactly the PRs the spec's own Edge
+   cases section says must still support brief generation ("рев'ю не є
+   передумовою генерації брифу") — and makes T12's own demo script
+   ("open a PR with no brief, click Generate brief") impossible to
+   perform on a PR that also happens to have no review yet. Restructure
+   the component so `VerdictBanner` renders CONDITIONALLY inside the
+   section body (`{rollup && <VerdictBanner ... />}`), while the Why+Risk
+   section below renders UNCONDITIONALLY, independent of `rollup`'s
+   presence. Add, below the (now-conditional) `VerdictBanner`, a Why+Risk
+   section with four states:
+   - **Empty** (`brief === null && !brief_degraded`, AC-16): "No brief
+     yet" caption + a "Generate brief" button wired to
+     `useGenerateBrief(prId)`.
+   - **Populated** (`brief` present, `!brief_degraded`, AC-17): a
+     `risk_level` badge (`high → var(--crit)`, `medium → var(--warn)`,
+     `low → var(--info)` — same CSS-variable convention
+     `IntentAndRiskCard`'s severity coloring will also use, Step 9) +
+     `what`/`why` as two short paragraphs + "Regenerate" button (same
+     mutation).
+   - **Degraded, brief present** (`brief_degraded === true` AND `brief`
+     present — reachable ONLY via Step 7's merge behavior for M3, i.e. a
+     Regenerate that failed while a previously-good brief was cached):
+     render the SAME populated content as above, PLUS a small inline
+     notice ("couldn't refresh — showing the last generated brief") near
+     the Regenerate button — never silently drop working content just
+     because the latest refresh attempt failed.
+   - **Degraded, no brief** (`brief_degraded === true` AND `brief ===
+     null` — the first-ever generation attempt failed, nothing to fall
+     back to): visible "couldn't generate a brief right now" message +
+     the same "Generate brief" button to retry (AC-21) — never a
+     silently-vanishing toast. Like onboarding's, this exact combination
+     is necessarily NOT visible after a page refresh (a degraded result
+     is never persisted, AC-13) — an accepted, documented v1 trade-off,
+     not a bug to route around client-side.
+2. **Update the existing test fixture** (cross-model review finding m1):
+   `PrBriefCard.test.tsx`'s current `brief()` mock helper
+   (`PrBriefCard.test.tsx:28-58`) returns only `{review_rollup}` —
+   `PrBriefSnapshot`'s new `brief`/`brief_generated_at` fields are
+   `.nullable()`, not `.optional()` (Step 1), so the inferred TS type
+   requires the keys present even when `null`; leaving the old fixture
+   as-is breaks `pnpm typecheck`, not just runtime tests. Update the
+   helper to return `{review_rollup, brief: null, brief_generated_at:
+   null}` by default, with per-test overrides for the populated/degraded
+   cases below.
+3. Test: extend `PrBriefCard.test.tsx` — a PR with `review_rollup: null`
+   (no reviews yet) still renders the Why+Risk empty-state CTA (regression
+   test for B1 — this is the exact case the old early-return broke);
+   empty state renders the CTA; clicking "Generate brief" calls the
+   mutation; populated state renders the risk-level badge color +
+   `what`/`why` text; degraded-with-no-prior-brief state renders the
+   retry message, not a blank card; degraded-with-a-prior-brief state
+   (seed `useBrief`'s cache with a populated snapshot, then trigger a
+   mutation resolving `{brief: null, brief_degraded: true}`) still shows
+   the PRIOR `what`/`why` text plus the inline "couldn't refresh" notice
+   (M3 regression test, verifies Step 7's merge actually reaches the UI).
 
 ### Step 9 — T9: `IntentCard` → `IntentAndRiskCard` + risk chips → AC-18
 
@@ -743,27 +967,53 @@ repeated here.
    `IntentCard.tsx` → `IntentAndRiskCard.tsx`, update its own internal
    component name and the `index.ts` barrel export); update the two
    import sites (`OverviewTab.tsx:8,28`).
-2. Add a `risks?: Risk[]` prop; when non-empty, render each as a
-   collapsible chip below the existing intent/scope block, reusing the
-   `chevronFor` style helper already established by `BlastRadiusCard/styles.ts`
-   and `SmartDiffViewer/styles.ts` for the identical expand/collapse
-   pattern: icon (by `kind`, fallback generic) + `title` + first grounded
-   `file_refs[0]` shown inline + a chevron that expands to reveal
-   `explanation`, colored by `severity` using the SAME three CSS variables
-   `PrBriefCard`'s risk-level badge uses (Step 8).
-3. `OverviewTab.tsx`: pass `risks={brief?.risks}` — calls its OWN
-   `useBrief(prId)` independently of `PrBriefCard`'s (React Query dedupes
-   on the shared `["brief", prId]` key, so this is a cache hit, not a
-   second network request — same independent-per-card-hook pattern
-   `BlastRadiusCard` already uses today; deliberately NOT lifting the
-   query into `OverviewTab` and prop-drilling it, to keep each card's data
-   dependency self-contained, matching this codebase's existing
-   convention rather than introducing a new one).
+2. **Change `intent`'s prop type from required `PrIntentRecord` to
+   `PrIntentRecord | null`** (cross-model review finding M4 — see item 3
+   below for why this is now reachable) — when `null`, the component
+   skips its existing intent/scope block entirely and renders ONLY the
+   risk chips (if any). Add a `risks?: Risk[]` prop; when non-empty,
+   render each as a collapsible chip below the (now-optional) intent/
+   scope block: icon (by `kind`, fallback generic) + `title` + first
+   grounded `file_refs[0]` shown inline + a chevron that expands to
+   reveal `explanation`, colored by `severity` using the SAME three CSS
+   variables `PrBriefCard`'s risk-level badge uses (Step 8). The
+   expand/collapse chevron is a small, self-contained UI pattern this
+   component owns independently — **copy** the same visual pattern
+   `BlastRadiusCard/styles.ts` and `SmartDiffViewer/styles.ts` each
+   already implement into `IntentAndRiskCard`'s OWN `styles.ts`, don't
+   import either of those folders' helpers directly (cross-model review
+   finding m3 — `chevronFor` is not a shared/exported utility today, each
+   of those two folders has its own independent copy; a cross-feature
+   import would violate `react-ui-architecture`'s folder-boundary rule,
+   not reuse an existing shared export).
+3. `OverviewTab.tsx`: **fix the existing conditional-mount bug this
+   feature would otherwise inherit** (cross-model review finding M4) —
+   today's `{data && <IntentCard intent={data} prId={prId} />}`
+   (`OverviewTab.tsx:28`) mounts the card ONLY when `useIntent` has data,
+   so a PR with no Intent classification yet (spec's own Edge cases:
+   "PR не має жодного пов'язаного `PrIntentRecord` … Intent не є жорсткою
+   передумовою" for Brief) would never show its `risks[]` either, even
+   when they exist. Fetch `const { data: brief } = useBrief(prId);`
+   independently in `OverviewTab` (React Query dedupes on the shared
+   `["brief", prId]` key against `PrBriefCard`'s own `useBrief(prId)` call
+   — a cache hit, not a second network request, same independent-per-card-
+   hook pattern `BlastRadiusCard` already uses today; deliberately NOT
+   lifting the query up further and prop-drilling it, to keep each card's
+   data dependency self-contained, matching this codebase's existing
+   convention). Change the mount condition to
+   `{(data || (brief?.brief?.risks?.length ?? 0) > 0) && <IntentAndRiskCard
+   intent={data ?? null} risks={brief?.brief?.risks} prId={prId} />}` —
+   the card now mounts when EITHER intent OR at least one risk exists,
+   matching item 2's now-nullable `intent` prop.
 4. Test: new `IntentAndRiskCard.test.tsx` (no prior `IntentCard.test.tsx`
-   existed to rename/extend) — renders intent text unchanged from before;
-   renders a risk chip closed by default, title + first file_ref visible;
-   clicking the chevron reveals `explanation`; empty `risks` renders the
-   card exactly as it did before this feature (no empty "Risks" heading).
+   existed to rename/extend) — renders intent text unchanged from before
+   when `intent` is non-null; `intent={null}` with a non-empty `risks`
+   renders ONLY the risk chips, no intent/scope block, no crash (M4
+   regression case — this is the exact combination the old mount
+   condition made unreachable); renders a risk chip closed by default,
+   title + first file_ref visible; clicking the chevron reveals
+   `explanation`; both `intent={null}` and empty `risks` together renders
+   nothing at all (matches `OverviewTab`'s own mount condition, item 3).
 
 ### Step 10 — T10: `ReviewFocusCard` + cross-tab file navigation → AC-19, AC-20
 
@@ -775,7 +1025,10 @@ repeated here.
    `review_focus` is empty or `brief` is `null` (same "nothing to show
    yet" convention `BlastRadiusCard`/`PrBriefCard` already follow).
 2. `page.tsx`: add a second focus-state, mirroring `focusFinding`'s exact
-   shape (Skills section above explains why the nonce matters):
+   shape including its incrementing nonce `n` (Skills section above
+   explains why: a second click on the SAME target must still re-trigger
+   the scroll effect, same reason `focusFinding`/`focusNonce` has one,
+   `page.tsx:168-169`):
    ```ts
    const [focusFile, setFocusFile] = React.useState<{ path: string; line: number | null; n: number } | null>(null);
    const openFile = (path: string, line?: number | null) => {
@@ -786,27 +1039,65 @@ repeated here.
    Pass `onOpenFile={openFile}` into `OverviewTab` (which forwards it to
    `ReviewFocusCard`), and pass `focusFile` into `DiffTab` (new prop,
    alongside the existing `onOpenFinding`).
-3. `DiffTab.tsx` → `SmartDiffViewer.tsx`/`DiffViewer.tsx` → `FileCard`:
-   thread a `focusFile: {path, line, n} | null` prop straight through to
+3. **New file-level focus mechanism (cross-model review findings B2+B3 —
+   see the corrected Constraints entry above for why the existing
+   `scrollToLine`/`highlight` plumbing alone is insufficient for this
+   AC).** `FileCard.tsx`: add a new prop
+   `focus?: { line: number | null; n: number } | null`, a `ref` on the
+   card's own root element (the `<div style={s.fileCard}>` wrapper), and:
+   ```ts
+   const cardRef = React.useRef<HTMLDivElement>(null);
+   React.useEffect(() => {
+     if (focus && cardRef.current) {
+       setOpen(true); // force-open regardless of whether `line` is known
+       cardRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+     }
+   }, [focus?.n]); // keyed on the NONCE, not on `focus`/`focus.line` — a
+                    // second click on the same file+line must re-run this
+                    // effect even though every other field is identical
+                    // (same reason `CodeLine`'s own highlight effect would
+                    // need re-keying if it were reused for this — it isn't,
+                    // see below).
+   ```
+   This is INDEPENDENT of the existing `scrollToLine` prop/effect
+   (`FileCard.tsx:50,59,74-75`, unchanged) — `scrollToLine` stays exactly
+   as it is today (unused by any caller yet; still available for a future
+   feature), `focus` is the NEW, file-level, nonce-driven mechanism this
+   step adds. Pass `focus?.line ?? null` down to `CodeLine` as a new
+   `highlightLine` prop (replacing the unused `scrollToLine`-derived
+   `highlight` boolean for THIS call site — `CodeLine.tsx`'s existing
+   `highlight`/`scrollIntoView` effect is extended to also accept
+   `focusNonce: number` and re-key its own effect's dependency array on
+   `[focusNonce]` instead of `[highlight]`, so a repeat click on the same
+   line also re-scrolls there, not just the file). When `focus.line` is
+   `null` (a path-only `review_focus` item), no `CodeLine` gets the
+   line-level highlight — only the file-level `scrollIntoView` above
+   fires, which is the correct degrade.
+4. `DiffTab.tsx` → `SmartDiffViewer.tsx`/`DiffViewer.tsx` → `FileCard`:
+   thread the `focusFile: {path, line, n} | null` prop from `page.tsx`
+   straight through (as a plain prop passthrough, no transformation) to
    the ONE `FileCard` whose `file.path === focusFile.path`, mapping it to
-   that `FileCard`'s EXISTING `scrollToLine` prop (`file.path ===
-   focusFile.path ? focusFile.line : undefined` — when `line` is `null`,
-   `scrollToLine` stays `undefined`, so the card still force-opens per
-   `FileCard.tsx:74-75`'s existing effect but no single line gets the
-   `highlight` treatment, which is the correct degrade for a
-   file-only review_focus item with no specific line). No changes needed
-   inside `FileCard.tsx`/`CodeLine.tsx` themselves — the mechanism already
-   exists (Constraints), this step is purely "supply the previously-never-
-   supplied prop" through three intermediate components. `DiffViewer.tsx`
-   (the "Original order" non-smart path) gets the same treatue for parity
-   — a review-focus click should work regardless of which order the user
+   that card's NEW `focus` prop: `focus={file.path === focusFile?.path ?
+   {line: focusFile.line, n: focusFile.n} : null}`. `DiffViewer.tsx` (the
+   "Original order" non-smart path) gets the same threading for parity —
+   a review-focus click should work regardless of which order the user
    has selected.
-4. Test: `ReviewFocusCard.test.tsx` (new) — renders the count badge and
+5. Test: `ReviewFocusCard.test.tsx` (new) — renders the count badge and
    each formatted row; clicking a row calls `onOpenFile(path, line)`.
-   Extend `DiffTab.test.tsx` — passing a `focusFile` prop force-opens the
-   matching `FileCard` and (when `line` is set) applies the `highlight`
-   styling to that exact line; a `focusFile` with `line: null` still opens
-   the file but highlights nothing.
+   New `FileCard.test.tsx` cases (or extend the existing diff-viewer test
+   suite, whichever already covers `FileCard`) — a `focus` prop with a
+   non-null `line` force-opens the card, calls `scrollIntoView` on the
+   card's own ref, AND highlights that exact `CodeLine`; a `focus` prop
+   with `line: null` still force-opens and scrolls the CARD but highlights
+   no individual line (B2 regression case); clicking the SAME
+   `ReviewFocusCard` row twice in a row (same `path`/`line`, `n`
+   incremented) re-triggers BOTH the file-level and line-level
+   `scrollIntoView` calls a second time — asserts the nonce actually does
+   its job (B3 regression case; a naive `[focus.line]`-keyed effect would
+   NOT re-fire here since `line` didn't change between the two clicks).
+   Extend `DiffTab.test.tsx` — passing a `focusFile` prop routes it to the
+   matching `FileCard`'s new `focus` prop, not the old, still-unused
+   `scrollToLine` prop.
 
 ## Test plan
 
