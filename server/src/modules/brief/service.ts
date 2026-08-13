@@ -1,15 +1,22 @@
-import type { PrBriefReviewRollup, PrBriefSnapshot, RunSummary } from '@devdigest/shared';
+import type { Brief, PrBriefReviewRollup, PrBriefSnapshot, RunSummary } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
-import type { ReviewRow } from '../reviews/repository.js';
+import type { ReviewRow, PullRow } from '../reviews/repository.js';
 import type { FindingRow } from '../../db/rows.js';
 import { buildFindingsSummary } from '../pulls/findings-summary.js';
+import { resolveFeatureModel } from '../settings/feature-models.js';
+import { renderPrompt } from '../../platform/prompts.js';
+import { assembleBriefInput, callBrief, type Logger } from './risk-brief.js';
+import { groundRisks, groundReviewFocus } from './grounding.js';
+import { BriefRepository } from './repository.js';
+
+export type { Logger };
 
 /**
- * Brief module — GET /pulls/:id/brief. First increment: a purely
- * deterministic review rollup for the top-of-Overview "PR Brief" card
- * (verdict/score/blockers/findings/cost/tokens). No LLM call here — Risk
- * Areas and the LLM-synthesized summary (via the `risk_brief` feature model)
- * land in a later increment; see `docs/2026-08-07-pr-brief-plan.md`.
+ * Brief module — GET /pulls/:id/brief, POST /pulls/:id/brief (SPEC-04).
+ * `review_rollup` is a purely deterministic rollup (verdict/score/blockers/
+ * cost) — no LLM. `brief` is the LLM-synthesized what/why/risk_level/risks/
+ * review_focus, cached in `pr_brief` and regenerated only via the explicit
+ * `POST` (never auto-generated on `GET`, AC-8/AC-9).
  */
 
 /** Sum of non-null values, or `null` when every value is null (never `0` for
@@ -72,16 +79,116 @@ export function computeReviewRollup(
 }
 
 export class BriefService {
-  constructor(private container: Container) {}
+  private briefRepo: BriefRepository;
 
-  async build(prId: string, workspaceId: string): Promise<PrBriefSnapshot> {
+  constructor(private container: Container) {
+    this.briefRepo = new BriefRepository(container.db);
+  }
+
+  private async getRollup(prId: string, workspaceId: string): Promise<PrBriefReviewRollup | null> {
     const reviews = await this.container.reviewRepo.reviewsForPull(prId);
     const runs = await this.container.reviewRepo.listRunsForPull(workspaceId, prId);
-    // `brief`/`brief_generated_at` are a forward-compatible stopgap for this
-    // commit only — PrBriefSnapshot's contract now requires them (SPEC-04
-    // T1), but the actual `pr_brief` cache read + headSha-freshness check
-    // (SPEC-04 T5, `build`'s real signature change to take a `PullRow`) lands
-    // in a later commit. Do not treat this as the real cache-read logic.
-    return { review_rollup: computeReviewRollup(reviews, runs), brief: null, brief_generated_at: null };
+    return computeReviewRollup(reviews, runs);
+  }
+
+  /**
+   * `GET /pulls/:id/brief` — reads ONLY the cached `pr_brief` row, no LLM
+   * call. `brief` is `null` when no row exists yet OR the cached `headSha`
+   * no longer matches the PR's current `head_sha` (AC-8's staleness rule —
+   * a stale cache reads as absent, it is not auto-regenerated here).
+   */
+  async build(pull: PullRow, workspaceId: string): Promise<PrBriefSnapshot> {
+    const review_rollup = await this.getRollup(pull.id, workspaceId);
+    const row = await this.briefRepo.getByPrId(pull.id);
+    const fresh = row !== undefined && row.headSha === pull.headSha;
+    return {
+      review_rollup,
+      brief: fresh ? (row!.json as Brief) : null,
+      brief_generated_at: fresh ? row!.createdAt.toISOString() : null,
+    };
+  }
+
+  /**
+   * `POST /pulls/:id/brief` (AC-9) — ALWAYS performs the full generation
+   * pipeline (AC-1–AC-7), never an internal cache short-circuit (mirrors
+   * `onboarding.generate`'s "always runs" contract). Workspace/PR ownership
+   * is already enforced by `routes.ts`'s inline select BEFORE this method is
+   * ever called (AC-12) — unlike onboarding, brief's existing `GET` already
+   * puts that check in `routes.ts`, not `service.ts`, so `generate` follows
+   * the SAME existing convention rather than introducing a second,
+   * service-level check.
+   *
+   * A degraded (LLM call failed) result is returned TRANSIENTLY and is
+   * NEVER persisted (AC-13) — `briefRepo.upsert` is only reached on the
+   * non-degraded success path below.
+   */
+  async generate(
+    pull: PullRow,
+    repoRow: { id: string; owner: string; name: string },
+    workspaceId: string,
+    logger?: Logger,
+  ): Promise<PrBriefSnapshot> {
+    const { provider, model } = await resolveFeatureModel(this.container, workspaceId, 'risk_brief');
+
+    // Rendered ONCE here — the ONE rendering call for this whole invocation,
+    // threaded into both `assembleBriefInput`'s budget check (AC-2) and
+    // `callBrief`'s actual send (cross-model review finding B5).
+    const systemPromptTemplate = await renderPrompt('risk-brief.system.md', {});
+
+    const inputs = await assembleBriefInput(this.container, pull, repoRow, systemPromptTemplate, logger);
+
+    let result: Awaited<ReturnType<typeof callBrief>>;
+    try {
+      result = await callBrief(this.container, {
+        provider,
+        model,
+        systemPrompt: systemPromptTemplate,
+        userMessage: inputs.userMessage,
+      });
+    } catch (err) {
+      logger?.warn(
+        { prId: pull.id, call: 'brief.generate', model, err: err instanceof Error ? err.message : String(err) },
+        'brief.generate: LLM call failed, returning degraded result',
+      );
+      return {
+        review_rollup: await this.getRollup(pull.id, workspaceId),
+        brief: null,
+        brief_generated_at: null,
+        brief_degraded: true,
+      };
+    }
+
+    // AC-5, AC-6, AC-7 — grounding strictly after the call, strictly before
+    // persistence.
+    const groundedRisks = groundRisks(result.data.risks, inputs.knownFileRefsUniverse);
+    const groundedFocus = groundReviewFocus(result.data.review_focus, inputs.changedPaths);
+    const brief: Brief = { ...result.data, risks: groundedRisks, review_focus: groundedFocus };
+
+    // AC-14 — structured cost log line. NEVER logs `brief.what`/`why`/
+    // `risks`/`review_focus` prose.
+    const costUsd = result.costUsd;
+    logger?.info(
+      { prId: pull.id, call: 'brief.generate', model, tokensIn: result.tokensIn, tokensOut: result.tokensOut, costUsd },
+      'brief.generate: prompt assembled',
+    );
+
+    // ONE timestamp, reused for both the persisted row and the returned
+    // snapshot (cross-model review finding B4 follow-through — an earlier
+    // draft computed `new Date()` twice, independently, so the persisted
+    // `createdAt` and the returned `brief_generated_at` could disagree).
+    const generatedAt = new Date();
+    await this.briefRepo.upsert(pull.id, {
+      json: brief,
+      providerUsed: provider,
+      modelUsed: model,
+      headSha: pull.headSha,
+      createdAt: generatedAt,
+    });
+
+    return {
+      review_rollup: await this.getRollup(pull.id, workspaceId),
+      brief,
+      brief_generated_at: generatedAt.toISOString(),
+    };
   }
 }
