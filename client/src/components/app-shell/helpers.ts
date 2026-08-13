@@ -26,7 +26,11 @@ export function isTextInput(el: EventTarget | null): boolean {
 export function activeKeyFor(pathname: string): string {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/multi-agent")) return "multi-agent";
-  if (pathname.includes("/onboarding")) return "onboarding-tour";
+  // Repo-scoped only — `/onboarding` with no `repoId` is the unrelated,
+  // already-shipped add-repository wizard (see `app/onboarding/page.tsx`),
+  // not this tour page; a plain `.includes("/onboarding")` would incorrectly
+  // highlight "Onboarding Tour" while on that wizard route.
+  if (/^\/repos\/[^/]+\/onboarding(\/|$)/.test(pathname)) return "onboarding-tour";
   if (pathname.includes("/context")) return "context";
   if (pathname.includes("/conventions")) return "conventions";
   if (pathname.includes("/pulls")) return "pulls";
