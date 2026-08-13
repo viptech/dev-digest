@@ -184,3 +184,46 @@ skills (або вони не додають нових документів), `t
 Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/ContextTab.test.tsx
 (тести "renders the agent's attached document", "excludes a disabled linked
 skill's docs...", "renders no breakdown line...")
+
+## 2026-08-13 · fix
+**`<Markdown>` рендерив h1-h6/ul/ol/li/blockquote/hr/pre/table як звичайний
+текст — не бракувало react-markdown, бракувало `components`-оверрайдів**
+Tailwind preflight (`@import "tailwindcss"` глобально) зануляє дефолтний
+font-size/weight/margin для ЦИХ тегів; `Markdown` мав кастомні стилі лише
+для `p`/`strong`/`code`/`a`, тож будь-який заголовок/список/цитата/код-блок
+у прев'ю `.md`-документа (Project Context page, SPEC-01/SPEC-02) виглядав
+візуально ідентично суцільному абзацу — доки хтось не відкрив реальний
+багатосекційний документ. Додано явні оверрайди для решти тегів. Пастка №1:
+перша спроба рендерити заголовки через `<div>` (не справжній `<hN>`) зламала
+`ProjectContextPage.test.tsx`'s `getByRole("heading", ...)` — семантичний
+тег обов'язковий, не лише візуальний розмір. Пастка №2: react-markdown v9
+більше НЕ передає `inline`-прапорець у `code`-рендерер (був у v7/v8) —
+inline vs fenced-блок тепер розрізняється лише за `className` (fenced-код
+отримує `language-xxx` від remark, inline — ніколи).
+Доказ: client/src/vendor/ui/primitives/Markdown.tsx (компонент), 
+client/src/vendor/ui/styles.css:1 (`@import "tailwindcss"`)
+
+## 2026-08-13 · decision
+**Замінює попередній запис від 2026-08-13 про `<Markdown>` — ручні
+per-element `components`-оверрайди прибрано на користь
+`@tailwindcss/typography`'s `.prose`**
+Той самий симптом (h1-h6/списки/цитати/hr/pre без типографіки), той самий
+корінь (Tailwind preflight), але інше рішення: замість вручну стилізованого
+`components`-об'єкта на кожен HTML-тег (крихко — новий remark-gfm конструкт,
+напр. task-list чи footnote, знову виглядав би як голий текст, доки хтось
+не додасть ще один оверрайд), підключено `@tailwindcss/typography` через
+`@plugin "@tailwindcss/typography";` (Tailwind v4, CSS-first конфіг — немає
+`tailwind.config.ts` в цьому проєкті) і клас `.prose` замінив увесь
+`components`-об'єкт у `Markdown.tsx`. Ключове: **не** знадобився окремий
+`.prose-invert`/`dark:`-варіант — застосунок вже тримає тему виключно через
+`[data-theme]``-перемикні CSS custom properties (`--text-primary` тощо), тож
+`.dd-md`'s `--tw-prose-*` мапляться на ці ж токени напряму (`--tw-prose-body:
+var(--text-primary)` і т.д.) — та сама мапа коректна в обох темах без
+дублювання. Побічний ефект типографіки, який довелось придушити: `.prose`
+за замовчуванням обгортає inline `code` в лапки-бектіки (`::before`/`::after`
+з `content: "`"`) — прибрано (`content: none`) і повернуто попередній
+"пігулка"-вигляд лише для inline (`:not(pre code)`), щоб не міняти вже
+усталений візуальний конвеншн.
+Доказ: client/src/vendor/ui/styles.css (`@plugin "@tailwindcss/typography";`
+і `.dd-md` блок з `--tw-prose-*`), client/src/vendor/ui/primitives/Markdown.tsx
+(спрощено до `className="dd-md prose max-w-none"`, без `components` пропу)

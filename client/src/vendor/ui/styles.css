@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* ===========================================================
    DevDigest — design tokens & base (ported 1:1 from prototype)
@@ -112,6 +113,47 @@
   --color-ok-bg: var(--ok-bg);
   --color-code-bg: var(--code-bg);
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* ---- Markdown viewer (`<Markdown>`, vendor/ui/primitives/Markdown.tsx):
+   `@tailwindcss/typography`'s `.prose` reads these `--tw-prose-*` vars for
+   every element it styles (headings/lists/code/tables/quotes/hr). They
+   point at this app's OWN already theme-aware tokens above (switched by
+   `[data-theme]`), so this single mapping is correct in both themes —
+   no separate `.prose-invert`/dark-variant wiring needed. ---- */
+.dd-md {
+  font-size: inherit;
+  line-height: 1.55;
+  --tw-prose-body: var(--text-primary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-lead: var(--text-secondary);
+  --tw-prose-links: var(--accent-text);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-counters: var(--text-secondary);
+  --tw-prose-bullets: var(--text-muted);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--text-secondary);
+  --tw-prose-quote-borders: var(--border-strong);
+  --tw-prose-captions: var(--text-muted);
+  --tw-prose-code: var(--accent-text);
+  --tw-prose-pre-code: var(--text-primary);
+  --tw-prose-pre-bg: var(--code-bg);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
+/* Inline code as a colored pill (prior established look) instead of
+   typography's default backtick-quoted style — `pre code` keeps its own,
+   unquoted block styling since it's excluded below. */
+.dd-md code::before,
+.dd-md code::after {
+  content: none;
+}
+.dd-md :where(code):not(:where(pre code)) {
+  background: var(--bg-hover);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
 }
 
 * {
