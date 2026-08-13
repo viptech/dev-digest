@@ -17,9 +17,13 @@ interface DiffTabProps {
   /** A Smart Diff finding badge was clicked — switch to the Findings tab and
    *  expand that finding's card there. */
   onOpenFinding?: (findingId: string) => void;
+  /** SPEC-04 T10 — a Review Focus row was clicked (Overview tab); scroll/
+   *  open the matching file (and highlight the line, if known), regardless
+   *  of Smart order vs Original order. */
+  focusFile?: { path: string; line: number | null; n: number } | null;
 }
 
-export function DiffTab({ prId, filesCount, files, canComment, onOpenFinding }: DiffTabProps) {
+export function DiffTab({ prId, filesCount, files, canComment, onOpenFinding, focusFile }: DiffTabProps) {
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
   // Comments start hidden so the diff is clean by default — toggle to reveal.
@@ -77,9 +81,15 @@ export function DiffTab({ prId, filesCount, files, canComment, onOpenFinding }: 
         Files changed · {filesCount} files
       </SectionLabel>
       {order === "smart" ? (
-        <SmartDiffViewer prId={prId} files={files} commenting={commenting} onOpenFinding={onOpenFinding} />
+        <SmartDiffViewer
+          prId={prId}
+          files={files}
+          commenting={commenting}
+          onOpenFinding={onOpenFinding}
+          focusFile={focusFile}
+        />
       ) : (
-        <DiffViewer files={files} commenting={commenting} />
+        <DiffViewer files={files} commenting={commenting} focusFile={focusFile} />
       )}
     </section>
   );

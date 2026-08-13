@@ -15,6 +15,9 @@ interface SmartDiffViewerProps {
   /** A finding badge was clicked — the parent switches to the Findings tab
    *  and expands that finding's card there. */
   onOpenFinding?: (findingId: string) => void;
+  /** SPEC-04 T10 — Review Focus click target, plain passthrough to the ONE
+   *  matching FileCard's `focus` prop. */
+  focusFile?: { path: string; line: number | null; n: number } | null;
 }
 
 /**
@@ -25,7 +28,7 @@ interface SmartDiffViewerProps {
  * Findings tab (via `onOpenFinding`) — the diff view itself doesn't own a
  * findings UI, so scrolling within it isn't the right destination.
  */
-export function SmartDiffViewer({ prId, files, commenting, onOpenFinding }: SmartDiffViewerProps) {
+export function SmartDiffViewer({ prId, files, commenting, onOpenFinding, focusFile }: SmartDiffViewerProps) {
   const { data: smartDiff, isLoading, isError } = useSmartDiff(prId);
   const [expanded, setExpanded] = React.useState<Record<SmartDiffRole, boolean>>({
     ...ROLE_DEFAULT_EXPANDED,
@@ -36,6 +39,20 @@ export function SmartDiffViewer({ prId, files, commenting, onOpenFinding }: Smar
     for (const f of files) m.set(f.path, f);
     return m;
   }, [files]);
+
+  // SPEC-04 T10 — a review-focus click must work even when its target file
+  // lives in a currently-collapsed role group (`boilerplate` starts closed
+  // by default, ROLE_DEFAULT_EXPANDED's own "literal acceptance criterion"
+  // comment) — without this, the matching FileCard would never mount, so
+  // its `focus` prop would have nothing to scroll to. Auto-open ONLY the
+  // group containing the target, not all groups, and only in reaction to a
+  // genuine focus click (keyed on the nonce, not the file set/role data).
+  React.useEffect(() => {
+    if (!focusFile || !smartDiff) return;
+    const targetGroup = smartDiff.groups.find((g) => g.files.some((f) => f.path === focusFile.path));
+    if (targetGroup) setExpanded((prev) => ({ ...prev, [targetGroup.role]: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusFile?.n]);
 
   if (isLoading) return <div style={{ padding: 24, color: "var(--text-muted)" }}>Loading smart order…</div>;
   if (isError || !smartDiff) {
@@ -76,6 +93,7 @@ export function SmartDiffViewer({ prId, files, commenting, onOpenFinding }: Smar
                       commenting={commenting}
                       findings={sdFile.findings}
                       onOpenFinding={onOpenFinding}
+                      focus={sdFile.path === focusFile?.path ? { line: focusFile.line, n: focusFile.n } : null}
                     />
                   );
                 })}

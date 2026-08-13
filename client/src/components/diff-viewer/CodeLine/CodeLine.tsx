@@ -17,15 +17,24 @@ export function CodeLine({
   threads,
   commenting,
   highlight,
+  focusNonce,
   finding,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
-  /** Smart Diff's "N findings" badge scroll target — true for the one line
-     this row should scroll into view and briefly highlight for. */
+  /** Smart Diff's "N findings" badge scroll target, OR SPEC-04's Review
+     Focus click target — true for the one line this row should scroll into
+     view and briefly highlight for. */
   highlight?: boolean;
+  /** Review Focus's incrementing nonce (SPEC-04 T10) — a second click on the
+     SAME line must still re-trigger the scroll effect even though `highlight`
+     itself stays `true`→`true` across the two clicks; included in the effect's
+     dependency array alongside `highlight` for exactly that reason. `undefined`
+     for the pre-existing Smart-Diff-finding-badge caller, which never repeats
+     a click against an already-highlighted line the same way. */
+  focusNonce?: number;
   /** Smart Diff — this line's (worst) finding severity, if any, rendered as
      an inline severity badge next to the line text. */
   finding?: Severity;
@@ -38,7 +47,7 @@ export function CodeLine({
     if (highlight && rowRef.current) {
       rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [highlight]);
+  }, [highlight, focusNonce]);
 
   if (ln.kind === "hunk") {
     return (
