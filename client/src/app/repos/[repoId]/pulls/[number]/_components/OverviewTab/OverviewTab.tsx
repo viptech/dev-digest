@@ -4,8 +4,9 @@ import React from "react";
 import type { PrIntentRecord } from "@devdigest/shared";
 import { SectionLabel } from "@devdigest/ui";
 import { useIntent } from "@/lib/hooks/reviews";
+import { useBrief } from "@/lib/hooks/brief";
 import { PrBriefCard } from "./_components/PrBriefCard";
-import { IntentCard } from "./_components/IntentCard";
+import { IntentAndRiskCard } from "./_components/IntentAndRiskCard";
 import { BlastRadiusCard } from "./_components/BlastRadiusCard";
 import { s } from "./styles";
 
@@ -22,10 +23,19 @@ interface OverviewTabProps {
 
 export function OverviewTab({ prId, prBody, intent, repoFullName, headSha }: OverviewTabProps) {
   const { data } = useIntent(prId, intent);
+  // Independent `useBrief` call — React Query dedupes on the shared
+  // `["brief", prId]` key against `PrBriefCard`'s own call, so this is a
+  // cache hit, never a second network request (same per-card-hook pattern
+  // `BlastRadiusCard` already uses). Deliberately not lifted/prop-drilled
+  // from a single parent fetch, to keep each card's data dependency
+  // self-contained, matching this codebase's existing convention.
+  const { data: brief } = useBrief(prId);
   return (
     <>
       <PrBriefCard prId={prId} />
-      {data && <IntentCard intent={data} prId={prId} />}
+      {(data || (brief?.brief?.risks?.length ?? 0) > 0) && (
+        <IntentAndRiskCard intent={data ?? null} risks={brief?.brief?.risks} prId={prId} />
+      )}
       <BlastRadiusCard prId={prId} repoFullName={repoFullName} headSha={headSha} />
       {prBody && (
         <section>
