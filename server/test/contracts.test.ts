@@ -19,6 +19,8 @@ import {
   AgentContextDocLink,
   SkillContextDocLink,
   SetContextDocsBody,
+  Brief,
+  PrBriefSnapshot,
 } from '@devdigest/shared';
 
 /**
@@ -112,6 +114,44 @@ describe('AI contracts parse fixtures', () => {
         ],
       }),
     ).not.toThrow();
+  });
+
+  it('Brief / ReviewFocusItem — risk-level enum, nullable line', () => {
+    const brief = Brief.parse({
+      what: 'Adds rate limiting to the public /api endpoints.',
+      why: 'Prevents abuse of the unauthenticated webhook receiver.',
+      risk_level: 'medium',
+      risks: [
+        { kind: 'security', title: 't', explanation: 'e', severity: 'high', file_refs: ['a.ts'] },
+      ],
+      review_focus: [
+        { path: 'src/api/public/webhooks.ts', line: null, note: 'New rate-limit branch.' },
+        { path: 'src/rate-limit.ts', line: 42, note: 'Window boundary math.' },
+      ],
+    });
+    expect(brief.risk_level).toBe('medium');
+    expect(brief.review_focus[0]!.line).toBeNull();
+    expect(brief.review_focus[1]!.line).toBe(42);
+    expect(() => Brief.parse({ ...brief, risk_level: 'critical' })).toThrow();
+  });
+
+  it('PrBriefSnapshot — review_rollup present, brief not yet generated', () => {
+    const snapshot = PrBriefSnapshot.parse({
+      review_rollup: {
+        verdict: 'request_changes',
+        score: 61,
+        findings_summary: { counts: { CRITICAL: 1, WARNING: 0, SUGGESTION: 0 }, items: [] },
+        blockers_count: 1,
+        summary: 'Two blockers before merge.',
+        cost_usd: 0.12,
+        tokens_in: 1000,
+        tokens_out: 200,
+      },
+      brief: null,
+      brief_generated_at: null,
+    });
+    expect(snapshot.brief).toBeNull();
+    expect(snapshot.brief_degraded).toBeUndefined();
   });
 
   it('SmartDiff (data.jsx DIFF)', () => {

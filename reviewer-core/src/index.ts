@@ -16,6 +16,7 @@ export {
   assemblePrompt,
   wrapUntrusted,
   formatIntentForPrompt,
+  INJECTION_GUARD,
   type PromptParts,
   type AssembledPrompt,
   type PromptSectionMeta,

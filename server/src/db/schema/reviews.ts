@@ -69,4 +69,10 @@ export const prBrief = pgTable('pr_brief', {
     .primaryKey()
     .references(() => pullRequests.id, { onDelete: 'cascade' }),
   json: jsonb('json').notNull(),
+  /** Resolved provider/model that produced this Brief (cost auditing). */
+  providerUsed: text('provider_used').notNull(),
+  modelUsed: text('model_used').notNull(),
+  /** Cache key — recomputed only when the PR's head_sha has moved on. */
+  headSha: text('head_sha').notNull(),
+  createdAt: now(),
 });

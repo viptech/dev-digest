@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { assemblePrompt } from '../src/prompt.js';
+import { INJECTION_GUARD } from '../src/index.js';
 
 function userOf(parts: Parameters<typeof assemblePrompt>[0]): string {
   const { messages } = assemblePrompt(parts);
@@ -29,6 +30,18 @@ describe('assemblePrompt — shared injection guard (server + CI)', () => {
     expect(sys).toMatch(/test fixture|intentional|demo/i);
     expect(sys).toMatch(/never reduce|never .*descope|REPORT it/i);
     expect(sys).toMatch(/any language/i);
+  });
+});
+
+describe('INJECTION_GUARD — public export (SPEC-04 T3)', () => {
+  it('is exported from the package entry point as a non-empty string', () => {
+    // Smoke check only — the guard's own text/content is covered by the
+    // existing suite above via assemblePrompt's system message. This just
+    // confirms the export compiles and is reachable from './index.js',
+    // now that `server/src/modules/brief/risk-brief.ts` (SPEC-04) needs it
+    // directly, not only through `assemblePrompt`.
+    expect(typeof INJECTION_GUARD).toBe('string');
+    expect(INJECTION_GUARD.length).toBeGreaterThan(0);
   });
 });
 

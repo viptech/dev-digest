@@ -27,6 +27,12 @@ function renderWithIntl(ui: React.ReactElement) {
 
 function brief(overrides: Partial<PrBriefSnapshot["review_rollup"]> = {}): PrBriefSnapshot {
   return {
+    // SPEC-04 (T1) extended PrBriefSnapshot with brief/brief_generated_at —
+    // this fixture predates the Why+Risk UI (Step 8, a later commit), so
+    // both stay null/never-generated here; Step 8's own test file will add
+    // dedicated fixtures for the populated/degraded brief states.
+    brief: null,
+    brief_generated_at: null,
     review_rollup: {
       verdict: "request_changes",
       score: 61,
@@ -71,7 +77,7 @@ describe("PrBriefCard", () => {
   });
 
   it("renders nothing when the PR has never been reviewed (review_rollup is null)", () => {
-    mockBrief = { review_rollup: null };
+    mockBrief = { review_rollup: null, brief: null, brief_generated_at: null };
     const { container } = render(<PrBriefCard prId="pr-1" />);
     expect(container).toBeEmptyDOMElement();
   });

@@ -77,6 +77,11 @@ export class BriefService {
   async build(prId: string, workspaceId: string): Promise<PrBriefSnapshot> {
     const reviews = await this.container.reviewRepo.reviewsForPull(prId);
     const runs = await this.container.reviewRepo.listRunsForPull(workspaceId, prId);
-    return { review_rollup: computeReviewRollup(reviews, runs) };
+    // `brief`/`brief_generated_at` are a forward-compatible stopgap for this
+    // commit only — PrBriefSnapshot's contract now requires them (SPEC-04
+    // T1), but the actual `pr_brief` cache read + headSha-freshness check
+    // (SPEC-04 T5, `build`'s real signature change to take a `PullRow`) lands
+    // in a later commit. Do not treat this as the real cache-read logic.
+    return { review_rollup: computeReviewRollup(reviews, runs), brief: null, brief_generated_at: null };
   }
 }
