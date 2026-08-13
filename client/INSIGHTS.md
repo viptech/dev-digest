@@ -262,3 +262,22 @@ client/src/app/repos/[repoId]/onboarding/_components/OnboardingTourPage/Onboardi
 `generate.cta` — однаковий рядок); тест
 client/src/app/repos/[repoId]/onboarding/_components/OnboardingTourPage/OnboardingTourPage.test.tsx
 ("shows the 30–60s / ~5,000 tokens copy in the empty state")
+
+## 2026-08-13 · gotcha
+**`@testing-library/user-event` не встановлений у `client/package.json` —
+`react-testing-library`-скіл радить його "завжди", але тут увесь наявний
+тестовий код клікає через `fireEvent`**
+`client/package.json`'s `devDependencies` містить `@testing-library/react` і
+`@testing-library/jest-dom`, але НЕ `@testing-library/user-event` — усі
+існуючі тести з кліками (`DiffTab.test.tsx`, `FindingsPanel.test.tsx`,
+`SmartDiffViewer.test.tsx`, `OnboardingTourPage.test.tsx`) використовують
+`fireEvent.click(...)`, не `userEvent`. Написання нового тесту з
+`import userEvent from "@testing-library/user-event"` компілюється лише
+локально в IDE (типи можуть резолвитись транзитивно через інший пакет), але
+провалиться в `pnpm test`/CI з "Cannot find module" — додавати пакет під час
+імплементації означало б чіпати lockfile (заборонено `CLAUDE.md`). Для цього
+репозиторію: продовжуй `fireEvent`, не `userEvent`, поки лишається окремим
+рішенням додати залежність.
+Доказ: client/package.json (немає рядка `@testing-library/user-event` у
+`devDependencies`); client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/DiffTab.test.tsx:56
+(`fireEvent.click(...)`)
