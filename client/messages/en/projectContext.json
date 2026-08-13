@@ -2,6 +2,8 @@
   "attachedTitle": "Project context",
   "attachedBadge": "{n} attached",
   "nOfMAttached": "{n} of {m} attached",
+  "aggregateBadge": "{count} attached",
+  "aggregateBreakdown": "{own} from this agent + {fromSkills} from linked skills",
   "noneAttached": "No documents attached yet — pick some from the discovery list below.",
   "orderHint": "Order matters — earlier docs appear earlier in the assembled ## Project context block. Toggle to attach.",
   "reorderHandle": "Drag to reorder",

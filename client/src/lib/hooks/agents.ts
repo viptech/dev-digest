@@ -137,6 +137,12 @@ export function useSetAgentContextDocs(agentId: string) {
       api.post<AgentContextDocLink[]>(`/agents/${agentId}/context-docs`, { docs }),
     onSuccess: (data) => {
       qc.setQueryData(["agent-context-docs", agentId], data);
+      // Not an unscoped invalidateQueries() — scoped to the exact
+      // "repo-context-docs" query-key head only (SPEC-02 NFR). The mutation
+      // response only reflects the NEW set, so a fully-detached repo would
+      // be missing from it; a predicate on the query key catches that case
+      // too, unlike diffing `data`/`variables` against the old cache.
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === "repo-context-docs" });
     },
   });
 }

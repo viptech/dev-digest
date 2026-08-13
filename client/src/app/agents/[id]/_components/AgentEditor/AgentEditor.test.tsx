@@ -3,6 +3,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { Agent } from "@devdigest/shared";
 import messages from "../../../../../../messages/en/agents.json";
+import projectContextMessages from "../../../../../../messages/en/projectContext.json";
 import { ToastProvider } from "../../../../../lib/toast";
 
 // Mock the data hooks so the editor renders without a network/query client.
@@ -11,6 +12,11 @@ vi.mock("../../../../../lib/hooks/agents", () => ({
   useProviderModels: () => ({ data: [{ id: "gpt-4.1", provider: "openai" }] }),
   useAgentContextDocs: () => ({ data: [] }),
   useSetAgentContextDocs: () => ({ mutate: vi.fn(), isPending: false }),
+  useAgentSkills: () => ({ data: [] }),
+}));
+vi.mock("../../../../../lib/hooks/skills", () => ({
+  useSkills: () => ({ data: [] }),
+  useSkillsContextDocs: () => new Map(),
 }));
 vi.mock("../../../../../components/context-doc-picker", () => ({
   ContextDocPicker: () => <div>context-doc-picker</div>,
@@ -37,7 +43,7 @@ const AGENT: Agent = {
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ agents: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ agents: messages, projectContext: projectContextMessages }}>
       <ToastProvider>{ui}</ToastProvider>
     </NextIntlClientProvider>,
   );

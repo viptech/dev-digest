@@ -167,3 +167,20 @@ server- і client-копіях — легко забути оновити одн
 (вендор-дублювання схем, не спільний пакет).
 Доказ: server/src/vendor/shared/contracts/brief.ts (`SmartDiffFinding`),
 client/src/vendor/shared/contracts/brief.ts (та ж схема)
+
+## 2026-08-13 · gotcha
+**Агрегатний бейдж `ContextTab.tsx` і власний бейдж `ContextDocPicker` навмисно
+показують ІДЕНТИЧНИЙ текст, коли `fromSkills === 0` — `getByText` тоді падає
+з "multiple elements found"**
+`aggregateBadge` ("{count} attached") і `ContextDocPicker`'s `attachedBadge`
+("{n} attached") — той самий рядок-формат. Коли в агента нема enabled linked
+skills (або вони не додають нових документів), `total === own`, тож на сторінці
+рендериться два однакових текстових вузли ("N attached") одночасно. Це не баг
+верстки, а прямий наслідок AC-24/Edge-case дизайну (без skills — тільки
+власний рахунок, число просто дублюється в двох бейджах). У тестах, де
+`fromSkills === 0`, треба `screen.getAllByText(...)` з перевіркою довжини
+(2), а не `getByText` — інакше тест ламається саме тоді, коли фіча працює
+правильно.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/ContextTab.test.tsx
+(тести "renders the agent's attached document", "excludes a disabled linked
+skill's docs...", "renders no breakdown line...")
