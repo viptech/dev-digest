@@ -73,6 +73,7 @@ function buildFixtureSections(readingOrderFiles: string[]): OnboardingSection[] 
 interface BuildOpts {
   ownerWorkspaceId?: string;
   degradedState?: boolean;
+  degradedStateReason?: string;
   degradedFacts?: boolean;
   llmThrows?: boolean;
   upsertSpy: ReturnType<typeof vi.fn>;
@@ -100,7 +101,7 @@ function buildService(opts: BuildOpts): { service: OnboardingService; llm: MockL
     repoIntel: {
       getIndexState: async () =>
         opts.degradedState
-          ? { degraded: true, degradedReason: 'index_partial', status: 'degraded', filesIndexed: 0, filesSkipped: 0, durationMs: 0, repoId: 'repo1', lastIndexedSha: '', indexerVersion: 1, updatedAt: new Date() }
+          ? { degraded: true, degradedReason: opts.degradedStateReason ?? 'index_partial', status: 'degraded', filesIndexed: 0, filesSkipped: 0, durationMs: 0, repoId: 'repo1', lastIndexedSha: '', indexerVersion: 1, updatedAt: new Date() }
           : { degraded: undefined, status: 'full', filesIndexed: 5, filesSkipped: 0, durationMs: 0, repoId: 'repo1', lastIndexedSha: 'sha', indexerVersion: 2, updatedAt: new Date() },
       getRepoFacts: async () => facts,
       getRepoMap: async () => ({ text: 'repo map text', tokens: 10, cached: true }),
@@ -185,6 +186,23 @@ describe('OnboardingService.generate — grounding + degraded/failure paths', ()
     const result = await service.generate('ws1', 'repo1');
     expect(result!.degraded).toBe(true);
     expect(result!.degraded_reason).toBe('index_partial');
+    expect(llm.calls.filter((c) => c.method === 'completeStructured')).toHaveLength(0);
+    expect(upsertSpy).not.toHaveBeenCalled();
+  });
+
+  it('repo_too_large (AC-10) → same deterministic-skeleton path as any other degraded reason, from the bounded facts the indexer already gathered', async () => {
+    const upsertSpy = vi.fn(async () => {});
+    const { service, llm } = buildService({
+      upsertSpy,
+      degradedState: true,
+      degradedStateReason: 'repo_too_large',
+    });
+    const result = await service.generate('ws1', 'repo1');
+    expect(result!.degraded).toBe(true);
+    expect(result!.degraded_reason).toBe('repo_too_large');
+    // No full clone, no new onboarding-level limit — the skeleton is built
+    // from whatever repoIntel already indexed before the bound kicked in
+    // (NON_DEGRADED_FACTS stands in for that bounded subset here).
     expect(llm.calls.filter((c) => c.method === 'completeStructured')).toHaveLength(0);
     expect(upsertSpy).not.toHaveBeenCalled();
   });
