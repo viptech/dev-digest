@@ -4,7 +4,6 @@ import type { Container } from '../../platform/container.js';
 import { wrapUntrusted } from '../../platform/prompt.js';
 import { renderPrompt } from '../../platform/prompts.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
-import { estimateCost } from '../../adapters/llm/pricing.js';
 import type { RepoFactsResult } from '../repo-intel/types.js';
 import { OnboardingRepository } from './repository.js';
 import { groundOnboardingSections } from './grounding.js';
@@ -159,7 +158,13 @@ export class OnboardingService {
     const groundedSections = groundOnboardingSections(result.data.sections, knownPaths);
 
     // 13-14. Cost + structured log line (NEVER logs prose/section content).
-    const costUsd = estimateCost(model, result.tokensIn, result.tokensOut);
+    // `costUsd` comes straight off the port's own StructuredResult — the
+    // adapter already ran `estimateCost` once to produce it
+    // (adapters/llm/{openai,anthropic}.ts); re-deriving it here would reach
+    // into adapters/** from a service, the same onion-architecture boundary
+    // run-executor.ts's own cost logging respects (it reads
+    // `outcome.costUsd`, never imports `pricing.ts` itself).
+    const costUsd = result.costUsd;
     logger?.info(
       { repoId, call: 'onboarding.generate', model, tokensIn: result.tokensIn, tokensOut: result.tokensOut, costUsd },
       'onboarding.generate: prompt assembled',
