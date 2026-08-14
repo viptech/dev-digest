@@ -11,14 +11,14 @@
   "detach": "Detach",
   "discoverTitle": "Discover in",
   "emptyDiscoveryTitle": "No documents discovered",
-  "emptyDiscoveryBody": "No .md files under specs/, docs/, or insights/ were found in this repo's clone yet — sync the repo first.",
+  "emptyDiscoveryBody": "No .md files were found in this repo's clone yet — sync the repo first.",
   "usedBy": "used by {n, plural, =0 {0 agents} one {1 agent} other {# agents}}",
   "tokenEstimate": "≈ {tokens} tokens",
   "budgetWarning": "approaching the per-run size budget",
   "serializesAsTitle": "SERIALIZES AS",
   "serializesAsHint": "Illustrative preview — any agent using this skill inherits these documents into its own ## Project context (union, not a separate prompt section).",
   "pageTitle": "Project Context",
-  "pageSubtitle": "Every .md document discovered under specs/, docs/, and insights/ in this repo's clone.",
+  "pageSubtitle": "Every .md document discovered in this repo's clone.",
   "refresh": "Refresh",
   "loadError": "Couldn’t load documents"
 }
