@@ -9,6 +9,7 @@ const setDocs = vi.fn();
 const REPOS = {
   repo1: { id: "repo1", owner: "acme", name: "payments-api", full_name: "acme/payments-api" },
   repo2: { id: "repo2", owner: "acme", name: "platform-specs", full_name: "acme/platform-specs" },
+  repo3: { id: "repo3", owner: "acme", name: "billing-worker", full_name: "acme/billing-worker" },
 };
 
 // Discovery always follows the app's already-active repo (no in-picker
@@ -26,9 +27,12 @@ const repo1Docs = [
   { path: "docs/architecture.md", category: "docs", chars: 20, used_by_agents: 0 },
 ];
 const repo2Docs = [{ path: "specs/rate-limiting.md", category: "specs", chars: 30, used_by_agents: 1 }];
+// A root-level INSIGHTS.md-style doc — outside specs/docs/insights, no
+// directory ancestor OR filename-stem match — surfaces as category 'other'.
+const repo3Docs = [{ path: "README.md", category: "other", chars: 15, used_by_agents: 0 }];
 
 function docsForRepo(repoId: string | null | undefined) {
-  return repoId === "repo1" ? repo1Docs : repoId === "repo2" ? repo2Docs : [];
+  return repoId === "repo1" ? repo1Docs : repoId === "repo2" ? repo2Docs : repoId === "repo3" ? repo3Docs : [];
 }
 
 vi.mock("../../lib/hooks/project-context", () => ({
@@ -113,6 +117,13 @@ describe("ContextDocPicker", () => {
     );
     // repo1 (active) has 2 discovered docs, 1 of them attached.
     expect(screen.getByText("1 of 2 attached")).toBeInTheDocument();
+  });
+
+  it("discovers a .md file outside specs/docs/insights and shows it with category 'other'", () => {
+    mockActiveRepoId = "repo3";
+    renderWithIntl(<ContextDocPicker attachedDocs={[]} onSetDocs={setDocs} />);
+    expect(screen.getByText("README.md")).toBeInTheDocument();
+    expect(screen.getByText("other")).toBeInTheDocument();
   });
 
   it("shows an empty-attached hint when nothing is attached yet", () => {

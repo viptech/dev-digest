@@ -1,12 +1,20 @@
 import type { Container } from '../../platform/container.js';
 import { ProjectContextRepository, type ContextDocRow } from './repository.js';
-import { discoverContextDocs, categorizePath, type ProjectContextCategory } from './discovery.js';
+import { discoverContextDocs, type ProjectContextCategory } from './discovery.js';
 import { resolveInClone } from '../repo-intel/path-guard.js';
+
+/** AC-15 (b): attach/read is scoped to `.md` files only — discovery only
+ *  ever surfaces `.md` files (any root, not just specs/docs/insights, see
+ *  discovery.ts), but the attach endpoint takes a client-supplied `path`
+ *  independent of discovery, so this still needs its own, explicit check. */
+function isMarkdownPath(path: string): boolean {
+  return path.toLowerCase().endsWith('.md');
+}
 
 /**
  * Project Context (SPEC-01) — business logic: discovery for a repo, attach/
- * detach/reorder for an agent or a skill (with the AC-15 traversal +
- * allowlist-root guard, and the workspace-ownership check for `repo_id`),
+ * detach/reorder for an agent or a skill (with the AC-15 traversal guard +
+ * `.md`-extension check, and the workspace-ownership check for `repo_id`),
  * and the AC-9/AC-10 run-time resolution + dedup `ReviewRunExecutor` calls.
  *
  * No HTTP here (routes.ts), no raw SQL (repository.ts) — this is exactly the
@@ -31,7 +39,7 @@ export interface ContextDocLinkDto {
 export interface RejectedDoc {
   repo_id: string;
   path: string;
-  reason: 'repo_not_in_workspace' | 'path_outside_clone' | 'path_outside_allowed_roots';
+  reason: 'repo_not_in_workspace' | 'path_outside_clone' | 'not_a_markdown_file';
 }
 
 export type SetDocsResult =
@@ -80,8 +88,8 @@ export class ProjectContextService {
    * Full text of one discovered document — backs the "Preview" action
    * (AC-4's row-level Preview, and the Project Context page's detail
    * panel). Same validity checks as attach-time (AC-15), but read-only —
-   * failure of any kind (repo not in workspace, path outside clone/roots,
-   * file missing) is a uniform `undefined` (404), no need to distinguish
+   * failure of any kind (repo not in workspace, path outside clone, not a
+   * `.md` file, file missing) is a uniform `undefined` (404), no need to distinguish
    * 422 vs 404 for a non-mutating read.
    */
   async readDocContent(
@@ -91,7 +99,7 @@ export class ProjectContextService {
   ): Promise<{ content: string } | undefined> {
     const repo = await this.repo.getRepoForContext(repoId);
     if (!repo || repo.workspaceId !== workspaceId) return undefined;
-    if (!repo.clonePath || !resolveInClone(repo.clonePath, path) || !categorizePath(path)) {
+    if (!repo.clonePath || !resolveInClone(repo.clonePath, path) || !isMarkdownPath(path)) {
       return undefined;
     }
     const [file] = await this.container.repoIntel.readFiles(repoId, [path]);
@@ -196,9 +204,12 @@ export class ProjectContextService {
     if (!repo.clonePath || !resolveInClone(repo.clonePath, path)) {
       return { repo_id: repoId, path, reason: 'path_outside_clone' };
     }
-    // AC-15 (b): AND under one of the configured roots (specs/docs/insights).
-    if (!categorizePath(path)) {
-      return { repo_id: repoId, path, reason: 'path_outside_allowed_roots' };
+    // AC-15 (b): AND is a `.md` file — attach/discover scope is "every
+    // markdown file in the repo" now, not just specs/docs/insights, but a
+    // client-supplied path could still name a non-.md file that happens to
+    // resolve inside the clone.
+    if (!isMarkdownPath(path)) {
+      return { repo_id: repoId, path, reason: 'not_a_markdown_file' };
     }
     return null;
   }

@@ -104,7 +104,7 @@ d('project-context attach/detach/reorder (Testcontainers pg)', () => {
     await app.close();
   });
 
-  it('404s a preview request for a path outside the allowed roots (never reads it)', async () => {
+  it('404s a preview request for a non-markdown path (never reads it)', async () => {
     const app = await appWith();
     const repo = await makeRepo(pg.handle.db, workspaceId, cloneA);
 
@@ -199,7 +199,7 @@ d('project-context attach/detach/reorder (Testcontainers pg)', () => {
     await app.close();
   });
 
-  it('rejects (422) a path outside the configured roots — never persists it (AC-15)', async () => {
+  it('rejects (422) a non-markdown path — never persists it (AC-15)', async () => {
     const app = await appWith();
     const repo = await makeRepo(pg.handle.db, workspaceId, cloneA);
     const agent = (

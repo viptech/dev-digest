@@ -15,6 +15,7 @@ const CATEGORY_COLOR: Record<ProjectContextCategory, string> = {
   specs: "var(--accent)",
   docs: "var(--ok)",
   insights: "var(--warn)",
+  other: "var(--text-muted)",
 };
 
 /**

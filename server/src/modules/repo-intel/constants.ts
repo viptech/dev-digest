@@ -23,6 +23,10 @@ export const EXCLUDED_DIRS = [
   'out',
   'vendor',
   '.git',
+  // Claude Code's own tooling directory (skills, agents, plans, hooks) —
+  // not source code, and its plans/skills are full of unrelated `.md` files
+  // that Project Context discovery (discovery.ts) should never surface.
+  '.claude',
 ] as const;
 
 // --- Read-time limits -------------------------------------------------------

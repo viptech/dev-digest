@@ -32,14 +32,28 @@ describe('categorizePath', () => {
     expect(categorizePath('docs/specs/foo.md')).toBe('specs');
   });
 
-  it('returns null when no ancestor matches', () => {
+  it('returns null when no ancestor directory or filename stem matches', () => {
     expect(categorizePath('src/index.ts')).toBeNull();
-    expect(categorizePath('README.md')).toBeNull();
   });
 
-  it('does not match the filename itself, only directory ancestors', () => {
-    // A file literally named "specs.md" at the root has no "specs" ancestor DIR.
-    expect(categorizePath('specs.md')).toBeNull();
+  it('matches by filename stem too, case-insensitively — no directory ancestor required', () => {
+    // This repo's own convention: root-level `INSIGHTS.md`/`server/INSIGHTS.md`
+    // have no `insights/` ancestor DIRECTORY, just that name as the FILENAME.
+    expect(categorizePath('INSIGHTS.md')).toBe('insights');
+    expect(categorizePath('server/INSIGHTS.md')).toBe('insights');
+    expect(categorizePath('specs.md')).toBe('specs');
+    expect(categorizePath('Docs.md')).toBe('docs');
+  });
+
+  it('directory-ancestor match still wins over filename stem when both are present', () => {
+    // "docs/insights.md" — the ancestor DIR (docs) takes priority over the
+    // filename stem (insights).
+    expect(categorizePath('docs/insights.md')).toBe('docs');
+  });
+
+  it('a filename that matches neither an ancestor nor a category stem is null', () => {
+    expect(categorizePath('README.md')).toBeNull();
+    expect(categorizePath('CHANGELOG.md')).toBeNull();
   });
 });
 
@@ -70,14 +84,27 @@ describe('discoverContextDocs', () => {
     ]);
   });
 
-  it('ignores .md files outside specs/docs/insights', async () => {
-    await writeFileAt(root, 'README.md', '# nope');
-    await writeFileAt(root, 'src/notes.md', '# nope either');
+  it("includes .md files outside specs/docs/insights, categorized as 'other'", async () => {
+    await writeFileAt(root, 'README.md', '# root readme');
+    await writeFileAt(root, 'src/notes.md', '# a stray note');
     await writeFileAt(root, 'specs/public-api.md', '# yes');
 
     const result = await discoverContextDocs(root);
     expect(result).toEqual([
+      { path: 'README.md', category: 'other', chars: Buffer.byteLength('# root readme') },
       { path: 'specs/public-api.md', category: 'specs', chars: Buffer.byteLength('# yes') },
+      { path: 'src/notes.md', category: 'other', chars: Buffer.byteLength('# a stray note') },
+    ]);
+  });
+
+  it("finds a root-level INSIGHTS.md as category 'insights' — it has no insights/ ANCESTOR DIRECTORY, just that name as its filename, matched by categorizePath's filename-stem check", async () => {
+    await writeFileAt(root, 'INSIGHTS.md', '# 2026-08-14 gotcha');
+    await writeFileAt(root, 'server/INSIGHTS.md', '# server gotcha');
+
+    const result = await discoverContextDocs(root);
+    expect(result).toEqual([
+      { path: 'INSIGHTS.md', category: 'insights', chars: Buffer.byteLength('# 2026-08-14 gotcha') },
+      { path: 'server/INSIGHTS.md', category: 'insights', chars: Buffer.byteLength('# server gotcha') },
     ]);
   });
 

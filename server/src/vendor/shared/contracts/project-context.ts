@@ -2,15 +2,20 @@ import { z } from 'zod';
 
 /**
  * Project Context (SPEC-01) — manual, per-agent/per-skill attachment of `.md`
- * documents discovered under `specs/`, `docs/`, `insights/` in a connected
- * repo's local clone. See `docs/specs/SPEC-01-project-context.md`.
+ * documents discovered anywhere in a connected repo's local clone. See
+ * `docs/specs/SPEC-01-project-context.md`. Originally scoped to `specs/`,
+ * `docs/`, `insights/` only; broadened to every `.md` file in the repo — the
+ * fixed-root scope silently missed real files (e.g. this very repo's own
+ * root-level `INSIGHTS.md`, which has no `insights/` ancestor DIRECTORY, just
+ * that name as its filename). A doc under one of the three original roots
+ * keeps that category label; every other `.md` file is `'other'`.
  *
  * NOTE: `PromptAssembly.specs` / `RunTrace.specs_read` (contracts/trace.ts)
  * already carry this feature's runtime output — no new field there, only new
  * *values* (repo-qualified `"<owner>/<name>:<path>"` strings, AC-16).
  */
 
-export const ProjectContextCategory = z.enum(['specs', 'docs', 'insights']);
+export const ProjectContextCategory = z.enum(['specs', 'docs', 'insights', 'other']);
 export type ProjectContextCategory = z.infer<typeof ProjectContextCategory>;
 
 /** One markdown document discovered in a repo's local clone (AC-1, AC-2). */

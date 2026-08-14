@@ -54,6 +54,13 @@ describe("ProjectContextPage", () => {
     expect(screen.getByText("docs/architecture.md")).toBeInTheDocument();
   });
 
+  it("lists a discovered .md file outside specs/docs/insights with category 'other' (e.g. a root-level README.md)", () => {
+    docs = [...docs, { path: "README.md", category: "other", chars: 12, used_by_agents: 0 }];
+    renderWithIntl(<ProjectContextPage />);
+    expect(screen.getByText("README.md")).toBeInTheDocument();
+    expect(screen.getByText("other")).toBeInTheDocument();
+  });
+
   it("selects the first document by default and shows its content + used-by count", () => {
     renderWithIntl(<ProjectContextPage />);
     expect(screen.getByRole("heading", { name: "Public API" })).toBeInTheDocument();
