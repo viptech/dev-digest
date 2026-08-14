@@ -71,7 +71,7 @@ of, an actual different model.
 
 Write the findings to `docs/reviews/<date>-pr-brief-plan-cross-model-review.md`
 in a **short** "Context / Findings / Resolution" format — this is a plan
-review, not the implementation retrospective `docs/2026-08-03-intent-layer-review.md`
+review, not the implementation retrospective `docs/reviews/2026-08-03-intent-layer-review.md`
 demonstrates (that file's length/depth is appropriate for a *post-hoc* record
 of what shipped plus two full review passes against a diff; a *pre-code*
 plan review only needs: (1) which plan section each finding targets, (2) the
@@ -149,7 +149,7 @@ Step 1:
   is a real, applied table today (`{pr_id PK, json}` only, confirmed by
   direct read) with **zero application-code readers/writers anywhere in
   `server/src/modules/**`** (same "genuinely empty in practice" situation
-  `docs/2026-08-03-intent-layer-review.md`'s Amendment 1 already confirmed
+  `docs/reviews/2026-08-03-intent-layer-review.md`'s Amendment 1 already confirmed
   for this exact table when it chose `pr_intent` over `pr_brief` for
   Intent Layer storage) — adding `headSha`/`providerUsed`/`modelUsed`
   `NOT NULL` columns with no `DEFAULT` (mirroring `prIntent`'s own
@@ -1174,7 +1174,7 @@ AC-14) with a plausible `tokensIn`/`tokensOut`/`costUsd`; click a
 right file/line (AC-20); reload the page and confirm the brief renders from
 cache with NO new log line (AC-11). Document the exact commands/expected log
 shape as a sibling file alongside this plan when run (same convention as
-`docs/2026-08-03-intent-layer-review.md` and SPEC-01's acceptance-demo
+`docs/reviews/2026-08-03-intent-layer-review.md` and SPEC-01's acceptance-demo
 sibling), not as an automated test.
 
 ## Out of scope

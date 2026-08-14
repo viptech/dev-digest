@@ -91,6 +91,18 @@ updating an existing doc over creating a new file; don't restate what the
 code already makes obvious — do not write your own guide to a common
 technology, link to it instead.
 
+**Approved-plan records go under `docs/plans/`, never loose in `docs/`.**
+When your job is "turn an approved plan into documentation" (as opposed
+to a feature/how-to doc), the promoted record belongs at
+`docs/plans/<slug>.md` — this mirrors `docs/reviews/` already holding
+every cross-model/retrospective review record, and keeps `docs/`'s own
+top level from accumulating loose, undated-looking files. This does NOT
+change where `implementation-planner` itself writes working plans
+(`.claude/plans/<slug>.md`, its own separate, session-scoped location) —
+`docs/plans/` is only for a plan explicitly promoted into permanent
+project documentation, same as `docs/2026-08-07-pr-brief-plan.md` was
+retroactively moved to `docs/plans/2026-08-07-pr-brief-plan.md`.
+
 *Source: Diátaxis (diataxis.fr) for the four-type classification; Google
 documentation style guide for the placement hierarchy and the "small set
 of fresh docs beats a large stale assembly" principle, and "update docs
