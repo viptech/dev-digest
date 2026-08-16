@@ -111,18 +111,37 @@ export class ProjectContextRepository {
       .values(docs.map((d, i) => ({ skillId, repoId: d.repoId, path: d.path, order: i })));
   }
 
-  // ---- usage (Project Context page's "Used by N agents") -------------------
+  // ---- usage (Project Context page's "Used by N agents" / "N skills") ------
 
   /**
-   * Direct-attachment count per path, scoped to one repo — agents only, no
-   * skill-transitive join (Goals: direct count only for v1, OQ7 decision).
+   * Direct-attachment counts per path, scoped to one repo — agent-level and
+   * skill-level counted INDEPENDENTLY (neither folds into the other; no
+   * skill-transitive "effectively used by N agents through a linked skill"
+   * count — that stays out of scope, per SPEC-01's original OQ7 decision).
+   * Both counts are surfaced on the Project Context page now: showing only
+   * the agent count made a doc attached solely to a skill (e.g. this repo's
+   * own `client/INSIGHTS.md`) look completely unused, which read as a bug.
    */
-  async usageCounts(repoId: string): Promise<Map<string, number>> {
-    const rows = await this.db
-      .select({ path: t.agentContextDocs.path, count: sql<number>`count(*)` })
-      .from(t.agentContextDocs)
-      .where(eq(t.agentContextDocs.repoId, repoId))
-      .groupBy(t.agentContextDocs.path);
-    return new Map(rows.map((r) => [r.path, Number(r.count)]));
+  async usageCounts(repoId: string): Promise<Map<string, { agents: number; skills: number }>> {
+    const [agentRows, skillRows] = await Promise.all([
+      this.db
+        .select({ path: t.agentContextDocs.path, count: sql<number>`count(*)` })
+        .from(t.agentContextDocs)
+        .where(eq(t.agentContextDocs.repoId, repoId))
+        .groupBy(t.agentContextDocs.path),
+      this.db
+        .select({ path: t.skillContextDocs.path, count: sql<number>`count(*)` })
+        .from(t.skillContextDocs)
+        .where(eq(t.skillContextDocs.repoId, repoId))
+        .groupBy(t.skillContextDocs.path),
+    ]);
+    const usage = new Map<string, { agents: number; skills: number }>();
+    for (const r of agentRows) usage.set(r.path, { agents: Number(r.count), skills: 0 });
+    for (const r of skillRows) {
+      const existing = usage.get(r.path);
+      if (existing) existing.skills = Number(r.count);
+      else usage.set(r.path, { agents: 0, skills: Number(r.count) });
+    }
+    return usage;
   }
 }

@@ -84,7 +84,63 @@ d('project-context attach/detach/reorder (Testcontainers pg)', () => {
         category: 'specs',
         chars: Buffer.byteLength('# Public API'),
         used_by_agents: 0,
+        used_by_skills: 0,
       },
+    ]);
+
+    await app.close();
+  });
+
+  it('used_by_agents and used_by_skills are counted independently — a doc attached only to a skill is not silently shown as unused (bug caught in live testing)', async () => {
+    const app = await appWith();
+    const repo = await makeRepo(pg.handle.db, workspaceId, cloneA);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Usage Agent', provider: 'openai', model: 'gpt-4.1', system_prompt: 'review' },
+      })
+    ).json();
+    const skill = (
+      await app.inject({
+        method: 'POST',
+        url: '/skills',
+        payload: { name: 'Usage Skill', description: 'd', body: '# Usage Skill' },
+      })
+    ).json();
+
+    // Only the agent attaches it first — used_by_skills must stay 0, not
+    // silently omitted/undefined.
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/context-docs`,
+      payload: { docs: [{ repo_id: repo.id, path: 'specs/public-api.md' }] },
+    });
+    const agentOnly = await app.inject({ method: 'GET', url: `/repos/${repo.id}/context/docs` });
+    expect(agentOnly.json()).toEqual([
+      expect.objectContaining({ used_by_agents: 1, used_by_skills: 0 }),
+    ]);
+
+    // The same doc also attaches to a skill — both counts now reflect their
+    // own, independent attachment, neither one folded into the other.
+    await app.inject({
+      method: 'POST',
+      url: `/skills/${skill.id}/context-docs`,
+      payload: { docs: [{ repo_id: repo.id, path: 'specs/public-api.md' }] },
+    });
+    const both = await app.inject({ method: 'GET', url: `/repos/${repo.id}/context/docs` });
+    expect(both.json()).toEqual([expect.objectContaining({ used_by_agents: 1, used_by_skills: 1 })]);
+
+    // Detach the agent — a skill-only attachment must still show its own
+    // count, not read as completely unused (the exact bug this test guards).
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/context-docs`,
+      payload: { docs: [] },
+    });
+    const skillOnly = await app.inject({ method: 'GET', url: `/repos/${repo.id}/context/docs` });
+    expect(skillOnly.json()).toEqual([
+      expect.objectContaining({ used_by_agents: 0, used_by_skills: 1 }),
     ]);
 
     await app.close();

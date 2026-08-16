@@ -26,8 +26,16 @@ export const ProjectContextDoc = z.object({
    *  `ceil(chars/4)` token estimate while attaching (AC-5); never the
    *  authoritative size used for the actual run-time injection cap. */
   chars: z.number().int(),
-  /** Direct-attachment count on agents only — no skill-transitive join (Goals). */
+  /** Direct-attachment count on agents — no skill-transitive join (a doc
+   *  attached only to a skill that's linked to N agents still counts as 0
+   *  here, not N; see `used_by_skills` for that doc's own, separate,
+   *  direct-attachment count on skills). */
   used_by_agents: z.number().int(),
+  /** Direct-attachment count on skills — the skill-level counterpart to
+   *  `used_by_agents`, counted independently (not folded into either
+   *  number; showing only `used_by_agents` made a doc attached solely to a
+   *  skill look completely unused). */
+  used_by_skills: z.number().int(),
 });
 export type ProjectContextDoc = z.infer<typeof ProjectContextDoc>;
 

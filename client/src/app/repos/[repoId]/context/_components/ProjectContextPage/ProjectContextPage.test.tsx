@@ -18,9 +18,16 @@ vi.mock("@/components/repo-not-found", () => ({
 }));
 
 const refetch = vi.fn();
-let docs: { path: string; category: string; chars: number; used_by_agents: number }[] = [
-  { path: "specs/public-api.md", category: "specs", chars: 40, used_by_agents: 3 },
-  { path: "docs/architecture.md", category: "docs", chars: 20, used_by_agents: 0 },
+type DocFixture = {
+  path: string;
+  category: string;
+  chars: number;
+  used_by_agents: number;
+  used_by_skills: number;
+};
+let docs: DocFixture[] = [
+  { path: "specs/public-api.md", category: "specs", chars: 40, used_by_agents: 3, used_by_skills: 0 },
+  { path: "docs/architecture.md", category: "docs", chars: 20, used_by_agents: 0, used_by_skills: 0 },
 ];
 vi.mock("@/lib/hooks/project-context", () => ({
   useRepoContextDocs: () => ({ data: docs, isLoading: false, isError: false, refetch }),
@@ -33,8 +40,8 @@ afterEach(() => {
   cleanup();
   repoNotFound = false;
   docs = [
-    { path: "specs/public-api.md", category: "specs", chars: 40, used_by_agents: 3 },
-    { path: "docs/architecture.md", category: "docs", chars: 20, used_by_agents: 0 },
+    { path: "specs/public-api.md", category: "specs", chars: 40, used_by_agents: 3, used_by_skills: 0 },
+    { path: "docs/architecture.md", category: "docs", chars: 20, used_by_agents: 0, used_by_skills: 0 },
   ];
 });
 
@@ -55,7 +62,7 @@ describe("ProjectContextPage", () => {
   });
 
   it("lists a discovered .md file outside specs/docs/insights with category 'other' (e.g. a root-level README.md)", () => {
-    docs = [...docs, { path: "README.md", category: "other", chars: 12, used_by_agents: 0 }];
+    docs = [...docs, { path: "README.md", category: "other", chars: 12, used_by_agents: 0, used_by_skills: 0 }];
     renderWithIntl(<ProjectContextPage />);
     expect(screen.getByText("README.md")).toBeInTheDocument();
     expect(screen.getByText("other")).toBeInTheDocument();
@@ -66,6 +73,23 @@ describe("ProjectContextPage", () => {
     expect(screen.getByRole("heading", { name: "Public API" })).toBeInTheDocument();
     expect(screen.getByText("contract text")).toBeInTheDocument();
     expect(screen.getByText("used by 3 agents")).toBeInTheDocument();
+  });
+
+  it("also shows the skill-attachment count alongside the agent count — a doc attached only to a skill must not look unused (bug fix)", () => {
+    docs = [
+      { path: "specs/public-api.md", category: "specs", chars: 40, used_by_agents: 3, used_by_skills: 0 },
+      { path: "docs/architecture.md", category: "docs", chars: 20, used_by_agents: 0, used_by_skills: 0 },
+      { path: "client/INSIGHTS.md", category: "insights", chars: 30, used_by_agents: 0, used_by_skills: 1 },
+    ];
+    renderWithIntl(<ProjectContextPage />);
+    fireEvent.click(screen.getByText("client/INSIGHTS.md"));
+    expect(screen.getByText("used by 0 agents")).toBeInTheDocument();
+    expect(screen.getByText("1 skill")).toBeInTheDocument();
+  });
+
+  it("hides the skill-attachment count entirely when it's zero — no '0 skills' clutter", () => {
+    renderWithIntl(<ProjectContextPage />);
+    expect(screen.queryByText(/skill/)).not.toBeInTheDocument();
   });
 
   it("clicking a row selects it", () => {

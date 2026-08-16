@@ -36,5 +36,8 @@ export const s = {
   } satisfies CSSProperties,
   detailHeader: { display: "flex", alignItems: "center", gap: 12, marginBottom: 16 } satisfies CSSProperties,
   detailPath: { fontSize: 15, fontWeight: 700, fontFamily: "var(--font-mono)" } satisfies CSSProperties,
-  usedBy: { marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  // Wrapper pushes the whole (agents + skills) count group right; each
+  // individual count span stays plain, no marginLeft of its own.
+  usedByGroup: { marginLeft: "auto", display: "flex", gap: 10 } satisfies CSSProperties,
+  usedBy: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
 } as const;

@@ -94,7 +94,12 @@ export function ProjectContextPage() {
                   <div style={s.detailHeader}>
                     <span style={s.detailPath}>{selected.path}</span>
                     <Badge color={CATEGORY_COLOR[selected.category]}>{selected.category}</Badge>
-                    <span style={s.usedBy}>{t("usedBy", { n: selected.used_by_agents })}</span>
+                    <span style={s.usedByGroup}>
+                      <span style={s.usedBy}>{t("usedBy", { n: selected.used_by_agents })}</span>
+                      {selected.used_by_skills > 0 && (
+                        <span style={s.usedBy}>{t("usedBySkills", { n: selected.used_by_skills })}</span>
+                      )}
+                    </span>
                   </div>
                   {contentLoading ? <Skeleton /> : <Markdown>{content?.content ?? ""}</Markdown>}
                 </>

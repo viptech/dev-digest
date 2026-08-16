@@ -257,19 +257,38 @@ describe('Project Context (SPEC-01) contracts', () => {
       category: 'specs',
       chars: 1240,
       used_by_agents: 3,
+      used_by_skills: 1,
     });
     expect(doc.category).toBe('specs');
   });
 
   it("ProjectContextDoc accepts category 'other' — every .md file in the repo is in scope now, not just specs/docs/insights", () => {
     expect(() =>
-      ProjectContextDoc.parse({ path: 'x.md', category: 'other', chars: 0, used_by_agents: 0 }),
+      ProjectContextDoc.parse({
+        path: 'x.md',
+        category: 'other',
+        chars: 0,
+        used_by_agents: 0,
+        used_by_skills: 0,
+      }),
     ).not.toThrow();
   });
 
   it('ProjectContextDoc rejects a category outside the known set entirely', () => {
     expect(() =>
-      ProjectContextDoc.parse({ path: 'x.md', category: 'bogus', chars: 0, used_by_agents: 0 }),
+      ProjectContextDoc.parse({
+        path: 'x.md',
+        category: 'bogus',
+        chars: 0,
+        used_by_agents: 0,
+        used_by_skills: 0,
+      }),
+    ).toThrow();
+  });
+
+  it('ProjectContextDoc rejects a payload missing used_by_skills (both usage counts are required, independent fields)', () => {
+    expect(() =>
+      ProjectContextDoc.parse({ path: 'x.md', category: 'specs', chars: 0, used_by_agents: 0 }),
     ).toThrow();
   });
 

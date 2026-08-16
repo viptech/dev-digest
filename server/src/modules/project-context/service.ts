@@ -26,6 +26,7 @@ export interface ProjectContextDocDto {
   category: ProjectContextCategory;
   chars: number;
   used_by_agents: number;
+  used_by_skills: number;
 }
 
 export interface ContextDocLinkDto {
@@ -63,7 +64,9 @@ export class ProjectContextService {
 
   /**
    * AC-1, AC-2: every discovered `.md` document for `repoId`, with its
-   * server-computed category and direct-attachment usage count.
+   * server-computed category and direct-attachment usage counts — both
+   * `used_by_agents` and `used_by_skills`, counted independently (see
+   * `usageCounts`'s own doc-comment).
    * AC-3: no clone yet → `[]`, not an error. `undefined` = repo not in
    * `workspaceId` (404-equivalent, same convention as `AgentsService.get`).
    */
@@ -76,12 +79,16 @@ export class ProjectContextService {
     if (!repo.clonePath) return [];
     const discovered = await discoverContextDocs(repo.clonePath);
     const usage = await this.repo.usageCounts(repoId);
-    return discovered.map((d) => ({
-      path: d.path,
-      category: d.category,
-      chars: d.chars,
-      used_by_agents: usage.get(d.path) ?? 0,
-    }));
+    return discovered.map((d) => {
+      const u = usage.get(d.path);
+      return {
+        path: d.path,
+        category: d.category,
+        chars: d.chars,
+        used_by_agents: u?.agents ?? 0,
+        used_by_skills: u?.skills ?? 0,
+      };
+    });
   }
 
   /**
