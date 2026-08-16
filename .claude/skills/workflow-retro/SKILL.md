@@ -68,6 +68,27 @@ Fields worth knowing:
 - `batch_histogram` — tool calls per assistant message; `batch: 1` dominating
   means almost no parallel tool use.
 - `undercount_check` — parent-reported vs actual, kept as a standing check.
+- per-agent `duration_s` — wall-clock seconds from that agent's first to last
+  transcript record, **including idle waiting** (session left open, next-day
+  continuation). Don't report this as work time — it's `main` on a session
+  spanning days that badly inflates this number.
+- per-agent `active_duration_s` (**report this one in the Агенти table**) —
+  sum of gaps between consecutive transcript events that are ≤ `idle_gap_s`
+  (600s / 10 min by default, tune via `WORKFLOW_RETRO_IDLE_GAP_S` if a session
+  has legitimately long tool calls). Gaps longer than that are dropped
+  entirely, not clamped. `idle_s` / `idle_gaps` show how much was cut and how
+  many breaks caused it — call these out in Примітки when `idle_s` is large
+  relative to `active_duration_s` (typically true for `main` on a multi-day
+  session, rarely true for a subagent that ran start-to-finish).
+- per-agent `skills` / session-level `skills_used` — which `Skill` tool calls
+  each agent made (name + count), and the same rolled up across every agent in
+  the session (not just the top-N in `agents`). An agent that never called
+  `Skill` has an empty list — report it as "—", not as a gap in the data.
+- per-agent `model` — for subagents, the model set on dispatch (from the
+  agent's meta, e.g. `claude-sonnet-5`); for `main`, the unique set of models
+  seen across its own requests, comma-joined. A `<synthetic>` entry in that
+  set is a compaction/summary request, not a second model doing real work —
+  don't report it as a model switch.
 
 ## Step 2 — interpret
 
@@ -94,42 +115,73 @@ so — do not infer difficulty from token counts alone.
 
 ## Step 3 — report to chat
 
-Lead with the actions, not the table. Structure:
+**The report is written in Ukrainian** — headers, prose and table content
+alike (only field names / file paths / skill ids stay as-is). Lead with the
+actions, not the table. Structure:
 
 ```markdown
-## Retro — <session short id>
-**Scope**: whole session, N agents (max depth D), <wall clock>
-**Cost**: <weighted> weighted (<raw> raw, <cache %> cache read)
+## Ретроспектива — <короткий id сесії>
+**Обсяг**: уся сесія, N агентів (макс. глибина D), <час виконання>
+**Вартість**: <weighted> зважених токенів (<raw> сирих, <cache %> кешованих читань)
 
-### Actions
-1. <concrete change> — because <signal, with the number>
+### Дії
+1. <конкретна зміна> — бо <сигнал, із числом>
 2. ...
 
-### Where the cost went
-<top 3-5 agents by weighted, one line each>
+### Агенти
+| Агент | Модель | Тривалість | Скіли | Токени (зважені / сирі) |
+|---|---|---|---|---|
+| implementer/ab12cd34 | claude-sonnet-5 | 4м12с | onion-architecture, zod | 1.2M / 3.4M |
+| test-writer/9f01aa22 | claude-sonnet-5 | 1м50с | — | 210K / 640K |
 
-### Notes
-<parallelism, undercount ratio, anything the data could not answer>
+Один рядок на агента (`agent` + `model` + `active_duration_s` (не
+`duration_s` — той включає простій) + `skills` + `tokens.weighted` /
+`tokens.total` із JSON колектора). Агент без жодного виклику `Skill` отримує
+«—» у колонці «Скіли» — це не пропуск у даних. Якщо `agents_omitted.count` >
+0, додай після таблиці один рядок: скільки агентів не влізло і скільки
+зваженого вони важать разом. Якщо в агента (найчастіше `main`) `idle_s`
+суттєвий відносно `active_duration_s`, згадай це в Примітках — скільки
+простою відсічено і скільки було перерв (`idle_gaps`).
+
+### Куди пішла вартість
+<топ-3–5 агентів за weighted, по одному рядку, з поясненням чому>
+
+### Примітки
+<паралелізм, коефіцієнт недооцінки, усе, на що дані не відповідають>
 ```
 
-Keep it short. Three well-evidenced actions beat ten speculative ones.
+Keep it short. Three well-evidenced actions beat ten speculative ones — the
+per-agent table is the added detail, not a license to pad the narrative
+sections.
 
-## Step 4 — append to the ledger
+## Step 4 — save the full report to file
+
+The chat report from Step 3 does not persist — it scrolls out of history.
+Write the **exact same markdown** (Actions, the Агенти table, Куди пішла
+вартість, Примітки) to `docs/retros/sessions/<short session id>.md` (create
+`docs/retros/sessions/` if missing). One file per session, named after the
+same short id used in the ledger's Session column — this is what Step 5 links
+to, so write this file before appending the ledger row.
+
+## Step 5 — append to the ledger, linking the report
 
 Append **one row** to `docs/retros/ledger.md` (create the file with the header
 below if missing). Append only — never rewrite or reorder past rows; the point
-is the trend.
+is the trend. The Session cell is a link to the file from Step 4, not bare
+text:
 
 ```markdown
 | Date | Session | Agents | Weighted | Raw | Cache | Tools | Wall | Top action |
 |---|---|---|---|---|---|---|---|---|
-| 2026-08-11 | 0cc0c9d6 | 90 (d2) | 49.9M | 103M | 94% | 1204 | 1h32m | Preload knowledge.ts — 12 agents read it separately |
+| 2026-08-11 | [0cc0c9d6](sessions/0cc0c9d6.md) | 90 (d2) | 49.9M | 103M | 94% | 1204 | 1h32m | Preload knowledge.ts — 12 agents read it separately |
 ```
 
-One line, deep-mode numbers only. The full analysis stays in chat; the ledger
-exists to show movement between runs, so if a row would not be comparable to
-the ones above it, note why in the Top action cell rather than padding the
-table with new columns.
+One line, deep-mode numbers only, same as before — the ledger is still the
+trend view, not the detail view. What changed: the per-agent breakdown from
+Step 3 is no longer chat-only, so it survives past the current conversation
+instead of disappearing once you write the one-line summary. If a row would
+not be comparable to the ones above it, note why in the Top action cell rather
+than padding the table with new columns.
 
 ## Common mistakes
 
@@ -141,3 +193,6 @@ table with new columns.
   collector's output once — the retro then costs more than what it saves.
 - Reporting every row of `duplicate_reads` as a problem. Two agents reading
   `CLAUDE.md` is fine; twelve agents reading the same contract file is not.
+- Appending the ledger row without first writing the Step 4 report file — the
+  Session cell then links to nothing, and the per-agent detail is gone the
+  moment the chat scrolls away.

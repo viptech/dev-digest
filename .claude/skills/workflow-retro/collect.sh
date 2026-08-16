@@ -39,6 +39,12 @@ PROJECT_DIR="${HOME}/.claude/projects/${PROJECT_SLUG}"
 TOP=12
 if [[ "${1:-}" == "--full" ]]; then TOP=100000; shift; fi
 
+# Gaps between consecutive transcript events longer than this are idle time
+# (waiting on the user, session left open overnight) and are excluded from
+# active_duration_s rather than counted as work. Tune via env if a session has
+# unusually long legitimate tool calls (big builds, long test suites).
+IDLE_GAP_S="${WORKFLOW_RETRO_IDLE_GAP_S:-600}"
+
 SESSION="${1:-}"
 if [[ -z "$SESSION" ]]; then
   newest=""
@@ -63,12 +69,17 @@ agent_json() {
   local file="$1" label="$2" agentid="$3" atype="$4" depth="$5" parent="$6" model="$7"
   jq -s \
     --arg label "$label" --arg agentid "$agentid" --arg atype "$atype" \
-    --arg depth "$depth" --arg parent "$parent" --arg model "$model" '
+    --arg depth "$depth" --arg parent "$parent" --arg model "$model" \
+    --argjson idle_gap_s "$IDLE_GAP_S" '
+    def epoch: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
     (map(select(.type == "assistant" and .message.usage != null))
       | group_by(.requestId) | map(.[0])) as $reqs
     | map(select(.type == "assistant" and (.message.content | type == "array"))) as $arecs
     | [$arecs[].message.content[]? | select(.type == "tool_use")] as $tools
-    | [.[].timestamp | select(. != null)] as $ts
+    | ([.[].timestamp | select(. != null)] | sort) as $ts
+    | (if ($ts | length) > 1
+       then [range(0; ($ts | length) - 1) | (($ts[.+1] | epoch) - ($ts[.] | epoch))]
+       else [] end) as $gaps
     | ($arecs | group_by(.message.id)
         | map([.[].message.content[]? | select(.type == "tool_use")] | length)
         | map(select(. > 0))) as $batches
@@ -90,10 +101,23 @@ agent_json() {
         tool_calls: ($tools | length),
         tools: ($tools | group_by(.name)
                  | map({name: .[0].name, n: length}) | sort_by(-.n)),
+        skills: ($tools | map(select(.name == "Skill"))
+                  | map(.input.skill // "unknown")
+                  | group_by(.) | map({skill: .[0], n: length}) | sort_by(-.n)),
         files_read: ([$tools[] | select(.name == "Read") | .input.file_path // empty] | unique),
         batches: $batches,
         start: ($ts | min),
-        end:   ($ts | max)
+        end:   ($ts | max),
+        # Wall-clock span, first to last record — includes idle waiting
+        # (session left open, next-day continuation). Not work time; see
+        # active_duration_s for that.
+        duration_s: (if ($ts | length) > 0 then (($ts | max | epoch) - ($ts | min | epoch)) else null end),
+        # Sum of inter-event gaps <= idle_gap_s. Gaps longer than that are
+        # excluded entirely rather than counted as work — see idle_s/idle_gaps
+        # for how much was cut and how many breaks that was.
+        active_duration_s: ($gaps | map(select(. <= $idle_gap_s)) | add // 0),
+        idle_s:            ($gaps | map(select(. >  $idle_gap_s)) | add // 0),
+        idle_gaps:         ($gaps | map(select(. >  $idle_gap_s)) | length)
       }
     | .tokens.total = (.tokens.input + .tokens.output + .tokens.cache_read + .tokens.cache_create)
     # Billable-weighted, in units of base input tokens. Anthropic ratios are
@@ -167,6 +191,15 @@ agent_json() {
                        | {count: length,
                           weighted: (map(.tokens.weighted) | add // 0),
                           total:    (map(.tokens.total)    | add // 0)}),
+      # Skills invoked, across ALL agents (not just the top-N above) — the
+      # per-agent .skills field only fans out to the truncated `agents` list,
+      # so this is the one place to see the full picture on a large session.
+      skills_used: ([$agents[] | .agent as $ag | .skills[]? | {skill: .skill, n: .n, agent: $ag}]
+                    | group_by(.skill)
+                    | map({skill: .[0].skill,
+                           n: (map(.n) | add),
+                           agents: (map(.agent) | unique)})
+                    | sort_by(-.n)),
       # Launch order — the "which agent ran when" question. One string per agent
       # ("HH:MM:SS  agent  <dur>s  w=<weighted>"), because for a 90-agent session
       # the same data as objects costs 3x the tokens for no extra signal.
