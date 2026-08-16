@@ -1,17 +1,43 @@
 {
   "title": "Onboarding Tour",
+  "headerTitle": "Onboarding for {repo}",
   "sections": "Sections",
   "sectionCount": "{count} sections",
   "regenerate": "Regenerate",
   "regenerating": "Regenerating…",
   "unknownError": "Unknown error",
+  "onThisPage": "On this page",
+  "lastRefreshed": "Last refreshed {time}",
+  "shareLink": "Share link",
+  "linkCopied": "Link copied",
+  "noTasks": "No suggested first tasks available.",
+  "openOnGithub": "Open",
+  "copyCommand": "Copy command",
+  "copied": "Copied",
   "generate": {
     "title": "Generate onboarding tour",
-    "body": "DevDigest indexes the repo and specs, then writes a 5-section guided tour: overview, architecture, key modules, getting started, and conventions & gotchas.",
+    "body": "DevDigest indexes the repo, then writes a 5-section guided tour: architecture, critical paths, local setup, reading order, and first tasks. Takes 30–60s and ~5,000 tokens.",
     "cta": "Generate onboarding tour",
     "generating": "Generating…"
   },
   "loadError": {
     "title": "Couldn’t load the onboarding tour"
+  },
+  "degraded": {
+    "banner": {
+      "flag_off": "Repo indexing is turned off — showing raw facts, not a written tour.",
+      "index_failed": "Indexing failed — showing raw facts, not a written tour.",
+      "index_partial": "Index degraded: partial — showing raw facts, not a written tour.",
+      "repo_too_large": "Repo is too large to fully index — showing raw facts, not a written tour.",
+      "no_data": "Not enough indexed data yet — showing raw facts, not a written tour.",
+      "llm_call_failed": "Couldn’t generate the tour this time — showing raw facts instead."
+    }
+  },
+  "kinds": {
+    "architecture": "Architecture",
+    "critical_paths": "Critical Paths",
+    "local_setup": "Local Setup",
+    "reading_order": "Reading Order",
+    "first_tasks": "First Tasks"
   }
 }

@@ -38,12 +38,56 @@ export const PrBriefReviewRollup = z.object({
 });
 export type PrBriefReviewRollup = z.infer<typeof PrBriefReviewRollup>;
 
+// ---- Risks (also used, unmodified, by the LLM-generated Brief below) ----
+export const RiskSeverity = z.enum(['high', 'medium', 'low']);
+export type RiskSeverity = z.infer<typeof RiskSeverity>;
+
+export const Risk = z.object({
+  kind: z.string(),
+  title: z.string(),
+  explanation: z.string(),
+  severity: RiskSeverity,
+  file_refs: z.array(z.string()),
+});
+export type Risk = z.infer<typeof Risk>;
+
+export const Risks = z.object({
+  risks: z.array(Risk),
+});
+export type Risks = z.infer<typeof Risks>;
+
+// ---- Brief (SPEC-04, `POST /pulls/:id/brief`) ----
+export const RiskLevel = z.enum(['high', 'medium', 'low']);
+export type RiskLevel = z.infer<typeof RiskLevel>;
+
+export const ReviewFocusItem = z.object({
+  path: z.string(),
+  line: z.number().int().nullish(),
+  note: z.string(),
+});
+export type ReviewFocusItem = z.infer<typeof ReviewFocusItem>;
+
+export const Brief = z.object({
+  what: z.string(),
+  why: z.string(),
+  risk_level: RiskLevel,
+  risks: z.array(Risk),
+  review_focus: z.array(ReviewFocusItem),
+});
+export type Brief = z.infer<typeof Brief>;
+
 /**
  * `GET /pulls/:id/brief`. `review_rollup` is `null` when the PR has never
- * been reviewed (mirrors `PrIntentRecord | null`).
+ * been reviewed (mirrors `PrIntentRecord | null`). `brief` is `null` until
+ * generated (or stale relative to the PR's current `head_sha` — SPEC-04
+ * AC-8). `brief_degraded` is `true` only for the transient, never-persisted
+ * "LLM call failed" case (SPEC-04 AC-13) — omitted/`undefined` otherwise.
  */
 export const PrBriefSnapshot = z.object({
   review_rollup: PrBriefReviewRollup.nullable(),
+  brief: Brief.nullable(),
+  brief_generated_at: z.string().nullable(),
+  brief_degraded: z.boolean().optional(),
 });
 export type PrBriefSnapshot = z.infer<typeof PrBriefSnapshot>;
 
@@ -108,24 +152,6 @@ export const BlastRadius = z.object({
   reason: BlastDegradedReason.optional(),
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
-
-// ---- Risks ----
-export const RiskSeverity = z.enum(['high', 'medium', 'low']);
-export type RiskSeverity = z.infer<typeof RiskSeverity>;
-
-export const Risk = z.object({
-  kind: z.string(),
-  title: z.string(),
-  explanation: z.string(),
-  severity: RiskSeverity,
-  file_refs: z.array(z.string()),
-});
-export type Risk = z.infer<typeof Risk>;
-
-export const Risks = z.object({
-  risks: z.array(Risk),
-});
-export type Risks = z.infer<typeof Risks>;
 
 // ---- PR History ----
 export const PrHistoryItem = z.object({

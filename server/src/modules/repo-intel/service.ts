@@ -27,7 +27,8 @@ import {
   langForFile,
 } from '../../adapters/astgrep/index.js';
 import { readFile } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname } from 'node:path';
+import { resolveInClone } from './path-guard.js';
 import { RepoIntelRepository, type FullSymbolRow } from './repository.js';
 import type {
   BlastCallerRow,
@@ -37,6 +38,8 @@ import type {
   IndexResult,
   IndexState,
   RefRow,
+  RepoFacts,
+  RepoFactsResult,
   RepoIntel,
   RepoMapResult,
   SignatureRow,
@@ -50,6 +53,7 @@ import {
   MAX_CALLERS_PER_SYMBOL,
   REFRESH_JOB_KIND,
   RESYNC_JOB_KIND,
+  ROUTES_FALLBACK_SCAN_N,
   SUPPORTED_EXT,
 } from './constants.js';
 import { runFullIndex, type IndexPayload } from './pipeline/full.js';
@@ -778,6 +782,115 @@ export class RepoIntelService implements RepoIntel {
     }
     return paths;
   }
+
+  /**
+   * Deterministic repo facts for the onboarding tour (AC-1, 5 of its 6
+   * categories — "structure" is served separately by `getRepoMap`). Uses
+   * only existing facade primitives (`readFiles`, `getAllFileFacts`,
+   * `getIndexState`) — this method IS the facade's own internal
+   * implementation, so it reads the clone directly the same way
+   * `readFiles`/`readClone` already do.
+   */
+  async getRepoFacts(repoId: string): Promise<RepoFactsResult> {
+    const state = await this.getIndexState(repoId);
+
+    const [pkgRows, lockRows, envRows, dockerRows] = await Promise.all([
+      this.readFiles(repoId, ['package.json']),
+      this.readFiles(repoId, ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock']),
+      this.readFiles(repoId, ['.env.example', '.env.sample']),
+      this.readFiles(repoId, ['docker-compose.yml', 'docker-compose.yaml']),
+    ]);
+
+    let dependencies: string[] = [];
+    let devDependencies: string[] = [];
+    let scripts: { name: string; command: string }[] = [];
+    const pkgRow = pkgRows[0];
+    if (pkgRow) {
+      try {
+        const pkg = JSON.parse(pkgRow.content) as {
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+          scripts?: Record<string, string>;
+        };
+        dependencies = Object.keys(pkg.dependencies ?? {});
+        devDependencies = Object.keys(pkg.devDependencies ?? {});
+        // package.json's own key order — no lifecycle reordering at this
+        // layer (that's a UI-presentation concern, moved to the onboarding
+        // module's `orderScriptsForLocalSetup`).
+        scripts = Object.entries(pkg.scripts ?? {}).map(([name, command]) => ({ name, command }));
+      } catch {
+        // malformed package.json — degrade this fact only, never throw.
+      }
+    }
+
+    const lockPath = lockRows[0]?.path;
+    const packageManager: RepoFacts['packageManager'] = lockPath?.includes('pnpm-lock')
+      ? 'pnpm'
+      : lockPath?.includes('package-lock')
+        ? 'npm'
+        : lockPath?.includes('yarn.lock')
+          ? 'yarn'
+          : null;
+
+    const envVarNames: string[] = [];
+    const envRow = envRows[0];
+    if (envRow) {
+      for (const line of envRow.content.split('\n')) {
+        const m = line.match(/^([A-Z0-9_]+)\s*=/);
+        if (m?.[1]) envVarNames.push(m[1]);
+      }
+    }
+
+    const dockerRow = dockerRows[0];
+    const dockerServices = dockerRow ? parseDockerComposeServices(dockerRow.content) : [];
+
+    const routes = await this.getRoutesForFacts(repoId);
+
+    const facts: RepoFacts = {
+      packageManager,
+      dependencies,
+      devDependencies,
+      scripts,
+      routes,
+      envVarNames,
+      dockerServices,
+    };
+
+    if (state.degraded) {
+      return { ...facts, degraded: true, reason: state.degradedReason };
+    }
+    // Non-Node repo AND nothing indexed at all → degrade with 'no_data'
+    // (Edge cases: a merely-missing OPTIONAL file — .env.example,
+    // docker-compose.yml — degrades only that one fact, not the whole result).
+    if (!pkgRow && state.filesIndexed === 0) {
+      return { ...facts, degraded: true, reason: 'no_data' };
+    }
+    return facts;
+  }
+
+  /**
+   * `routes` fact: flatten+dedupe every indexed file's precomputed
+   * `file_facts.endpoints` (written at index time by
+   * `extractEndpoints`/`extractCrons` over EVERY walked file — see
+   * `pipeline/full.ts` / `pipeline/incremental.ts`). FALLBACK only when
+   * `file_facts` is empty for the repo: a bounded per-file re-scan over the
+   * same ranked-paths set `getConventionSamples` already reads, never a
+   * fresh unbounded walk.
+   */
+  private async getRoutesForFacts(repoId: string): Promise<string[]> {
+    const allFacts = await this.repo.getAllFileFacts(repoId);
+    if (allFacts.length > 0) {
+      const routes = new Set<string>();
+      for (const f of allFacts) for (const e of f.endpoints) routes.add(e);
+      return [...routes];
+    }
+    const paths = await this.getConventionSamples(repoId, ROUTES_FALLBACK_SCAN_N);
+    if (paths.length === 0) return [];
+    const files = await this.readFiles(repoId, paths);
+    const routes = new Set<string>();
+    for (const f of files) for (const e of extractEndpoints(f.content)) routes.add(e);
+    return [...routes];
+  }
 }
 
 /** How many top-ranked files seed `getCriticalPaths` dependency chains. */
@@ -838,5 +951,30 @@ function enclosingSymbolName(
 }
 
 async function readClone(clonePath: string, file: string): Promise<string | null> {
-  return readFile(join(clonePath, file), 'utf8').catch(() => null);
+  const resolved = resolveInClone(clonePath, file);
+  if (!resolved) return null;
+  return readFile(resolved, 'utf8').catch(() => null);
+}
+
+/**
+ * Heuristic line-based `docker-compose.yml` services parser (no new YAML
+ * dependency — matches the existing `extractEndpoints`/`extractCrons`
+ * regex-heuristic style): find the `services:` top-level key, then collect
+ * each subsequent 2-space-indented `  <name>:` line until the next 0-indent
+ * key or EOF.
+ */
+function parseDockerComposeServices(content: string): string[] {
+  const services: string[] = [];
+  let inServices = false;
+  for (const raw of content.split('\n')) {
+    if (!inServices) {
+      if (/^services:\s*$/.test(raw)) inServices = true;
+      continue;
+    }
+    if (raw.trim() === '') continue;
+    if (/^\S/.test(raw)) break; // next 0-indent top-level key — block ended
+    const m = raw.match(/^ {2}([A-Za-z0-9_.-]+):/);
+    if (m?.[1]) services.push(m[1]);
+  }
+  return services;
 }

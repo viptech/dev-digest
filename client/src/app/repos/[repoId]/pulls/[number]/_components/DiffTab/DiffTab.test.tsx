@@ -59,4 +59,21 @@ describe("DiffTab", () => {
     expect(screen.queryByText("Core logic · 1 file")).not.toBeInTheDocument();
     expect(screen.getByText("src/service.ts")).toBeInTheDocument();
   });
+
+  it("SPEC-04 T10 — a focusFile prop routes to the matching FileCard's new focus prop, not the old, still-unused scrollToLine prop", () => {
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    renderWithIntl(
+      <DiffTab
+        prId="pr-1"
+        filesCount={1}
+        files={FILES}
+        focusFile={{ path: "src/service.ts", line: null, n: 1 }}
+      />,
+    );
+    // The matching file's card scrolled into view (block: "start" — the
+    // NEW file-level `focus` mechanism, not the old per-line `scrollToLine`
+    // one, which never fires a card-level scroll at all).
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ block: "start" }));
+    spy.mockRestore();
+  });
 });

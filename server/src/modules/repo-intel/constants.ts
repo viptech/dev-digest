@@ -23,6 +23,10 @@ export const EXCLUDED_DIRS = [
   'out',
   'vendor',
   '.git',
+  // Claude Code's own tooling directory (skills, agents, plans, hooks) —
+  // not source code, and its plans/skills are full of unrelated `.md` files
+  // that Project Context discovery (discovery.ts) should never surface.
+  '.claude',
 ] as const;
 
 // --- Read-time limits -------------------------------------------------------
@@ -51,3 +55,12 @@ export const HOTNESS_WINDOW_DAYS = 180;
 export const DEFAULT_REPO_MAP_TOKEN_BUDGET = 1500;
 /** Signatures are trimmed to this many chars in the parse phase (cache stability). */
 export const MAX_SIGNATURE_CHARS = 120;
+
+// --- [T3] onboarding reading-path — repo facts ------------------------------
+/**
+ * `getRepoFacts`'s `routes` fallback (only when `file_facts` is empty for the
+ * repo — e.g. an older index predating that column, or a repo whose full
+ * index never reached the facts-writing step): bounded, ranked-paths re-scan
+ * via `extractEndpoints`, never a fresh unbounded walk.
+ */
+export const ROUTES_FALLBACK_SCAN_N = 200;

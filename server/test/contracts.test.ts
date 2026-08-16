@@ -15,6 +15,12 @@ import {
   Settings,
   Repo,
   PrDetail,
+  ProjectContextDoc,
+  AgentContextDocLink,
+  SkillContextDocLink,
+  SetContextDocsBody,
+  Brief,
+  PrBriefSnapshot,
 } from '@devdigest/shared';
 
 /**
@@ -110,6 +116,44 @@ describe('AI contracts parse fixtures', () => {
     ).not.toThrow();
   });
 
+  it('Brief / ReviewFocusItem — risk-level enum, nullable line', () => {
+    const brief = Brief.parse({
+      what: 'Adds rate limiting to the public /api endpoints.',
+      why: 'Prevents abuse of the unauthenticated webhook receiver.',
+      risk_level: 'medium',
+      risks: [
+        { kind: 'security', title: 't', explanation: 'e', severity: 'high', file_refs: ['a.ts'] },
+      ],
+      review_focus: [
+        { path: 'src/api/public/webhooks.ts', line: null, note: 'New rate-limit branch.' },
+        { path: 'src/rate-limit.ts', line: 42, note: 'Window boundary math.' },
+      ],
+    });
+    expect(brief.risk_level).toBe('medium');
+    expect(brief.review_focus[0]!.line).toBeNull();
+    expect(brief.review_focus[1]!.line).toBe(42);
+    expect(() => Brief.parse({ ...brief, risk_level: 'critical' })).toThrow();
+  });
+
+  it('PrBriefSnapshot — review_rollup present, brief not yet generated', () => {
+    const snapshot = PrBriefSnapshot.parse({
+      review_rollup: {
+        verdict: 'request_changes',
+        score: 61,
+        findings_summary: { counts: { CRITICAL: 1, WARNING: 0, SUGGESTION: 0 }, items: [] },
+        blockers_count: 1,
+        summary: 'Two blockers before merge.',
+        cost_usd: 0.12,
+        tokens_in: 1000,
+        tokens_out: 200,
+      },
+      brief: null,
+      brief_generated_at: null,
+    });
+    expect(snapshot.brief).toBeNull();
+    expect(snapshot.brief_degraded).toBeUndefined();
+  });
+
   it('SmartDiff (data.jsx DIFF)', () => {
     const d = SmartDiff.parse({
       groups: [
@@ -186,6 +230,99 @@ describe('AI contracts parse fixtures', () => {
     });
     expect(trace.tool_calls).toHaveLength(1);
     expect(trace.stats.cost_usd).toBeUndefined();
+  });
+
+  it('RunTrace (SPEC-01): specs_read carries repo-qualified entries, no schema change needed', () => {
+    // AC-16's format is a VALUE convention ("<owner>/<name>:<path>"), not a
+    // schema change — specs_read stays z.array(z.string()); this fixture
+    // pins that the existing schema already accepts the new format.
+    const trace = RunTrace.parse({
+      config: { agent: 'Security Reviewer', version: 'v7', model: 'gpt-4.1', pr: 482, source: 'local' },
+      stats: { duration_ms: 8200, tokens_in: 14820, tokens_out: 1240, findings: 3, grounding: '3/3 passed' },
+      prompt_assembly: { system: 's', user: 'u', specs: '<untrusted source="spec-0">…</untrusted>' },
+      tool_calls: [],
+      raw_output: '{}',
+      memory_pulled: [],
+      specs_read: ['acme/payments-api:specs/public-api.md'],
+      log: [],
+    });
+    expect(trace.specs_read).toEqual(['acme/payments-api:specs/public-api.md']);
+  });
+});
+
+describe('Project Context (SPEC-01) contracts', () => {
+  it('ProjectContextDoc — discovery response shape, chars feeds the UI token estimate', () => {
+    const doc = ProjectContextDoc.parse({
+      path: 'specs/public-api.md',
+      category: 'specs',
+      chars: 1240,
+      used_by_agents: 3,
+      used_by_skills: 1,
+    });
+    expect(doc.category).toBe('specs');
+  });
+
+  it("ProjectContextDoc accepts category 'other' — every .md file in the repo is in scope now, not just specs/docs/insights", () => {
+    expect(() =>
+      ProjectContextDoc.parse({
+        path: 'x.md',
+        category: 'other',
+        chars: 0,
+        used_by_agents: 0,
+        used_by_skills: 0,
+      }),
+    ).not.toThrow();
+  });
+
+  it('ProjectContextDoc rejects a category outside the known set entirely', () => {
+    expect(() =>
+      ProjectContextDoc.parse({
+        path: 'x.md',
+        category: 'bogus',
+        chars: 0,
+        used_by_agents: 0,
+        used_by_skills: 0,
+      }),
+    ).toThrow();
+  });
+
+  it('ProjectContextDoc rejects a payload missing used_by_skills (both usage counts are required, independent fields)', () => {
+    expect(() =>
+      ProjectContextDoc.parse({ path: 'x.md', category: 'specs', chars: 0, used_by_agents: 0 }),
+    ).toThrow();
+  });
+
+  it('AgentContextDocLink / SkillContextDocLink — attach-record shape, repo-qualified (AC-10)', () => {
+    expect(() =>
+      AgentContextDocLink.parse({
+        agent_id: 'a1',
+        repo_id: 'r1',
+        path: 'specs/public-api.md',
+        order: 0,
+        owner: 'acme',
+        name: 'payments-api',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      SkillContextDocLink.parse({
+        skill_id: 's1',
+        repo_id: 'r1',
+        path: 'specs/public-api.md',
+        order: 0,
+        owner: 'acme',
+        name: 'payments-api',
+      }),
+    ).not.toThrow();
+  });
+
+  it('SetContextDocsBody — the set/reorder request body (repo_id + path only, never content)', () => {
+    const body = SetContextDocsBody.parse({
+      docs: [
+        { repo_id: 'r1', path: 'specs/public-api.md' },
+        { repo_id: 'r2', path: 'docs/architecture.md' },
+      ],
+    });
+    expect(body.docs).toHaveLength(2);
   });
 });
 

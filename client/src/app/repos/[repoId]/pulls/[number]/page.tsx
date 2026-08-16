@@ -76,6 +76,17 @@ export default function PRDetailPage() {
     setTab("findings");
   };
 
+  // SPEC-04 (T10) — a Review Focus row (Overview tab) was clicked: switch to
+  // Files changed and scroll/highlight the target file (and line, if known).
+  // Same incrementing-nonce shape as `focusFinding` above, for the same
+  // reason — a second click on the SAME target must still re-trigger the
+  // scroll effect.
+  const [focusFile, setFocusFile] = React.useState<{ path: string; line: number | null; n: number } | null>(null);
+  const openFile = (path: string, line?: number | null) => {
+    setFocusFile((p) => ({ path, line: line ?? null, n: (p?.n ?? 0) + 1 }));
+    setTab("diff");
+  };
+
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
   const allFindings: FindingRecord[] = React.useMemo(
@@ -150,6 +161,7 @@ export default function PRDetailPage() {
             intent={pr.intent}
             repoFullName={repoFullName}
             headSha={pr.head_sha}
+            onOpenFile={openFile}
           />
         )}
 
@@ -187,6 +199,7 @@ export default function PRDetailPage() {
             files={pr.files}
             canComment={pr.status === "open"}
             onOpenFinding={openFinding}
+            focusFile={focusFile}
           />
         )}
 

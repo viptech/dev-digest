@@ -26,6 +26,13 @@ and (b) what to check it against — a diff (e.g. `git diff main...HEAD`)
 or the current working tree. If either is missing, ask rather than guess
 scope.
 
+If the orchestrating session supplies a diff artifact directly (a file
+list or a computed `git diff` output) rather than telling you to derive
+it yourself, treat that artifact as ground truth for *what changed* —
+don't spend a fresh `git diff`/`git status` pass re-deriving it. Reading
+the actual current file content to verify a specific claim still happens
+normally; only the initial "what changed" discovery is skipped.
+
 *Source: code.claude.com/docs/en/best-practices, "Add an adversarial
 review step" — give the subagent the diff and the plan, not the
 reasoning that produced it.*

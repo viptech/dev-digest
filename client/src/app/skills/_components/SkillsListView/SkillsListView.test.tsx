@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../messages/en/skills.json";
+import projectContextMessages from "../../../../../messages/en/projectContext.json";
 
 // AppShell pulls in repo-context/theme/pulls hooks that are unrelated to
 // this view; stub it to a passthrough so the test only exercises the list.
@@ -33,6 +34,11 @@ vi.mock("../../../../lib/hooks/skills", () => ({
   useDeleteSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useImportPreview: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useImportSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSkillContextDocs: () => ({ data: [] }),
+  useSetSkillContextDocs: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("../../../../components/context-doc-picker", () => ({
+  ContextDocPicker: () => null,
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -45,7 +51,10 @@ afterEach(cleanup);
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+    <NextIntlClientProvider
+      locale="en"
+      messages={{ skills: messages, projectContext: projectContextMessages }}
+    >
       {ui}
     </NextIntlClientProvider>,
   );

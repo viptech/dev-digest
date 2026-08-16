@@ -3,7 +3,15 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Agent, AgentSkillLink, AgentStats, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
+import type {
+  Agent,
+  AgentContextDocLink,
+  AgentSkillLink,
+  AgentStats,
+  ModelInfo,
+  Provider,
+  ReviewStrategy,
+} from "@devdigest/shared";
 
 export function useAgents() {
   return useQuery({
@@ -107,6 +115,34 @@ export function useSetAgentSkills(agentId: string) {
     onSuccess: (data) => {
       qc.setQueryData(["agent-skills", agentId], data);
       qc.invalidateQueries({ queryKey: ["agents"] }); // refresh skillCount on the AgentCard
+    },
+  });
+}
+
+// ---- Project Context (SPEC-01) — Agent editor Context tab ----------------
+
+export function useAgentContextDocs(agentId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["agent-context-docs", agentId],
+    queryFn: () => api.get<AgentContextDocLink[]>(`/agents/${agentId}/context-docs`),
+    enabled: !!agentId,
+  });
+}
+
+/** Replace the whole ordered set of attached docs for an agent (AC-4b, AC-6). */
+export function useSetAgentContextDocs(agentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (docs: { repo_id: string; path: string }[]) =>
+      api.post<AgentContextDocLink[]>(`/agents/${agentId}/context-docs`, { docs }),
+    onSuccess: (data) => {
+      qc.setQueryData(["agent-context-docs", agentId], data);
+      // Not an unscoped invalidateQueries() — scoped to the exact
+      // "repo-context-docs" query-key head only (SPEC-02 NFR). The mutation
+      // response only reflects the NEW set, so a fully-detached repo would
+      // be missing from it; a predicate on the query key catches that case
+      // too, unlike diffing `data`/`variables` against the old cache.
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === "repo-context-docs" });
     },
   });
 }

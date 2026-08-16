@@ -48,6 +48,7 @@ export function FileCard({
   file,
   commenting,
   scrollToLine,
+  focus,
   findings,
   onOpenFinding,
 }: {
@@ -55,8 +56,19 @@ export function FileCard({
   commenting?: DiffCommentApi;
   /** Smart Diff's clickable "N findings" badge — the new-side line number to
      scroll this card open to and highlight. Forces the card open even if it
-     would otherwise auto-collapse (large file). */
+     would otherwise auto-collapse (large file). Declared/consumed since this
+     component's original build, but no caller has ever passed it — kept as
+     its own, independent mechanism, not repurposed for SPEC-04's `focus`
+     below (which has different semantics: a nullable `line`, and a nonce
+     for repeat-click re-triggering that `scrollToLine` never needed). */
   scrollToLine?: number | null;
+  /** SPEC-04 (T10) Review Focus click target — file-level scroll/open,
+     independent of `scrollToLine`. `line: null` still force-opens and
+     scrolls to the CARD itself, just highlights no individual line (a
+     path-only `review_focus` item, the correct degrade). `n` is an
+     incrementing nonce so a second click on the SAME target re-triggers
+     the scroll even though every other field is identical. */
+  focus?: { line: number | null; n: number } | null;
   /** Smart Diff — this file's findings (line + severity), rendered as an
      inline badge on each matching line. */
   findings?: SmartDiffFinding[];
@@ -68,11 +80,24 @@ export function FileCard({
   const [open, setOpen] = React.useState(
     (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
   );
+  const cardRef = React.useRef<HTMLDivElement>(null);
   // A finding badge click always wants to see the line, regardless of the
   // file's auto-expand default.
   React.useEffect(() => {
     if (scrollToLine != null) setOpen(true);
   }, [scrollToLine]);
+  // SPEC-04 T10 — independent of the effect above. Force-open + scroll the
+  // CARD itself into view regardless of whether `focus.line` is known (the
+  // `CodeLine`-level highlight below only fires when it is). Keyed on the
+  // NONCE, not on `focus`/`focus.line`, so a repeat click on the same
+  // file+line still re-scrolls.
+  React.useEffect(() => {
+    if (focus && cardRef.current) {
+      setOpen(true);
+      cardRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.n]);
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
   const findingByLineMap = React.useMemo(() => findingByLine(findings), [findings]);
 
@@ -92,7 +117,7 @@ export function FileCard({
     : 0;
 
   return (
-    <div style={s.fileCard}>
+    <div ref={cardRef} style={s.fileCard}>
       <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />
@@ -137,7 +162,11 @@ export function FileCard({
                 path={file.path}
                 threads={threadsForLine(ln, matched)}
                 commenting={commenting}
-                highlight={scrollToLine != null && ln.newNo === scrollToLine}
+                highlight={
+                  (scrollToLine != null && ln.newNo === scrollToLine) ||
+                  (focus?.line != null && ln.newNo === focus.line)
+                }
+                focusNonce={focus?.n}
                 finding={ln.newNo != null ? findingByLineMap.get(ln.newNo) : undefined}
               />
             ))

@@ -14,9 +14,15 @@ import { FileCard } from "../FileCard";
 export function DiffViewer({
   files,
   commenting,
+  focusFile,
 }: {
   files: PrFile[];
   commenting?: DiffCommentApi;
+  /** SPEC-04 T10 — Review Focus click target, plain passthrough to the ONE
+     matching FileCard's `focus` prop. "Original order" gets the same
+     wiring as Smart Diff for parity: a review-focus click should work
+     regardless of which order the user has selected. */
+  focusFile?: { path: string; line: number | null; n: number } | null;
 }) {
   const t = useTranslations("shell");
   if (!files || files.length === 0) {
@@ -25,7 +31,12 @@ export function DiffViewer({
   return (
     <div style={s.list}>
       {files.map((f, i) => (
-        <FileCard key={i} file={f} commenting={commenting} />
+        <FileCard
+          key={i}
+          file={f}
+          commenting={commenting}
+          focus={f.path === focusFile?.path ? { line: focusFile.line, n: focusFile.n } : null}
+        />
       ))}
     </div>
   );

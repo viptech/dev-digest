@@ -530,6 +530,31 @@ export class RepoIntelRepository {
       );
   }
 
+  /**
+   * ALL persisted per-file facts (endpoints/crons) for a repo — same
+   * `file_facts` table `getFileFacts` reads, but without the `inArray`
+   * filter (every row for the repo, not a caller-supplied subset). Backs
+   * `getRepoFacts`'s `routes` category (T3 onboarding): the indexer already
+   * ran `extractEndpoints`/`extractCrons` over every walked file at index
+   * time (`pipeline/full.ts`, `pipeline/incremental.ts`), so this is a plain
+   * read of already-precomputed data, never a fresh per-file re-scan.
+   */
+  async getAllFileFacts(repoId: string): Promise<IndexerFileFactsRow[]> {
+    const rows = await this.db
+      .select({
+        filePath: t.fileFacts.filePath,
+        endpoints: t.fileFacts.endpoints,
+        crons: t.fileFacts.crons,
+      })
+      .from(t.fileFacts)
+      .where(eq(t.fileFacts.repoId, repoId));
+    return rows.map((r) => ({
+      filePath: r.filePath,
+      endpoints: (r.endpoints as string[]) ?? [],
+      crons: (r.crons as string[]) ?? [],
+    }));
+  }
+
   /** Per-file facts (endpoints/crons) for the given files. */
   async getFileFacts(repoId: string, files: string[]): Promise<IndexerFileFactsRow[]> {
     if (files.length === 0) return [];

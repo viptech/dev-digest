@@ -2,9 +2,9 @@
    Skills tab. Mirrors hooks/agents.ts. */
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Skill, SkillType } from "@devdigest/shared";
+import type { Skill, SkillContextDocLink, SkillType } from "@devdigest/shared";
 
 export function useSkills() {
   return useQuery({
@@ -62,6 +62,60 @@ export function useDeleteSkill() {
       qc.removeQueries({ queryKey: ["skill", id] });
     },
   });
+}
+
+// ---- Project Context (SPEC-01) — Skill drawer "Project context to use" ---
+
+export function useSkillContextDocs(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-context-docs", skillId],
+    queryFn: () => api.get<SkillContextDocLink[]>(`/skills/${skillId}/context-docs`),
+    enabled: !!skillId,
+  });
+}
+
+/** Replace the whole ordered set of attached docs for a skill (AC-7). */
+export function useSetSkillContextDocs(skillId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (docs: { repo_id: string; path: string }[]) =>
+      api.post<SkillContextDocLink[]>(`/skills/${skillId}/context-docs`, { docs }),
+    onSuccess: (data) => {
+      qc.setQueryData(["skill-context-docs", skillId], data);
+      // Scoped predicate, not an unscoped invalidateQueries() — see the
+      // matching comment on useSetAgentContextDocs (hooks/agents.ts).
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === "repo-context-docs" });
+    },
+  });
+}
+
+/**
+ * Context docs for a SET of skills at once (SPEC-02, T4) — backs the Agent
+ * editor's Context tab aggregate badge, which needs every enabled linked
+ * skill's docs to compute the combined "own + from skills" count. Mirrors
+ * `useContextDocsCharsMap`'s `useQueries` shape (`hooks/project-context.ts`):
+ * one query per id, using the SAME query key shape as `useSkillContextDocs`
+ * (`["skill-context-docs", skillId]`) so the cache is shared and viewing a
+ * skill's own drawer never double-fetches. Calling `useSkillContextDocs` once
+ * per item inside a `.map()` would violate the rules of hooks here (the
+ * number of linked skills can change across renders) — `useQueries` is the
+ * safe, variable-length-list equivalent.
+ */
+export function useSkillsContextDocs(skillIds: string[]): Map<string, SkillContextDocLink[]> {
+  const results = useQueries({
+    queries: skillIds.map((skillId) => ({
+      queryKey: ["skill-context-docs", skillId],
+      queryFn: () => api.get<SkillContextDocLink[]>(`/skills/${skillId}/context-docs`),
+    })),
+  });
+  const map = new Map<string, SkillContextDocLink[]>();
+  for (let i = 0; i < skillIds.length; i++) {
+    const skillId = skillIds[i];
+    const docs = results[i]?.data;
+    if (!skillId || !docs) continue;
+    map.set(skillId, docs);
+  }
+  return map;
 }
 
 export interface ImportPreviewResult {

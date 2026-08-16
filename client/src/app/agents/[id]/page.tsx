@@ -9,10 +9,16 @@ import { Button, Dropdown, ErrorState, Skeleton, Icon, Badge } from "@devdigest/
 import { AppShell } from "../../../components/app-shell";
 import { AgentCard } from "../_components/AgentCard";
 import { AgentEditor } from "./_components/AgentEditor";
+import { TABS } from "./_components/AgentEditor/constants";
 import { useAgents, useAgent, useUpdateAgent } from "../../../lib/hooks/agents";
 import { ApiError } from "../../../lib/api";
 
-const VALID_TABS = ["config", "skills", "evals", "stats"];
+// Derived from AgentEditor's own TABS (not a separately hand-maintained
+// list) — a bug from SPEC-01 ("?tab=context" silently fell back to
+// "config" because this list was hardcoded and never updated when the
+// Context tab was added) showed that keeping two copies in sync by hand
+// doesn't work.
+const VALID_TABS = TABS.map((t) => t.key);
 
 export default function AgentEditorPage() {
   const params = useParams<{ id: string }>();

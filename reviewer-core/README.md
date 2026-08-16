@@ -28,10 +28,14 @@ in the diff is dropped, so the engine can't hallucinate locations. The score is
 recomputed deterministically from the **surviving** findings, not trusted from the
 model. `review/run.ts` orchestrates the run (single-pass by default).
 
-The engine also accepts optional prompt slots the **course lessons** start
-feeding it — `skills` (L02), `memory` (L07), `specs` (L05), `callers` — plus a
-`reduce()`/map-reduce path and a `toReview()` CI payload helper used from L06.
-In the starter the server passes only the diff, system prompt, and repo map; the
+The engine also accepts optional prompt slots the **course lessons** feed it —
+`skills` (L02), `callers` (L04, via `repo-intel`), `specs` (L05 — manual
+per-agent/per-skill `.md` attachment, SPEC-01: `server/src/modules/reviews/
+run-executor.ts`'s `buildProjectContextDigest` resolves and passes these; no
+change needed here, `assemblePrompt` already wrapped each entry with
+`wrapUntrusted()`), `memory` (L07) — plus a `reduce()`/map-reduce path and a
+`toReview()` CI payload helper used from L06. In the bare starter (before any
+lesson) the server passes only the diff, system prompt, and repo map; the
 extra slots are omitted, so `assemblePrompt` simply leaves those sections out.
 
 ## Public API

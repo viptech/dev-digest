@@ -59,3 +59,15 @@ README каталогу скілів обіцяє `.cursor/skills/ → ../.claud
 Доказ: server/src/vendor/shared/contracts/platform.ts:158-201 vs
 client/src/vendor/shared/contracts/platform.ts (до фіксу цього ж дня не мав
 `findings_summary` взагалі)
+
+## 2026-08-11 · gotcha
+**Порядок секцій у `.claude/agents/README.md` — не алфавітний, а конвеєрний**
+Секції йдуть у порядку хендофу (`researcher` → `implementation-planner` →
+`implementer` → `test-writer` → `architecture-reviewer` → `plan-verifier` →
+`doc-writer`), як описано в секції "Хендоф" унизу того ж файлу, і збігається
+з порядком у заголовку `docs/claude-code-agents.md:1`. При перейменуванні чи
+додаванні агента зберігай його позицію в конвеєрі — не "виправляй" на
+алфавітний порядок (я спершу помилково запланував саме це при перейменуванні
+`planner.md` → `implementation-planner.md`, довелось відкотити рішення після
+повторного читання файлу).
+Доказ: .claude/agents/README.md:200-211

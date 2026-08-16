@@ -167,3 +167,117 @@ server- і client-копіях — легко забути оновити одн
 (вендор-дублювання схем, не спільний пакет).
 Доказ: server/src/vendor/shared/contracts/brief.ts (`SmartDiffFinding`),
 client/src/vendor/shared/contracts/brief.ts (та ж схема)
+
+## 2026-08-13 · gotcha
+**Агрегатний бейдж `ContextTab.tsx` і власний бейдж `ContextDocPicker` навмисно
+показують ІДЕНТИЧНИЙ текст, коли `fromSkills === 0` — `getByText` тоді падає
+з "multiple elements found"**
+`aggregateBadge` ("{count} attached") і `ContextDocPicker`'s `attachedBadge`
+("{n} attached") — той самий рядок-формат. Коли в агента нема enabled linked
+skills (або вони не додають нових документів), `total === own`, тож на сторінці
+рендериться два однакових текстових вузли ("N attached") одночасно. Це не баг
+верстки, а прямий наслідок AC-24/Edge-case дизайну (без skills — тільки
+власний рахунок, число просто дублюється в двох бейджах). У тестах, де
+`fromSkills === 0`, треба `screen.getAllByText(...)` з перевіркою довжини
+(2), а не `getByText` — інакше тест ламається саме тоді, коли фіча працює
+правильно.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/ContextTab.test.tsx
+(тести "renders the agent's attached document", "excludes a disabled linked
+skill's docs...", "renders no breakdown line...")
+
+## 2026-08-13 · fix
+**`<Markdown>` рендерив h1-h6/ul/ol/li/blockquote/hr/pre/table як звичайний
+текст — не бракувало react-markdown, бракувало `components`-оверрайдів**
+Tailwind preflight (`@import "tailwindcss"` глобально) зануляє дефолтний
+font-size/weight/margin для ЦИХ тегів; `Markdown` мав кастомні стилі лише
+для `p`/`strong`/`code`/`a`, тож будь-який заголовок/список/цитата/код-блок
+у прев'ю `.md`-документа (Project Context page, SPEC-01/SPEC-02) виглядав
+візуально ідентично суцільному абзацу — доки хтось не відкрив реальний
+багатосекційний документ. Додано явні оверрайди для решти тегів. Пастка №1:
+перша спроба рендерити заголовки через `<div>` (не справжній `<hN>`) зламала
+`ProjectContextPage.test.tsx`'s `getByRole("heading", ...)` — семантичний
+тег обов'язковий, не лише візуальний розмір. Пастка №2: react-markdown v9
+більше НЕ передає `inline`-прапорець у `code`-рендерер (був у v7/v8) —
+inline vs fenced-блок тепер розрізняється лише за `className` (fenced-код
+отримує `language-xxx` від remark, inline — ніколи).
+Доказ: client/src/vendor/ui/primitives/Markdown.tsx (компонент), 
+client/src/vendor/ui/styles.css:1 (`@import "tailwindcss"`)
+
+## 2026-08-13 · decision
+**Замінює попередній запис від 2026-08-13 про `<Markdown>` — ручні
+per-element `components`-оверрайди прибрано на користь
+`@tailwindcss/typography`'s `.prose`**
+Той самий симптом (h1-h6/списки/цитати/hr/pre без типографіки), той самий
+корінь (Tailwind preflight), але інше рішення: замість вручну стилізованого
+`components`-об'єкта на кожен HTML-тег (крихко — новий remark-gfm конструкт,
+напр. task-list чи footnote, знову виглядав би як голий текст, доки хтось
+не додасть ще один оверрайд), підключено `@tailwindcss/typography` через
+`@plugin "@tailwindcss/typography";` (Tailwind v4, CSS-first конфіг — немає
+`tailwind.config.ts` в цьому проєкті) і клас `.prose` замінив увесь
+`components`-об'єкт у `Markdown.tsx`. Ключове: **не** знадобився окремий
+`.prose-invert`/`dark:`-варіант — застосунок вже тримає тему виключно через
+`[data-theme]``-перемикні CSS custom properties (`--text-primary` тощо), тож
+`.dd-md`'s `--tw-prose-*` мапляться на ці ж токени напряму (`--tw-prose-body:
+var(--text-primary)` і т.д.) — та сама мапа коректна в обох темах без
+дублювання. Побічний ефект типографіки, який довелось придушити: `.prose`
+за замовчуванням обгортає inline `code` в лапки-бектіки (`::before`/`::after`
+з `content: "`"`) — прибрано (`content: none`) і повернуто попередній
+"пігулка"-вигляд лише для inline (`:not(pre code)`), щоб не міняти вже
+усталений візуальний конвеншн.
+Доказ: client/src/vendor/ui/styles.css (`@plugin "@tailwindcss/typography";`
+і `.dd-md` блок з `--tw-prose-*`), client/src/vendor/ui/primitives/Markdown.tsx
+(спрощено до `className="dd-md prose max-w-none"`, без `components` пропу)
+
+## 2026-08-13 · gotcha
+**`<Markdown>` без `rehype-raw` НЕ видаляє сирий HTML з тексту — перетворює
+його на видимий текстовий вузол, а не на реальний DOM-елемент**
+`react-markdown` v9's `post()` transform (`skipHtml` за замовчуванням
+`false`) конвертує mdast-вузли типу `'raw'` у `{type: 'text', value:
+node.value}`, а не дропає і не парсить їх у справжні DOM-теги. Тобто
+рядок body типу `"...<script>alert(1)</script>..."`, переданий у
+`<Markdown>` без жодного санітайзера, рендериться як буквальний видимий
+текст `<script>alert(1)</script>` (жодного реального `<script>`-елемента в
+DOM, `container.querySelector('script')` — `null`), а не зникає і не
+виконується. Це підтверджує, що XSS-захист для LLM-згенерованого `body`
+(SPEC-03 T5, stored-XSS NFR) не потребує ручного екранування на клієнті —
+дефолтна поведінка `Markdown`-компонента вже безпечна.
+Доказ: client/node_modules/react-markdown/lib/index.js:354-359 (`transform`:
+`node.type === 'raw'` → `parent.children[index] = {type: 'text', value:
+node.value}` коли `skipHtml` falsy); тест
+client/src/app/repos/[repoId]/onboarding/_components/OnboardingTourPage/OnboardingTourPage.test.tsx
+("renders a literal <script> in the body as visible, inert text")
+
+## 2026-08-13 · gotcha
+**`messages/en/onboarding.json`'s `generate.title` і `generate.cta` — буквально
+однаковий рядок ("Generate onboarding tour") → `getByText` ламається на
+"multiple elements found" в порожньому стані**
+`EmptyState` рендерить `title` окремим `<div>` і `cta` окремою кнопкою; коли
+обидва пропси отримують однаковий переклад, в DOM одночасно опиняються два
+елементи з ідентичним текстом. Непомітно з коду компонента — видно лише при
+спробі написати `screen.getByText(...)` в тесті на порожній стан. Фікс:
+`screen.getAllByText(...)` з перевіркою довжини (2) для перевірки самого
+факту наявності тексту, і `screen.getByRole("button", {name: ...})` замість
+`getByText`, коли потрібно саме клікнути по кнопці.
+Доказ: client/messages/en/onboarding.json:18,20 (`generate.title` і
+`generate.cta` — однаковий рядок); тест
+client/src/app/repos/[repoId]/onboarding/_components/OnboardingTourPage/OnboardingTourPage.test.tsx
+("shows the 30–60s / ~5,000 tokens copy in the empty state")
+
+## 2026-08-13 · gotcha
+**`@testing-library/user-event` не встановлений у `client/package.json` —
+`react-testing-library`-скіл радить його "завжди", але тут увесь наявний
+тестовий код клікає через `fireEvent`**
+`client/package.json`'s `devDependencies` містить `@testing-library/react` і
+`@testing-library/jest-dom`, але НЕ `@testing-library/user-event` — усі
+існуючі тести з кліками (`DiffTab.test.tsx`, `FindingsPanel.test.tsx`,
+`SmartDiffViewer.test.tsx`, `OnboardingTourPage.test.tsx`) використовують
+`fireEvent.click(...)`, не `userEvent`. Написання нового тесту з
+`import userEvent from "@testing-library/user-event"` компілюється лише
+локально в IDE (типи можуть резолвитись транзитивно через інший пакет), але
+провалиться в `pnpm test`/CI з "Cannot find module" — додавати пакет під час
+імплементації означало б чіпати lockfile (заборонено `CLAUDE.md`). Для цього
+репозиторію: продовжуй `fireEvent`, не `userEvent`, поки лишається окремим
+рішенням додати залежність.
+Доказ: client/package.json (немає рядка `@testing-library/user-event` у
+`devDependencies`); client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/DiffTab.test.tsx:56
+(`fireEvent.click(...)`)

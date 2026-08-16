@@ -188,3 +188,29 @@ the same review chain on a known diff and comparing:
   shared across agent processes) are out of scope — Claude Code's Agent
   tool starts each subagent cold with no shared cache today; that's a
   platform capability, not something this repo's prompts can change.
+
+## Implementation status (2026-08-11)
+
+Implemented as part of a broader SDD-workflow audit, without the
+controlled-comparison step this plan itself required for Step 1 and
+Step 4:
+
+- **Step 1** (Bash-availability discrepancy): not reproduced via a
+  throwaway run as this plan specified. Applied the one-sentence
+  mitigation directly instead — `implementer.md:81-86` now says plainly
+  to report "Bash unavailable" and stop rather than hand-simulate a
+  type-checker's output. If the original discrepancy resurfaces, it's
+  still worth the actual reproduction run this plan describes.
+- **Step 2** (diff/evidence artifact convention): done —
+  `architecture-reviewer.md:26-35`, `plan-verifier.md:29-34`, and
+  `.claude/agents/README.md`'s "Хендоф" section.
+- **Step 3** (`doc-writer` trust-mode carve-out): done —
+  `doc-writer.md:75-79`.
+- **Step 4** (model-tier trial, haiku vs. sonnet for
+  `architecture-reviewer`/`plan-verifier`): **still open** — this needs an
+  actual side-by-side run on a real diff, not a prompt edit. Not done in
+  this pass.
+- **Step 5** (orchestrator skip-rule for `doc-writer`): the README note is
+  in place (`.claude/agents/README.md`, "Хендоф"); whether the
+  orchestrating session actually follows it is, as this plan already
+  said, only provable by observing future sessions.

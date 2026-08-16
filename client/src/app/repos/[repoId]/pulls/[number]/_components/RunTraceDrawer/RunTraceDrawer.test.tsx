@@ -19,8 +19,19 @@ const TRACE: RunTrace = {
   ],
 };
 
+// SPEC-01 (Project Context) — a run with an attached spec actually injected.
+const TRACE_WITH_SPECS: RunTrace = {
+  ...TRACE,
+  prompt_assembly: {
+    ...TRACE.prompt_assembly,
+    specs: '<untrusted source="spec-0">### acme/payments-api — specs/public-api.md\nPublic API contract.</untrusted>',
+  },
+  specs_read: ["acme/payments-api:specs/public-api.md"],
+};
+
+let currentTrace = TRACE;
 vi.mock("../../../../../../../lib/hooks/trace", () => ({
-  useRunTrace: () => ({ data: TRACE, isLoading: false }),
+  useRunTrace: () => ({ data: currentTrace, isLoading: false }),
 }));
 vi.mock("../../../../../../../lib/hooks/reviews", () => ({
   useRunEvents: () => ({ events: [], running: false }),
@@ -28,7 +39,10 @@ vi.mock("../../../../../../../lib/hooks/reviews", () => ({
 
 import RunTraceDrawer from "./RunTraceDrawer";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  currentTrace = TRACE;
+});
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
@@ -46,6 +60,26 @@ describe("A5 Run Trace drawer (smoke)", () => {
     expect(screen.getByText("2/2 passed")).toBeInTheDocument();
     expect(screen.getByText("$0.06")).toBeInTheDocument();
     expect(screen.getByText("Tool calls")).toBeInTheDocument();
+  });
+
+  it(
+    "SPEC-01: a run with an attached spec shows the repo-qualified specs_read " +
+      "entry and the untrusted-labeled Prompt assembly row (AC-17, AC-18)",
+    () => {
+      currentTrace = TRACE_WITH_SPECS;
+      renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+      expect(screen.getByText("acme/payments-api:specs/public-api.md")).toBeInTheDocument();
+      // "Prompt assembly" starts collapsed (defaultOpen={false}) — expand it
+      // to reach the PromptBlock label.
+      fireEvent.click(screen.getByText("Prompt assembly"));
+      expect(screen.getByText("Project context — attached specs (untrusted)")).toBeInTheDocument();
+    },
+  );
+
+  it("a run with no attached specs shows 'none' for specs read (no behaviour change)", () => {
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    expect(screen.getByText("none")).toBeInTheDocument();
+    expect(screen.queryByText("Project context — attached specs (untrusted)")).not.toBeInTheDocument();
   });
 
   it("switches to the live log tab", () => {
