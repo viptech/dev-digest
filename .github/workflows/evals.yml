@@ -1,0 +1,112 @@
+# Harness evals (evals/) — see CLAUDE.md's "Evals — what to run after touching what" and
+# evals/README.md. Two jobs, deliberately different gate strength:
+#
+#  - quality: static, no LLM call, deterministic — the only job that BLOCKS the PR.
+#  - workflow-report: model-backed (`pnpm eval:workflow`), non-blocking — probabilistic evals
+#    aren't trustworthy as a hard gate yet (see CLAUDE.md), so this posts a report/trend instead
+#    of failing the check. Promote to blocking only after the suite has enough history to know
+#    its own false-positive rate (root CLAUDE.md).
+#
+# Fork-PR safety: triggered by `pull_request` (never `pull_request_target`), so a fork PR's job
+# runs with a read-only GITHUB_TOKEN and NO access to repo secrets — GitHub withholds secrets
+# from fork-triggered `pull_request` runs by default. workflow-report's OPENROUTER_API_KEY step
+# is therefore simply absent/empty on a fork PR; `if: env.OPENROUTER_API_KEY != ''` skips the
+# model call rather than failing when the secret isn't available.
+name: evals
+
+on:
+  pull_request:
+    paths:
+      - 'evals/**'
+      - '.claude/skills/**'
+      - '.claude/agents/**'
+      - 'CLAUDE.md'
+      - 'server/CLAUDE.md'
+      - 'client/CLAUDE.md'
+      - 'reviewer-core/CLAUDE.md'
+      - 'e2e/CLAUDE.md'
+      - '.github/workflows/evals.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: eval:quality (blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm eval:quality
+
+  workflow-report:
+    name: eval:workflow (report only, not a merge gate)
+    runs-on: ubuntu-latest
+    # Budget: this job makes real model calls. Cap wall-clock so a stuck/looping case can't run
+    # up cost indefinitely — pair with evals/src/config.ts's own MAX_TURNS per case.
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: evals
+    env:
+      EVAL_BACKEND: openrouter
+      OPENROUTER_BASE_URL: http://localhost:4000
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: google/gemini-2.5-flash # verified to dispatch subagents — see evals/README.md
+      EVAL_JUDGE_MODEL: google/gemini-2.5-flash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+      # A fork PR gets no OPENROUTER_API_KEY (GitHub withholds secrets from fork pull_request
+      # runs) — skip the model call entirely rather than fail on a missing credential.
+      - name: Start LiteLLM proxy
+        if: env.OPENROUTER_API_KEY != ''
+        run: docker compose -f proxy/docker-compose.yml up -d
+
+      - name: Wait for proxy
+        if: env.OPENROUTER_API_KEY != ''
+        run: pnpm proxy:wait
+
+      - name: Run workflow evals (report, does not fail the job)
+        if: env.OPENROUTER_API_KEY != ''
+        run: pnpm eval:workflow --reporter=verbose || echo "::warning::workflow evals did not pass cleanly — see log above; not a merge gate yet"
+
+      - name: Skip (no OPENROUTER_API_KEY available — fork PR or unconfigured repo)
+        if: env.OPENROUTER_API_KEY == ''
+        run: echo "::notice::Skipping model-backed workflow evals — no OPENROUTER_API_KEY in this run's context."
+
+      - if: always() && env.OPENROUTER_API_KEY != ''
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+
+      - if: always() && env.OPENROUTER_API_KEY != ''
+        run: docker compose -f proxy/docker-compose.yml down

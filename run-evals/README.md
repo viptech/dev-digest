@@ -18,7 +18,7 @@
 | 2 | [02-experiment-2-onion-architecture.md](02-experiment-2-onion-architecture.md) | Експеримент 2 — ламаємо `onion-architecture`, власний regression-кейс | ✅ |
 | 3 | [03-experiment-3-architecture-reviewer.md](03-experiment-3-architecture-reviewer.md) | Експеримент 3 — `architecture-reviewer-strict` vs `-lite` (A/B) | ✅ |
 | 4 | [04-experiment-4-workflow.md](04-experiment-4-workflow.md) | Експеримент 4 — `pnpm eval:workflow` (dispatch, activation, control/treatment) | ✅ |
-| 5 | Експеримент 5 — самоперевірка в `CLAUDE.md`/`AGENTS.md` | — | ⏳ не почато |
+| 5 | [05-experiment-5-ci-selfcheck.md](05-experiment-5-ci-selfcheck.md) | Експеримент 5 — routing-таблиця в `CLAUDE.md` + `.github/workflows/evals.yml` | ✅ |
 
 ## Пов'язане
 

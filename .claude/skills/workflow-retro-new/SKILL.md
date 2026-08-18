@@ -1,5 +1,5 @@
 ---
-name: workflow-retro
+name: workflow-retro-new
 description: >
   Post-mortem / retrospective for a multi-agent run. Run it AFTER a workflow finishes
   (/run-plan, the spec → plan → implement chain, a Workflow() fan-out, or any batch of

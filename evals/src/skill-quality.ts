@@ -13,6 +13,10 @@ import { REPO_ROOT, SKILLS_DIR, EVALS_DIR } from "./artifacts/paths.js";
 
 const REQUIRED = ["name", "description"];
 const LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
+// Matches fenced code blocks (``` ... ``` or ~~~ ... ~~~) so their contents can be stripped
+// before the link check runs — a markdown link INSIDE a worked example (e.g. a sample ledger
+// row shown as documentation, not a real cross-reference) is not a broken reference.
+const FENCED_CODE_RE = /^(`{3,}|~{3,}).*?\n[\s\S]*?^\1/gm;
 
 interface Report {
   skill: string;
@@ -47,7 +51,8 @@ function evaluate(skillDir: string): Report {
   if (fm.name && fm.name !== name) errors.push(`frontmatter name '${fm.name}' != directory '${name}'`);
   if (body.length < 100) errors.push("SKILL.md body suspiciously short (< 100 chars)");
   if (body.split("\n").filter((l) => l.startsWith("#")).length < 2) errors.push("fewer than 2 headings — likely incomplete");
-  for (const [target, path] of internalLinks(body)) {
+  const bodyWithoutFencedCode = body.replace(FENCED_CODE_RE, "");
+  for (const [target, path] of internalLinks(bodyWithoutFencedCode)) {
     if (!existsSync(join(skillDir, path))) errors.push(`broken reference (${target}) — not found: ${path}`);
   }
 
