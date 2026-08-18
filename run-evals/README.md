@@ -17,7 +17,7 @@
 | 1 | [01-experiment-1-skill-creator-zod.md](01-experiment-1-skill-creator-zod.md) | Експеримент 1 — Skill Creator на скілі `zod` | ✅ |
 | 2 | [02-experiment-2-onion-architecture.md](02-experiment-2-onion-architecture.md) | Експеримент 2 — ламаємо `onion-architecture`, власний regression-кейс | ✅ |
 | 3 | [03-experiment-3-architecture-reviewer.md](03-experiment-3-architecture-reviewer.md) | Експеримент 3 — `architecture-reviewer-strict` vs `-lite` (A/B) | ✅ |
-| 4 | Експеримент 4 — `pnpm eval:workflow` | — | ⏳ не почато |
+| 4 | [04-experiment-4-workflow.md](04-experiment-4-workflow.md) | Експеримент 4 — `pnpm eval:workflow` (dispatch, activation, control/treatment) | ✅ |
 | 5 | Експеримент 5 — самоперевірка в `CLAUDE.md`/`AGENTS.md` | — | ⏳ не почато |
 
 ## Пов'язане
