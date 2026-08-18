@@ -77,3 +77,15 @@ where the strict variant stays silent"*. Підтвердилось: без ви
 ## Коміти
 
 Буде зафіксовано разом із рештою файлів цього кроку.
+
+
+
+aws bedrock create-inference-profile \
+--region eu-central-1 \
+--inference-profile-name "code-reviewer-dev" \
+--model-source copyFrom=arn:aws:bedrock:eu-central-1:074993326329:inference-profile/eu.anthropic.claude-sonnet-5 \
+--tags key=Hypothesis,value=code-reviewer key=Environment,value=dev key=Model,value=sonet-5
+
+
+
+

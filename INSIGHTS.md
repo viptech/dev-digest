@@ -72,20 +72,6 @@ client/src/vendor/shared/contracts/platform.ts (до фіксу цього ж д
 повторного читання файлу).
 Доказ: .claude/agents/README.md:200-211
 
-## 2026-08-18 · gotcha
-**`upstream/l06-evals` (курсовий template-репозиторій) відрізаний від старого чекпоінту — прямий `git merge` знищив би L02–L05**
-`git diff --stat HEAD upstream/l06-evals` показав 533 файли, 82061 видалення:
-гілка не має `.claude/agents/`, `.claude/plans/`, кількох скілів
-(`workflow-retro`, `sdd-implement`, `react-ui-architecture`, `pr-self-review`)
-і половини `server/` (модулі `skills`, `smart-diff`, контракти
-project-context). Це не активне видалення з боку upstream — гілку просто
-відрізали від репозиторію до того, як ці лесони приземлились локально. Пряме
-`git merge upstream/l06-evals` спробувало б реконсилювати це як реальні
-зміни. Робочий обхід — переносити лише конкретний новий каталог окремим
-комітом: `git checkout upstream/l06-evals -- evals` (жодного full-branch
-merge), точно за фолбеком, який описує сама лаба.
-Доказ: `04-hands-on-lab.md` (L06, "Якщо merge конфліктує з версією
-репозиторію, каталог переносять окремим комітом")
 
 ## 2026-08-18 · gotcha
 **`skill-creator`'s `scripts/aggregate_benchmark.py` тихо занулює tokens і ігнорує описово названі eval-теки — обидва без жодного попередження**
