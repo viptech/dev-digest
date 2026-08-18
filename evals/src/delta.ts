@@ -63,11 +63,23 @@ function main(): void {
   console.log(`A = ${labelA}  sha ${a.git_sha}${a.dirty ? "-dirty" : ""}  (${a.times} runs)`);
   console.log(`B = ${labelB}  sha ${b.git_sha}${b.dirty ? "-dirty" : ""}  (${b.times} runs)`);
 
-  const nodeids = [...new Set([...Object.keys(a.tests), ...Object.keys(b.tests)])].sort();
-  for (const id of nodeids) {
-    const ta = a.tests[id];
-    const tb = b.tests[id];
-    const shortId = id.split(" > ").slice(-1)[0];
+  // Match by the trailing segment (the case name itself), not the full nodeid. A genuine agent/skill
+  // A/B (e.g. architecture-reviewer-strict vs architecture-reviewer-lite) deliberately runs each
+  // variant under its OWN `describeAgent`/`describeSkill` label, which is a prefix of the full
+  // nodeid — matching on the full string would treat every case as "only in A" / "only in B" even
+  // when both sides ran the exact same cases array, which defeats the entire point of eval:delta.
+  const shortOf = (id: string) => id.split(" > ").slice(-1)[0];
+  const byShort = (tests: Record<string, NodeAggregate>) => {
+    const m = new Map<string, NodeAggregate>();
+    for (const t of Object.values(tests)) m.set(shortOf(t.nodeid), t);
+    return m;
+  };
+  const aShort = byShort(a.tests);
+  const bShort = byShort(b.tests);
+  const shortIds = [...new Set([...aShort.keys(), ...bShort.keys()])].sort();
+  for (const shortId of shortIds) {
+    const ta = aShort.get(shortId);
+    const tb = bShort.get(shortId);
     rateRow("\n  ", shortId, ta?.pass, tb?.pass);
 
     const practiceTexts = [...new Set([...Object.keys(ta?.practices ?? {}), ...Object.keys(tb?.practices ?? {})])];

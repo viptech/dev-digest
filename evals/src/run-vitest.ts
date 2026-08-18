@@ -11,12 +11,18 @@ import { fileURLToPath } from "node:url";
 import { DIM, RESET } from "./ansi.js";
 
 const EVALS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
+// `pnpm exec` runs a hidden dependency status check first — in a sandbox with unapproved build
+// scripts pending (ERR_PNPM_IGNORED_BUILDS territory) that check can itself fail non-interactively
+// and the whole `pnpm exec vitest ...` call crashes before vitest ever starts (silently — no vitest
+// output, just a pnpm.mjs stack trace). Call the local binary directly instead; same workaround
+// already documented in the repo root INSIGHTS.md for `pnpm exec drizzle-kit`/`tsc`/etc.
+const VITEST_BIN = join(EVALS_DIR, "node_modules", ".bin", "vitest");
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 /** How many test cases the pattern matches, via `vitest list` (no model calls). null on error. */
 export function countTests(vitestArgs: string[]): number | null {
   try {
-    const out = execFileSync("pnpm", ["exec", "vitest", "list", ...vitestArgs], {
+    const out = execFileSync(VITEST_BIN, ["list", ...vitestArgs], {
       cwd: EVALS_DIR,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -33,7 +39,7 @@ export function runVitestOnce(label: string, vitestArgs: string[], extraEnv: Rec
   return new Promise((resolve) => {
     const start = Date.now();
     let out = "";
-    const child = spawn("pnpm", ["exec", "vitest", "run", "--reporter=dot", ...vitestArgs], {
+    const child = spawn(VITEST_BIN, ["run", "--reporter=dot", ...vitestArgs], {
       cwd: EVALS_DIR,
       env: { ...process.env, EVAL_QUIET: "1", ...extraEnv },
       stdio: ["ignore", "pipe", "pipe"],
