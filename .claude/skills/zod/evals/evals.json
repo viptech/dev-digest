@@ -1,0 +1,19 @@
+{
+  "skill_name": "zod",
+  "evals": [
+    {
+      "id": 1,
+      "name": "user-profile-route-review",
+      "prompt": "Can you review this profile-update route before I open the PR? It's a Fastify handler that upserts a user's profile row.",
+      "expected_output": "Flags z.any() on `metadata` as unsafe (recommend z.unknown() or a concrete shape), flags calling .parse() directly on req.body (untrusted user input) instead of .safeParse(), and flags the object schema missing .strict() before the parsed values are persisted to the DB (unknown fields silently pass through).",
+      "files": ["../../zod-workspace/fixtures/user-profile-schema.ts"]
+    },
+    {
+      "id": 2,
+      "name": "checkout-form-schema-review",
+      "prompt": "I'm about to reuse this checkout form schema in a new flow — can you sanity-check it first?",
+      "expected_output": "Flags the .refine() callback throwing an Error instead of returning false, flags the hand-written `interface CheckoutForm` duplicating the schema instead of using z.infer<typeof CheckoutFormSchema>, and flags `email: z.string()` missing .email() validation.",
+      "files": ["../../zod-workspace/fixtures/checkout-form-schema.ts"]
+    }
+  ]
+}

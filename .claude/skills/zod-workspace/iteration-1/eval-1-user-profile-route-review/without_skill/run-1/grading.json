@@ -1,0 +1,31 @@
+{
+  "expectations": [
+    {
+      "text": "Flags z.any() on the `metadata` field as unsafe and recommends z.unknown() (or a concrete shape) instead",
+      "passed": true,
+      "evidence": "\"### 3. `metadata: z.any()` — фактично відсутність валідації\"."
+    },
+    {
+      "text": "Flags calling .parse() directly on req.body (untrusted user input) and recommends .safeParse() so invalid input doesn't throw an unhandled error",
+      "passed": true,
+      "evidence": "\"### 2. `UserProfileSchema.parse()` кидає виняток, який ніде не обробляється як 400\"."
+    },
+    {
+      "text": "Flags the object schema missing .strict() before the parsed values are persisted, noting unknown/extra fields from the request body would silently pass through",
+      "passed": false,
+      "evidence": "No mention of .strict()/.strip() or unknown-key handling anywhere in the review (sections 1-4 Critical, 5-10 Important, plus 3 minor notes) — this specific gap is absent."
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 1,
+    "total": 3,
+    "pass_rate": 0.67
+  },
+  "execution_metrics": {
+    "total_tool_calls": 3
+  },
+  "eval_feedback": {
+    "overall": "Baseline (no skill) still caught 2/3 target findings and produced a comparably thorough review — these are well-known Zod smells even without the skill. The .strict() miss is the one real differentiator in this run."
+  }
+}

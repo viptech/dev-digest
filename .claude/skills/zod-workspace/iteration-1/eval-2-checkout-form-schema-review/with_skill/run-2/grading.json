@@ -1,0 +1,36 @@
+{
+  "expectations": [
+    {
+      "text": "Flags the .refine() callback calling throw new Error(...) instead of returning false, noting refine() should return a boolean, not throw",
+      "passed": true,
+      "evidence": "\"### 1. `.refine()` throws instead of returning `false` — breaks `ZodError` handling\" — rule `error-avoid-throwing-in-refine`."
+    },
+    {
+      "text": "Flags the hand-written `interface CheckoutForm` duplicating the schema shape and recommends deriving the type via z.infer<typeof CheckoutFormSchema> instead",
+      "passed": true,
+      "evidence": "\"### 8. Manual `CheckoutForm` interface duplicates the schema instead of using `z.infer`\" — rule `type-use-z-infer`."
+    },
+    {
+      "text": "Flags `email: z.string()` missing .email() validation, noting it currently accepts any non-empty string as a valid email",
+      "passed": true,
+      "evidence": "\"### 3. `email` has no format validation — line 12\" — rule `schema-string-validations`."
+    },
+    {
+      "text": "[bonus, not predefined] Flags that .refine() turns the schema into ZodEffects, blocking .pick()/.omit()/.extend() — directly relevant since the task states the schema is about to be reused in a new flow",
+      "passed": true,
+      "evidence": "\"## Headline finding: the schema can't be composed for the new flow as written\" — explicit ZodEffects explanation with a superRefine() rewrite, cites `object-pick-omit`, `object-extend-for-composition`, `compose-shared-schemas`."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tool_calls": 20
+  },
+  "eval_feedback": {
+    "overall": "Both with_skill runs independently surfaced the same ZodEffects/composability headline finding as the top issue — consistent, not a fluke of one run."
+  }
+}

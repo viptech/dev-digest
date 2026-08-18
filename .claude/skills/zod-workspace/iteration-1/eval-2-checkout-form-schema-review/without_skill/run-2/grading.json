@@ -1,0 +1,36 @@
+{
+  "expectations": [
+    {
+      "text": "Flags the .refine() callback calling throw new Error(...) instead of returning false, noting refine() should return a boolean, not throw",
+      "passed": true,
+      "evidence": "\"### 1. `refine()` кидає `Error` замість `return false` — ламає контракт `ZodError`\"."
+    },
+    {
+      "text": "Flags the hand-written `interface CheckoutForm` duplicating the schema shape and recommends deriving the type via z.infer<typeof CheckoutFormSchema> instead",
+      "passed": true,
+      "evidence": "\"### 4. `CheckoutForm` — ручний дублікат типу замість `z.infer`\" — even notes the z.input vs z.output default(true) subtlety."
+    },
+    {
+      "text": "Flags `email: z.string()` missing .email() validation, noting it currently accepts any non-empty string as a valid email",
+      "passed": true,
+      "evidence": "\"### 2. `email` не валідується як email\"."
+    },
+    {
+      "text": "[bonus, not predefined] Flags that .refine() turns the schema into ZodEffects, blocking .pick()/.omit()/.extend() — directly relevant since the task states the schema is about to be reused in a new flow",
+      "passed": false,
+      "evidence": "No mention of ZodEffects or .pick()/.omit()/.extend() composability anywhere — closest is a generic note about extracting a payment sub-schema 'before it has a second point of use', which is not the same claim."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 1,
+    "total": 4,
+    "pass_rate": 0.75
+  },
+  "execution_metrics": {
+    "total_tool_calls": 3
+  },
+  "eval_feedback": {
+    "overall": "Same pattern as without_skill run 1: all 3 predefined assertions pass, ZodEffects/composability bonus finding missing — reproduces across both baseline runs, not a one-off."
+  }
+}

@@ -71,3 +71,38 @@ client/src/vendor/shared/contracts/platform.ts (до фіксу цього ж д
 `planner.md` → `implementation-planner.md`, довелось відкотити рішення після
 повторного читання файлу).
 Доказ: .claude/agents/README.md:200-211
+
+## 2026-08-18 · gotcha
+**`upstream/l06-evals` (курсовий template-репозиторій) відрізаний від старого чекпоінту — прямий `git merge` знищив би L02–L05**
+`git diff --stat HEAD upstream/l06-evals` показав 533 файли, 82061 видалення:
+гілка не має `.claude/agents/`, `.claude/plans/`, кількох скілів
+(`workflow-retro`, `sdd-implement`, `react-ui-architecture`, `pr-self-review`)
+і половини `server/` (модулі `skills`, `smart-diff`, контракти
+project-context). Це не активне видалення з боку upstream — гілку просто
+відрізали від репозиторію до того, як ці лесони приземлились локально. Пряме
+`git merge upstream/l06-evals` спробувало б реконсилювати це як реальні
+зміни. Робочий обхід — переносити лише конкретний новий каталог окремим
+комітом: `git checkout upstream/l06-evals -- evals` (жодного full-branch
+merge), точно за фолбеком, який описує сама лаба.
+Доказ: `04-hands-on-lab.md` (L06, "Якщо merge конфліктує з версією
+репозиторію, каталог переносять окремим комітом")
+
+## 2026-08-18 · gotcha
+**`skill-creator`'s `scripts/aggregate_benchmark.py` тихо занулює tokens і ігнорує описово названі eval-теки — обидва без жодного попередження**
+Два незалежні дефекти зловлені під час Експерименту 1 (L06, скіл `zod`, 2
+кейси × with/without × 2 прогони):
+(1) Виявлення eval-тек читає буквально `benchmark_dir.glob("eval-*")` —
+тека з описовою назвою (`user-profile-route-review/`), яку сам SKILL.md
+скіла прямо радить використовувати ("Give each eval a descriptive name...
+not just eval-0"), просто пропускається з "No eval directories found" без
+іншого попередження. Обхід — префіксувати описову назву `eval-N-`
+(`eval-1-user-profile-route-review`) — реальний `eval_id` все одно береться
+з `eval_metadata.json`, префікс потрібен лише для glob'а.
+(2) Токени рахуються ЛИШЕ з сусіднього `timing.json`, і лише якщо
+`result["time_seconds"] == 0.0` — якщо `grading.json` сам містить
+`"timing": {"total_duration_seconds": ...}` (а `agents/grader.md`'s Step 8
+прямо радить туди скопіювати timing.json), гілка з токенами взагалі не
+виконується і всі прогони показують `tokens: 0` без жодного попередження.
+Обхід — не класти `total_duration_seconds` всередину `grading.json`, лишати
+timing-дані тільки в сусідньому `timing.json`.
+Доказ: `~/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown/skills/skill-creator/scripts/aggregate_benchmark.py:86-152`
