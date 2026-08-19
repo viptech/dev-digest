@@ -15,15 +15,8 @@ import {
 import { ApiError } from "../../../../../../../lib/api";
 import { EvalCaseModal } from "@/components/eval-case-modal";
 import { METRIC_COLOR } from "@/lib/eval-metrics";
-import {
-  groupRuns,
-  caseTransitions,
-  deriveCaseTag,
-  casesPassingSummary,
-  deriveMetricCards,
-  type RunGroup,
-  type CaseTag,
-} from "./helpers";
+import { groupRuns, caseTransitions, toggleRunSelection, type RunGroup } from "@/lib/eval-runs";
+import { deriveCaseTag, casesPassingSummary, deriveMetricCards, type CaseTag } from "./helpers";
 import { s } from "./styles";
 
 const METRICS = ["recall", "precision", "citation_accuracy"] as const;
@@ -130,13 +123,11 @@ export function EvalsTab({ agentId }: { agentId: string }) {
   };
 
   // Selecting a 3rd run drops the oldest selection — comparison is always
-  // between exactly the two most-recently-clicked runs.
+  // between exactly the two most-recently-clicked runs (extracted to
+  // `@/lib/eval-runs`'s `toggleRunSelection`, T15, so the drill-down page's
+  // own run-history table reuses the same rule).
   const toggleGroupSelection = (id: string) => {
-    setSelectedGroupIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 2) return [prev[1]!, id];
-      return [...prev, id];
-    });
+    setSelectedGroupIds((prev) => toggleRunSelection(prev, id));
   };
 
   const selectedGroups = groups.filter((g) => selectedGroupIds.includes(g.run_group_id));

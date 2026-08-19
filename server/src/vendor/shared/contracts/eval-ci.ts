@@ -66,6 +66,11 @@ export const EvalRunRecord = z.object({
   citation_accuracy: z.number().nullable(),
   duration_ms: z.number().int().nullable(),
   cost_usd: z.number().nullable(),
+  /** `agents.system_prompt` at run time (SPEC-05 T15) — `null` for a
+   *  single-case run and for any row persisted before this column existed.
+   *  Feeds the per-agent Eval Dashboard drill-down's Compare-runs modal
+   *  (system-prompt diff + "Promote"). */
+  system_prompt_snapshot: z.string().nullish(),
 });
 export type EvalRunRecord = z.infer<typeof EvalRunRecord>;
 

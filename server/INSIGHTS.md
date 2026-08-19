@@ -453,3 +453,19 @@ count(*)` / `\d <table>`), як і для міграцій.
 Доказ: server/src/db/seed.ts:538-539 (guard), server/src/db/seed.ts:548
 (`console.log('✓ seeded', r)` — цей рядок не зʼявився в жодному прогоні
 цієї сесії)
+
+## 2026-08-19 · decision
+**Жоден роут `evals/routes.ts` не декларує `response`-схему (zod чи іншу) — нове поле в спільному контракті `EvalRunRecord` не потребує жодних змін у `routes.ts`**
+Fastify зі `ZodTypeProvider` серіалізує/обрізає відповідь по `response`-схемі,
+ЯКЩО вона задекларована в `{ schema: { response: {...} } }`; тут жоден з
+`GET/POST /agents/:id/eval-runs`, `GET /eval-dashboard` тощо цього не робить —
+відповіді просто повертають DTO-об'єкт як є. Тому додавання
+`system_prompt_snapshot` (T15) до `EvalRunRecord`
+(`server/src/vendor/shared/contracts/eval-ci.ts`) знадобилось провести лише
+через `toEvalRunRecordDto()` (`helpers.ts`) — жодних правок у `routes.ts` не
+було потрібно. Якби хоч один роут мав `response`-схему, нове поле мовчки
+обрізалось би серіалізацією, і це не виявилось би без ручної перевірки тіла
+відповіді.
+Доказ: server/src/modules/evals/routes.ts:39-114 (жодного `response` у
+`{ schema: {...} }` жодного роута), server/src/modules/evals/helpers.ts:118-133
+(`toEvalRunRecordDto`, єдине місце, де довелось додати поле)

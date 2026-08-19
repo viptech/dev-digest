@@ -170,6 +170,7 @@ export class EvalsService {
     skillBodies: string[],
     evalCase: EvalCaseRow,
     runGroupId: string | null,
+    systemPromptSnapshot: string | null = null,
   ): Promise<{ case: EvalCase; runRow: EvalRunRow }> {
     if (!evalCase.inputDiff || evalCase.inputDiff.trim().length === 0) {
       throw new ValidationError('Eval case has no diff to review');
@@ -208,6 +209,7 @@ export class EvalsService {
       citationAccuracy,
       durationMs,
       costUsd: outcome.costUsd,
+      systemPromptSnapshot,
     });
 
     return { case: toEvalCaseDto(evalCase), runRow };
@@ -244,7 +246,9 @@ export class EvalsService {
    * small, this is a manually-triggered button, not a hot path), persisting
    * every case's row under one shared `run_group_id`. A case whose LLM call
    * throws is recorded as `pass: false` with null metrics and does NOT abort
-   * the rest of the set (AC-14).
+   * the rest of the set (AC-14). Every row (including a failed one) also
+   * carries `system_prompt_snapshot: agent.systemPrompt` (T15) — the SAME
+   * `agent` already resolved below, no extra query.
    */
   async runSet(workspaceId: string, agentId: string, logger?: Logger): Promise<EvalSetRunResult | undefined> {
     const agent = await this.agents.getById(workspaceId, agentId);
@@ -271,7 +275,7 @@ export class EvalsService {
     for (const evalCase of cases) {
       const start = Date.now();
       try {
-        const { runRow } = await this.executeCase(agent, skillBodies, evalCase, runGroupId);
+        const { runRow } = await this.executeCase(agent, skillBodies, evalCase, runGroupId, agent.systemPrompt);
         cases_.push(toEvalRunRecordDto(runRow, evalCase.name));
         if (runRow.recall != null) {
           recallSum += runRow.recall;
@@ -302,6 +306,7 @@ export class EvalsService {
           citationAccuracy: null,
           durationMs: Date.now() - start,
           costUsd: null,
+          systemPromptSnapshot: agent.systemPrompt,
         });
         cases_.push(toEvalRunRecordDto(failedRow, evalCase.name));
       }

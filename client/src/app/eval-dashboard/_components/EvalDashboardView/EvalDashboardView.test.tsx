@@ -97,13 +97,13 @@ describe("EvalDashboardView", () => {
     expect(screen.getAllByText("75%")).toHaveLength(2);
   });
 
-  it("clicking a card navigates to that agent's Evals tab", () => {
+  it("clicking a card navigates to that agent's per-agent Eval Dashboard drill-down (T15)", () => {
     dashboard = { data: [SECURITY_REVIEWER], isLoading: false, isError: false, refetch: vi.fn() };
     renderWithIntl();
     // "Security Reviewer" also labels the two history rows below the card —
     // the card itself (with its model badge) is the first occurrence.
     fireEvent.click(screen.getAllByText("Security Reviewer")[0]!);
-    expect(routerPush).toHaveBeenCalledWith("/agents/ag1?tab=evals");
+    expect(routerPush).toHaveBeenCalledWith("/eval-dashboard/ag1");
   });
 
   it("shows a percentage next to each metric bar in the history table", () => {

@@ -39,6 +39,9 @@ export interface InsertEvalRun {
   citationAccuracy: number | null;
   durationMs: number;
   costUsd: number | null;
+  /** `agents.system_prompt` at run time, shared by every row of one
+   *  bulk set-run (SPEC-05 T15); `null` for a single-case run. */
+  systemPromptSnapshot?: string | null;
 }
 
 export class EvalsRepository {
@@ -127,6 +130,7 @@ export class EvalsRepository {
         citationAccuracy: values.citationAccuracy,
         durationMs: values.durationMs,
         costUsd: values.costUsd,
+        systemPromptSnapshot: values.systemPromptSnapshot ?? null,
       })
       .returning();
     return row!;

@@ -1,78 +1,14 @@
-import type { EvalRunRecord, EvalExpectation } from "@devdigest/shared";
+import type { EvalExpectation } from "@devdigest/shared";
 import type { Severity, Category } from "@devdigest/ui";
 import type { EvalCaseWithLastRun } from "@/lib/hooks/evals";
-
-/** One historical set-run: every case's row that shares one `run_group_id`,
- *  plus a simple macro-average aggregate (same rule as the server's
- *  bulk-run response — a null metric is excluded from the average, not
- *  coerced to 0). */
-export interface RunGroup {
-  run_group_id: string;
-  ran_at: string;
-  cases: EvalRunRecord[];
-  aggregate: { recall: number; precision: number; citation_accuracy: number };
-}
-
-function average(values: number[]): number {
-  return values.length === 0 ? 0 : values.reduce((s, v) => s + v, 0) / values.length;
-}
-
-/** Group a flat set-run-history response by `run_group_id`, newest first
- *  (AC-17). Rows with a `null` run_group_id (shouldn't happen — the server
- *  only returns set-runs here — but defensive) are dropped. */
-export function groupRuns(rows: EvalRunRecord[]): RunGroup[] {
-  const byGroup = new Map<string, EvalRunRecord[]>();
-  for (const row of rows) {
-    if (!row.run_group_id) continue;
-    const list = byGroup.get(row.run_group_id) ?? [];
-    list.push(row);
-    byGroup.set(row.run_group_id, list);
-  }
-  const groups: RunGroup[] = Array.from(byGroup.entries()).map(([run_group_id, cases]) => {
-    const ranAt = cases.reduce((max, c) => (c.ran_at > max ? c.ran_at : max), cases[0]!.ran_at);
-    const recalls = cases.map((c) => c.recall).filter((v): v is number => v != null);
-    const precisions = cases.map((c) => c.precision).filter((v): v is number => v != null);
-    const citations = cases.map((c) => c.citation_accuracy).filter((v): v is number => v != null);
-    return {
-      run_group_id,
-      ran_at: ranAt,
-      cases,
-      aggregate: {
-        recall: average(recalls),
-        precision: average(precisions),
-        citation_accuracy: average(citations),
-      },
-    };
-  });
-  return groups.sort((a, b) => (a.ran_at < b.ran_at ? 1 : a.ran_at > b.ran_at ? -1 : 0));
-}
-
-/** Per-case pass/fail transitions between two set-runs (AC-19). A case
- *  present in only one of the two groups (the set changed between runs)
- *  renders as "no data" for the other side — never a fabricated fail. */
-export interface CaseTransition {
-  case_id: string;
-  case_name: string | null;
-  oldPass: boolean | null | undefined; // undefined = no data (case absent from that run)
-  newPass: boolean | null | undefined;
-}
-
-export function caseTransitions(older: RunGroup, newer: RunGroup): CaseTransition[] {
-  const byId = new Map<string, EvalRunRecord>();
-  for (const c of older.cases) byId.set(c.case_id, c);
-  const seen = new Set<string>();
-  const rows: CaseTransition[] = [];
-  for (const c of newer.cases) {
-    const prev = byId.get(c.case_id);
-    seen.add(c.case_id);
-    rows.push({ case_id: c.case_id, case_name: c.case_name ?? null, oldPass: prev?.pass, newPass: c.pass });
-  }
-  for (const c of older.cases) {
-    if (seen.has(c.case_id)) continue;
-    rows.push({ case_id: c.case_id, case_name: c.case_name ?? null, oldPass: c.pass, newPass: undefined });
-  }
-  return rows;
-}
+// `RunGroup`/`groupRuns`/`caseTransitions`/`METRIC_KEYS` moved to
+// `@/lib/eval-runs` (SPEC-05 T15, Development Plan Addendum 3) once the new
+// per-agent Eval Dashboard drill-down page became a second consumer
+// (react-ui-architecture "promote on second user", same rule that already
+// promoted `EvalCaseModal`/T13 and `METRIC_COLOR`). `EvalsTab.tsx` imports
+// those directly from `@/lib/eval-runs` now; only the RunGroup TYPE is
+// still needed here, for `deriveMetricCards`'s signature below.
+import { METRIC_KEYS, type MetricKey, type RunGroup } from "@/lib/eval-runs";
 
 /** MUST FIND/MUST NOT FLAG badge + severity-category tag for one case row —
  *  a discriminated union so a `must_find` tag's severity/category are only
@@ -125,9 +61,6 @@ export function casesPassingSummary(cases: EvalCaseWithLastRun[]): { passing: nu
     total: cases.length,
   };
 }
-
-const METRIC_KEYS = ["recall", "precision", "citation_accuracy"] as const;
-export type MetricKey = (typeof METRIC_KEYS)[number];
 
 export interface MetricCard {
   key: MetricKey;

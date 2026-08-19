@@ -25,6 +25,10 @@ function pct(v: number): string {
  * versioning), a "Run all agents" button (client-side loop over the
  * existing per-agent bulk-run endpoint — no new bulk-of-bulk route), and a
  * "Recent eval runs · all agents" table flattening every agent's history.
+ *
+ * T15: clicking a card now navigates to that agent's own drill-down page
+ * (`/eval-dashboard/:agentId`) instead of `/agents/:id?tab=evals` — the
+ * Evals tab (T8) remains a separate, independent path to the same data.
  */
 export function EvalDashboardView() {
   const t = useTranslations("eval");
@@ -74,7 +78,7 @@ export function EvalDashboardView() {
         {!isLoading && !isError && (agents?.length ?? 0) > 0 && <SectionLabel icon="Cpu">{t("dashboardPage.agentsHeading")}</SectionLabel>}
 
         {(agents ?? []).map((a) => (
-          <div key={a.agent_id} style={s.card} onClick={() => router.push(`/agents/${a.agent_id}?tab=evals`)}>
+          <div key={a.agent_id} style={s.card} onClick={() => router.push(`/eval-dashboard/${a.agent_id}`)}>
             <div style={s.cardMain}>
               <div style={s.cardNameRow}>
                 <span style={s.name}>{a.agent_name}</span>

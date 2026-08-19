@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
@@ -685,5 +685,58 @@ d('evals — run a case with/without a skill (Testcontainers pg)', () => {
 
       await app.close();
     });
+  });
+
+  // ---- T15: system_prompt_snapshot on every row of a bulk set-run --------
+  it('a bulk run persists system_prompt_snapshot equal to the agent\'s prompt at run time on every row (T15)', async () => {
+    const { app } = await appWith(NO_FINDINGS_REVIEW);
+    const PROMPT = 'Review for security issues only.';
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Snapshot Agent', provider: 'openai', model: 'gpt-4.1', system_prompt: PROMPT },
+      })
+    ).json();
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/evals`,
+      payload: { name: 'snap-1', input_diff: DIFF, expected_output: [] },
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/evals`,
+      payload: { name: 'snap-2', input_diff: DIFF, expected_output: [] },
+    });
+
+    const res = await app.inject({ method: 'POST', url: `/agents/${agent.id}/eval-runs` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.cases).toHaveLength(2);
+    for (const c of body.cases) {
+      expect(c.system_prompt_snapshot).toBe(PROMPT);
+    }
+
+    const history = (await app.inject({ method: 'GET', url: `/agents/${agent.id}/eval-runs` })).json();
+    expect(history).toHaveLength(2);
+    for (const row of history) {
+      expect(row.system_prompt_snapshot).toBe(PROMPT);
+    }
+
+    // The single-case run path (run(), not runSet()) leaves it null. This
+    // row has `run_group_id: null`, so `GET .../eval-runs` (AC-17, filters
+    // to `run_group_id IS NOT NULL`) never returns it — query the DB
+    // directly instead, same pattern the T2 round-trip test above uses.
+    const caseId = body.cases[0].case_id;
+    const singleRes = await app.inject({ method: 'POST', url: `/agents/${agent.id}/evals/${caseId}/run` });
+    expect(singleRes.statusCode).toBe(200);
+    const [singleRunRow] = await pg.handle.db
+      .select()
+      .from(t.evalRuns)
+      .where(and(eq(t.evalRuns.caseId, caseId), isNull(t.evalRuns.runGroupId)));
+    expect(singleRunRow).toBeDefined();
+    expect(singleRunRow!.systemPromptSnapshot).toBeNull();
+
+    await app.close();
   });
 });

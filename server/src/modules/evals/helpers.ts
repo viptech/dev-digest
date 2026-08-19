@@ -129,5 +129,6 @@ export function toEvalRunRecordDto(row: EvalRunRow, caseName?: string | null): E
     citation_accuracy: row.citationAccuracy,
     duration_ms: row.durationMs,
     cost_usd: row.costUsd,
+    system_prompt_snapshot: row.systemPromptSnapshot ?? null,
   };
 }

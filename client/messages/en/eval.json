@@ -142,5 +142,36 @@
     "lastRunVersion": "Last run v{version} · {when} · {passed}/{total} pass",
     "recentRunsHeading": "Recent eval runs · all agents",
     "recentRunsEmpty": "No eval runs yet — run an agent's eval set to see history here."
+  },
+  "agentDashboardPage": {
+    "loadError": "Couldn't load this agent's eval dashboard.",
+    "subtitle": "Regression harness · {count} eval cases",
+    "metricLabels": {
+      "recall": "RECALL",
+      "precision": "PRECISION",
+      "citation_accuracy": "CITATION ACCURACY"
+    },
+    "trendHeading": "Metric trend",
+    "historyHeading": "Run history",
+    "noHistory": "No set-runs yet. Run this agent's whole eval set from its Evals tab to see history here.",
+    "selectToCompare": "Select to compare",
+    "compare": "Compare",
+    "comparePrompt": "Select exactly two runs above to compare them.",
+    "casesCount": "{count} cases",
+    "passCount": "{passed}/{total} pass",
+    "versionColumn": "Version",
+    "ranAtColumn": "Ran at"
+  },
+  "compareModal": {
+    "heading": "Compare set-runs",
+    "metricsHeading": "Metric deltas",
+    "cost": "Cost",
+    "promptDiffHeading": "System prompt diff",
+    "promptNotCaptured": "Not captured for this run",
+    "promote": "Promote v{version}",
+    "promoting": "Promoting…",
+    "promoteSuccess": "Promoted this prompt to the live agent.",
+    "promoteFailed": "Couldn't promote this prompt. Please try again.",
+    "close": "Close"
   }
 }

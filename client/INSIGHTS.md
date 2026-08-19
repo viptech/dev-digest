@@ -390,3 +390,18 @@ run_group'и, ці дві пари збігаються — і обидва бл
 (спільне джерело `groups`, картки метрик, заголовок Compare-секції);
 client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.test.tsx
 (тест "selecting two set-runs..." — виправлено скоупом `within(compareSection)`)
+
+## 2026-08-19 · gotcha
+**Інструмент `Glob` (не vitest/Next.js) трактує Next.js dynamic-route теку
+`[agentId]`/`[id]` як bracket-character-class у власному патерні — повертає
+"No files found" навіть коли тека реально існує**
+`Glob({ pattern: "client/src/app/eval-dashboard/[agentId]/**" })` і аналогічний
+виклик з `[id]` дали порожній результат попри те, що обидві теки існують і
+успішно резолвляться Next.js/vitest (їхній глоб-скан матчить РЕАЛЬНІ шляхи
+файлів, де `[`/`]` — звичайні символи; проблема лише в РУЧНОМУ написанні
+глоб-патерна з літеральними дужками). Для пошуку файлів під dynamic-route
+текою треба `Grep` (`output_mode: files_with_matches`) по шляху-предку або по
+відомій підрядці замість `Glob` із буквальним `[...]` у патерні.
+Доказ: client/src/app/eval-dashboard/[agentId]/page.tsx (тека існує, `Glob`
+на `client/src/app/eval-dashboard/**` під час цієї сесії повернув 0
+результатів для неї, `Grep` на `"eval-dashboard"` — знайшов миттєво)

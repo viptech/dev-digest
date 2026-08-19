@@ -1,0 +1,1 @@
+ALTER TABLE "eval_runs" ADD COLUMN "system_prompt_snapshot" text;

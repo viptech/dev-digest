@@ -37,6 +37,13 @@ export const evalRuns = pgTable(
     citationAccuracy: doublePrecision('citation_accuracy'),
     durationMs: integer('duration_ms'),
     costUsd: doublePrecision('cost_usd'),
+    /** `agents.system_prompt` AT THE TIME OF THE RUN, copied verbatim onto
+     *  every row of a bulk set-run (SPEC-05 T15) — lets the Compare-runs
+     *  modal show a "SYSTEM PROMPT DIFF" between two historical runs and
+     *  "Promote vN" copy an old-but-good prompt back onto the live agent.
+     *  `null` for a single-case run (`run()`) and for any row persisted
+     *  before this column existed. */
+    systemPromptSnapshot: text('system_prompt_snapshot'),
   },
   (t) => ({
     runGroupIdx: index('eval_runs_run_group_idx').on(t.runGroupId),
