@@ -1,6 +1,8 @@
 # Spec: Eval Pipeline для рев'ю-агента + порівняння прогонів
 Spec ID: SPEC-05
-Status: draft
+Status: ready — єдине `[NEEDS CLARIFICATION]` вирішено рішенням користувача
+2026-08-19 (див. Open questions); решта відкритих питань — рівня Development
+Plan, не блокують `implementation-planner`
 Supersedes: жодного попереднього `SPEC-NN` не замінює — перша спека під
 `docs/specs/SPEC-05-*`. Частково реконсилює (не скасовує) наявну, ще
 до-L05 сесії реалізацію модуля `evals` (`server/src/modules/evals/`,
@@ -117,18 +119,44 @@ Supersedes: жодного попереднього `SPEC-NN` не заміню�
   `z.array(EvalExpectation)` (T1) — заміна нетипізованого
   `ExpectedFinding[]`, що сьогодні живе лише як локальний, неекспортований
   TS-інтерфейс у `helpers.ts`.
-- Кнопка "Turn into eval case" на `FindingCard` — одним кліком (без
-  проміжної модалки перед збереженням, буквально за текстом ДЗ) створює й
-  ОДРАЗУ персистує eval-кейс: `accepted` → один елемент
+- **Виправлено 2026-08-19 (див. Open questions) — попередній пункт
+  ("одним кліком без модалки, буквально за текстом ДЗ") був хибною
+  інтерпретацією.** Підтверджено відеозаписом еталонної реалізації курсу
+  (реальний робочий DevDigest, не мокап): клік "Turn into eval case" на
+  `FindingCard` (тільки коли `accepted_at`/`dismissed_at` заповнено, AC-2)
+  **будує чернетку, НЕ персистує одразу** — відкриває наявний
+  `EvalCaseModal` попередньо заповненим: `accepted` → один елемент
   `{type: 'must_find', file: f.file, start_line: f.start_line, end_line:
   f.end_line, severity: f.severity, category: f.category}`, `dismissed` →
   той самий елемент з `type: 'must_not_flag'`; `input_diff` —
   реконструйований single-file unified diff з `pr_files.patch` +
   `pr_files.path` того ж PR (діагностика формату — розділ нижче);
-  `owner_id` — `agent_id` рев'ю, з якого знахідка (`ReviewRecord.agent_id`).
-  Створений кейс лишається доступним для редагування через наявний
-  `EvalCaseModal` (AC-4) — кнопка не замінює ручне редагування, лише
-  прискорює створення.
+  `owner_id` (для майбутнього persist) — `agent_id` рев'ю, з якого
+  знахідка (`ReviewRecord.agent_id`). Персистування відбувається лише
+  коли користувач тисне **Save** (чи **Run case**, який зберігає-і-прогонує)
+  всередині модалки — тим самим наявним шляхом `useCreateEvalCase`, що вже
+  обслуговує ручне створення (AC-4 — кейс і так лишається доступним через
+  той самий `EvalCaseModal`, тепер це єдиний шлях персистування, не лише
+  редагування).
+  Модалка в "seeded"-режимі (за відеозаписом) додатково показує:
+  - підпис під заголовком "Seeded from an accepted/dismissed finding —
+    assert the expected output";
+  - бейдж **POSITIVE CASE**/**NEGATIVE CASE** з людським підсумком
+    очікування ("MUST find "<title>" at <file>:<start_line>" /
+    "MUST NOT flag ..."), виведений з першого елемента `expected_output`;
+  - **Actual output** — повний JSON `run.per_trace[0].actual` після
+    прогону (не лише pass/fail-бейдж, який модалка вже показувала);
+  - банер статусу прогону з `traces_passed`/`traces_total`/`duration_ms`/
+    `cost_usd` (наприклад "0/1 passed · 8.2s · $0.00") — усі ці поля вже
+    повертає наявний контракт `EvalRun` (`server/src/vendor/shared/contracts/knowledge.ts:98-107`),
+    це рендер наявних даних, не нове поле;
+  - кнопка **"Finding skeleton"** — вставляє шаблонний елемент
+    `EvalExpectation` в `expected_output`-textarea для ручного дописування;
+  - перемикач **"Run on save"** — Save виконує save-and-run замість
+    простого save, коли увімкнено;
+  - третій таб **"Files"** поруч із наявними Diff/PR meta — список файлів,
+    виведений з `diff --git a/... b/...`-заголовків уже наявного
+    `input_diff`, без нового джерела даних.
 - **Новий** bulk-ендпоінт `POST /agents/:id/eval-runs` (множина — на
   відміну від наявного одиничного `POST
   /agents/:id/evals/:caseId/run`): прогін АГЕНТА на ВСІХ кейсах його
@@ -212,14 +240,24 @@ Supersedes: жодного попереднього `SPEC-NN` не заміню�
   `'agent'`; ця спека не додає паралельного UI для скіл-власників.
   Схема технічно дозволяє (`eval_cases.owner_kind` enum лишається
   незмінним), реалізація — окрема майбутня спека.
-- **Тренд-графіки** (мультиточковий лінійний графік recall/precision у
-  часі, `EvalTrendPoint`/`EvalDashboard.trend`/`.delta`/`.alert` з
-  чернетки `eval-ci.ts`) — ця спека реалізує лише порівняння РІВНО двох
-  обраних прогонів (AC-18) і список останніх set-run'ів у Dashboard
-  (AC-20), без повноцінної трендової візуалізації; `trend`/`delta` (на
-  рівні агрегованого дашборду, не порівняння двох конкретних прогонів,
-  яке залишається в обсязі)/`alert` з чернетки лишаються неспожитими
-  полями контракту до окремої майбутньої спеки.
+- ~~**Тренд-графіки**~~ — **явно скасовано користувачем 2026-08-19
+  (див. Open questions і Task T14): дашборд-рівневий тренд/спарклайн
+  ТЕПЕР У ОБСЯЗІ**, за референс-дизайном (Eval Dashboard mockup з
+  еталонного відео курсу, той самий, що дав POSITIVE/NEGATIVE CASE
+  референс для T13). Було: "ця спека реалізує лише порівняння РІВНО
+  двох обраних прогонів (AC-18) і список останніх set-run'ів у Dashboard
+  (AC-20), без повноцінної трендової візуалізації". T14 додає: спарклайн
+  recall по історії set-run'ів кожного агента, порядковий номер версії
+  прогону (`v1, v2, ...` — лічильник set-run'ів агента за часом, НЕ
+  версія конфігурації агента з `agent_versions`), і таблицю "Recent eval
+  runs" по всіх агентах воркспейсу. `EvalTrendPoint`/`.alert` з чернетки
+  `eval-ci.ts` лишаються НЕспожитими — нова реалізація не використовує
+  ці конкретні типи чернетки, обчислює тренд-дані власним, простішим
+  шляхом з уже наявних `eval_runs`-рядків (без нових запитів — `runsByOwner`
+  у `dashboard()` вже тягне ВСІ прогони, не лише останній). AC-18's
+  обмеження (порівняння рівно двох ОБРАНИХ прогонів у `EvalsTab`, без
+  regression-індикатора при одному) лишається без змін — це про інший
+  UI (вкладка Evals конкретного агента), не про сам Dashboard.
 - **`PreToolUse`-хук, що автоматично блокує зміну промпту/коду без
   зеленого eval-прогону** — поза обсягом; evals цієї спеки
   запускаються вручну кнопкою, не автоматично на кожен edit.
@@ -271,15 +309,18 @@ Supersedes: жодного попереднього `SPEC-NN` не заміню�
 
 **Створення кейса зі знахідки**
 
-- **AC-1** (event-driven). КОЛИ рецензент натискає "Turn into eval case"
-  на `FindingCard` для знахідки з заповненим `accepted_at` АБО
-  `dismissed_at`, система (shall) одним викликом створити й персистувати
-  новий `eval_cases`-рядок: `owner_kind: 'agent'`, `owner_id` = `agent_id`
-  рев'ю цієї знахідки, `expected_output` = масив з одним
-  `EvalExpectation` (`type: 'must_find'` для `accepted`, `type:
+- **AC-1** (event-driven) — **виправлено 2026-08-19, див. Open questions**.
+  КОЛИ рецензент натискає "Turn into eval case" на `FindingCard` для
+  знахідки з заповненим `accepted_at` АБО `dismissed_at`, система (shall)
+  побудувати чернетку eval-кейса БЕЗ запису в БД: `owner_kind: 'agent'`,
+  `owner_id` = `agent_id` рев'ю цієї знахідки, `expected_output` = масив з
+  одним `EvalExpectation` (`type: 'must_find'` для `accepted`, `type:
   'must_not_flag'` для `dismissed`; `file`/`start_line`/`end_line`/
   `severity`/`category` — з самої знахідки), `input_diff` —
-  реконструйований single-file unified diff для `f.file` (нижче).
+  реконструйований single-file unified diff для `f.file` (нижче) — і
+  (shall) відкрити цю чернетку в наявному `EvalCaseModal` для перегляду/
+  редагування; сам запис `eval_cases` (shall) створюватись лише коли
+  користувач тисне Save/Run case в модалці (той самий шлях, що AC-4).
 - **AC-2** (unwanted behavior). ЯКЩО знахідка не має ні `accepted_at`, ні
   `dismissed_at` (рішення ще не прийнято), ТО кнопка "Turn into eval
   case" (shall) бути неактивною — жодного кейса без прийнятого рішення.
@@ -288,11 +329,11 @@ Supersedes: жодного попереднього `SPEC-NN` не заміню�
   відмовити створенню кейса з цієї знахідки (кнопка неактивна на клієнті
   АБО сервер повертає 422 "Finding's review has no agent") — eval-кейс
   без власника-агента існувати не може.
-- **AC-4** (ubiquitous). Кейс, створений кнопкою (AC-1), (shall)
-  лишатись доступним для подальшого редагування через наявний
-  `EvalCaseModal` (`PUT /agents/:id/evals/:caseId`) — та сама форма, що
-  вже редагує вручну створені кейси, без окремого, паралельного шляху
-  редагування.
+- **AC-4** (ubiquitous) — **розширено 2026-08-19**. Чернетка з AC-1
+  (shall) відкриватись і персистуватись через той самий наявний
+  `EvalCaseModal` (`POST`/`PUT /agents/:id/evals[/:caseId]`), що вже
+  створює/редагує кейси вручну — жодного окремого, паралельного шляху
+  персистування чи редагування для кейсів, народжених зі знахідки.
 
 **Типізовані очікування й скоринг**
 
@@ -564,13 +605,85 @@ SPEC-03/SPEC-04 до їхніх LLM-викликів і недовіреного
 
 ## Open questions
 
-- **[NEEDS CLARIFICATION] Агрегація метрик bulk-прогону.** Goals
-  фіксують просте macro-average (кожен кейс важить однаково) як дефолт —
-  потребує підтвердження власника продукту, чи не варто натомість важити
-  кейси кількістю очікувань/знайдених findings (кейс із 5 `must_find`
-  впливав би на агрегат сильніше за кейс з 1). Рекомендація — лишити
-  простий macro-average у v1 (простіше пояснити на демо, менш чутливо до
-  розміру окремого кейса).
+- **Per-agent Eval Dashboard drill-down (окрема сторінка) + Compare-модалка
+  з диффом system prompt + "Promote" — взято в обсяг користувачем
+  2026-08-19, Task T15.** Джерело — 3 нових скріншоти референс-дизайну
+  курсу, показані вперше саме в цей момент (не раніше в цій сесії, не в
+  тексті ДЗ, не в жодному з попередніх 5 скріншотів дизайну). Це НЕ
+  деталізація T14 (workspace-рівневого списку агентів) — новий, окремий
+  рівень навігації. Ключові дизайн-рішення, яких мокап буквально не дає
+  (зафіксовано тут, а не залишено на розсуд Development Plan, бо
+  торкаються моделі даних):
+  - **Маршрут**: `/eval-dashboard/:agentId` (не `/agents/:id?tab=evals`,
+    куди T14 наразі веде клік по картці — T15 перенаправляє клік картки
+    workspace-дашборда сюди натомість; вкладка `Evals` в `AgentEditor`
+    (T8) лишається окремим, незалежним шляхом до тих самих даних, не
+    видаляється).
+  - **Знімок system prompt на прогін — нове поле в БД.** Щоб Compare-
+    модалка могла показати "SYSTEM PROMPT DIFF" між двома вибраними
+    прогонами, `eval_runs` (shall) отримати нову nullable-колонку
+    `system_prompt_snapshot text`, заповнювану в `runSet()` одним і тим
+    самим значенням `agent.systemPrompt` (на момент прогону) для кожного
+    рядка групи — нова міграція через `pnpm db:generate`, як і `T2`.
+  - **"Promote vN" — семантика.** У цій системі немає окремого поняття
+    "запропонований, ще не активний" system prompt — редагування Config
+    одразу мутує `agents.system_prompt` (наявний шлях). Тому "Promote vN"
+    (shall) означати: скопіювати `system_prompt_snapshot` обраного
+    прогону НАЗАД у `agents.system_prompt` через наявний
+    `PUT /agents/:id` — це "відкат до відомого-доброго промпту", не нова
+    concept версіонування. Жодного нового сервер-роуту не додається.
+  - **Банер-інсайт ("Precision dipped 2pts on v7 — a new false positive
+    slipped in") — генерується кодом з двох найновіших прогонів, БЕЗ
+    LLM-виклику** (той самий принцип, що весь скоринг пайплайна).
+    Правило: обрати метрику з найбільшим падінням (якщо є) →
+    "{Metric} dipped {N}pts on v{version}"; якщо серед `must_not_flag`-
+    кейсів є перехід pass→fail (перевикористовується вже наявна
+    `caseTransitions()`-логіка з `EvalsTab/helpers.ts`, T8) → додати
+    "a new false positive slipped in"; якщо серед `must_find`-кейсів є
+    перехід pass→fail → "a case stopped being caught"; інші дві метрики,
+    що зросли чи не змінились → "{Metric} and {metric} both up"/"stable".
+    Немає жодного падіння жодної метрики → банер не рендериться взагалі.
+  - **"20-trace gold set" з мокапу** — це flavor-текст мокапу
+    (конкретне число з демо-даних курсу), не нова вимога до розміру
+    набору; рендериться дані-орієнтовано з реальних
+    `cases_total`/`recent_runs.length` цього агента, не хардкодиться.
+  - **Тренд-графік** — на цій виділеній сторінці доречний ПОВНИЙ
+    `LineChart` (`client/src/vendor/ui/charts/LineChart.tsx`, вже
+    наявний, Recharts-based) із трьома серіями (recall/precision/
+    citation) — на відміну від T14's workspace-картки, де свідомо
+    обрано легкий `Sparkline` через невідповідну візуальну вагу; тут
+    вага виправдана (окрема сторінка, є простір для осей/сітки).
+  - **Перевикористання T8's `RunGroup`/`groupRuns`/`caseTransitions`**
+    (`EvalsTab/helpers.ts`) — другий споживач (ця нова сторінка) означає
+    промоцію в спільний шар (`client/src/lib/eval-runs.ts` чи подібний),
+    той самий патерн, що вже застосований для `EvalCaseModal` (T13,
+    react-ui-architecture's "promote on the second user").
+- **Eval Dashboard — тренд/спарклайн/версії/історія — явно взято в обсяг
+  користувачем 2026-08-19**, всупереч попередньому Non-goal. Джерело —
+  той самий референс-дизайн курсу (скріншот Eval Dashboard), не текст
+  ДЗ (текст ДЗ прямо називає "Тренд-графіки метрик" Stretch-пунктом
+  "без дедлайну" — `L06/10-domashnie-zavdannya.md`). Користувач свідомо
+  вирішив витратити час на це до дедлайну 23 серпня, а не залишити як
+  stretch. Деталі — Non-goals (вище, закреслений пункт) і Task T14.
+- **"Turn into eval case" — модалка чи миттєвий persist — вирішено
+  2026-08-19, джерело: відеозапис еталонної реалізації курсу (не текст
+  ДЗ і не жоден з 4 вбудованих PNG-референсів на сторінці ДЗ — ці
+  джерела питання просто не покривають).** Початкове рішення в Goals
+  ("одним кліком, без модалки, буквально за текстом ДЗ") ґрунтувалось на
+  інтерпретації фрази "одним кліком" з тексту ДЗ як "без жодного UI
+  кроку". Відеозапис показав протилежне: клік відкриває наявний
+  `EvalCaseModal` попередньо заповненим (не персистить одразу), з
+  можливістю переглянути/відредагувати/прогнати перед Save. Виправлено
+  в Goals/AC-1/AC-4. **Явне застереження**: це рішення НЕ підкріплене
+  жодним письмовим AC чи текстом ДЗ — лише поведінкою відеозапису;
+  якщо з'явиться письмове джерело, що суперечить цьому, воно має
+  пріоритет.
+- **Агрегація метрик bulk-прогону — вирішено користувачем 2026-08-19:**
+  простий macro-average (кожен кейс важить однаково, незалежно від
+  кількості його очікувань чи знайдених findings), як і зафіксовано в
+  AC-12. Розглянутий, але відхилений варіант — важити кейси кількістю
+  очікувань/findings (кейс із 5 `must_find` впливав би на агрегат сильніше
+  за кейс з 1); не береться в v1.
 - Точна DDL-реалізація групування set-run'у (нова колонка `run_group_id`
   на `eval_runs` vs окрема таблиця `eval_run_groups`) — Development Plan
   рівень; ПОВЕДІНКА (AC-11/AC-12: один прогін набору = один ідентифікатор
@@ -703,3 +816,132 @@ SPEC-03/SPEC-04 до їхніх LLM-викликів і недовіреного
       Plan, не автотест (той самий принцип, SPEC-04's T12) — критерій
       приймання ДЗ "скріншот порівняння двох прогонів" + "скрінкаст
       наскрізного сценарію"
+- [ ] T13 **Виправлення T6/T7 під відкориговане AC-1/AC-4 (Open questions,
+      2026-08-19).** Не переписує T6/T7 — розширює вже реалізоване:
+      - Сервер: `EvalsService.createFromFinding` (T6) перестає викликати
+        `EvalsRepository.insert` — лишає лише резолюцію
+        `FindingRecord`/`agent_id`/реконструкцію diff'а й повертає
+        побудовану чернетку (`{owner_id, name, input_diff, input_meta,
+        expected_output}`, без `id`) без запису в БД. Access-control
+        (AC-23 — 404 на чужий workspace) лишається ДО побудови, як і
+        раніше — просто тепер "до будь-якого DB-запису" в принципі не
+        актуально для цього шляху (запису вже нема).
+      - Клієнт: `useCreateEvalCaseFromFinding` (T7) більше не
+        `onSuccess`-персистить сам по собі — повертає чернетку в
+        компонент; `FindingCard.tsx`'s `onTurnIntoEvalCase` відкриває
+        `EvalCaseModal` з цією чернеткою замість виклику toast/deep-link
+        (попередній round 2 фікс на toast+`?case=` — ліквідується разом
+        з переходом на модалку; клієнтський роутинг `?case=` в
+        `EvalsTab.tsx` можна лишити для інших переходів, якщо
+        використовується, або прибрати, якщо ні — рішення implementer'а).
+      - `EvalCaseModal.tsx`: новий необов'язковий проп для "seeded"-режиму
+        (підпис "Seeded from an accepted/dismissed finding", бейдж
+        POSITIVE CASE/NEGATIVE CASE з `expected_output[0]`); рендер
+        `run.data.run.per_trace[0].actual` як Actual output (JSON, не
+        лише pass/fail-бейдж); банер статусу прогону з
+        `traces_passed`/`traces_total`/`duration_ms`/`cost_usd`; кнопка
+        "Finding skeleton" (вставляє шаблонний `EvalExpectation` в
+        `expectedText`); перемикач "Run on save" (Save викликає
+        `saveAndRun` замість `save`, коли увімкнено); третій таб "Files"
+        (список файлів, розпарсений з `diff --git a/... b/...`-заголовків
+        наявного `input_diff` — без нового джерела даних).
+      → AC-1, AC-4 (виправлені) →
+      `client/.../FindingCard/FindingCard.test.tsx` (клік відкриває
+      модалку з чернеткою, не викликає мутацію напряму),
+      `client/.../EvalCaseModal/EvalCaseModal.test.tsx` (seeded-режим:
+      підпис + бейдж рендеряться, Actual output показує JSON після
+      прогону, Finding skeleton вставляє шаблон, Run on save змінює
+      поведінку Save, Files-таб рендерить список),
+      `server/test/evals.it.test.ts` (T6's ендпоінт більше не створює
+      рядок у `eval_cases` — лише повертає чернетку; жодного нового
+      INSERT до явного `POST /agents/:id/evals`)
+- [ ] T14 **Eval Dashboard — тренд/спарклайн/версії/історія (Open
+      questions, 2026-08-19), скасовує попередній Non-goal.** Дані вже
+      здебільшого готові: `EvalsService.dashboard()`
+      (`server/src/modules/evals/service.ts:319-357`) уже тягне ВСІ
+      set-run'и агента через `repo.allSetRuns()`, групує по
+      `run_group_id`, але лишає лише НАЙНОВІШУ групу — треба зберегти
+      решту, не додавати нових запитів.
+      - Сервер: розширити `EvalDashboardAgentSummary`
+        (`service.ts:61`) — новий тип `EvalDashboardRunSummary
+        {run_group_id, version, ran_at, cases_total, cases_passed,
+        recall, precision, citation_accuracy}`; `dashboard()` рахує ВСІ
+        групи агента (не лише найновішу), сортує за `ran_at` зростаюче
+        для присвоєння `version` (1 = найстаріший set-run цього агента —
+        НЕ версія конфігурації з `agent_versions`, окремого поняття),
+        повертає `recent_runs: EvalDashboardRunSummary[]` (найновіші
+        перші, обмежити розумною кількістю, напр. 10 — для спарклайна й
+        таблиці історії); `last_run` = `recent_runs[0]`; додати
+        `agent_model: string` з уже наявного `agents.model` (без нового
+        запиту — `agents.list()` вже повертає весь рядок). Дублювати
+        зміну типу в клієнтську копію (`client/src/lib/hooks/evals.ts`'s
+        `EvalDashboardAgentSummary` — та сама, вже задокументована
+        конвенція "не спільний контракт, дублюється вручну", root
+        `INSIGHTS.md` 2026-07-31).
+      - Клієнт: `EvalDashboardView.tsx` — картки агентів (name + модель-
+        бейдж з `agent_model` + "Last run v{N} · {дата} · {passed}/{total}
+        pass" + спарклайн recall по `recent_runs` (найпростіший inline
+        SVG polyline, БЕЗ важкого `LineChart`-компонента з осями/сіткою
+        — той для повноцінних графіків, не для крихітного спарклайна) +
+        RECALL/PREC/CITE кольоровими числами) замість голих текстових
+        рядків; кнопка "Run all agents" зверху праворуч — client-side
+        цикл викликів наявного `POST /agents/:id/eval-runs` по кожному
+        агенту зі списку (жодного нового bulk-of-bulk ендпоінта); нова
+        секція "Recent eval runs · all agents" — плаский список,
+        зведений з `recent_runs` УСІХ агентів, відсортований за `ran_at`
+        спадаюче, з прогрес-барами recall/precision/citation (кольорові
+        смуги) + `passed/total`. AC-21 (empty "Never run" на агента без
+        жодного прогону) лишається без змін.
+      → Open questions (вище) → жоден новий AC у формальному EARS-сенсі
+      (це UI/агрегація, не нова API-поведінка за межами вже наявного
+      `GET /eval-dashboard`) →
+      `client/.../EvalDashboardView.test.tsx` (розширити наявний —
+      картка показує спарклайн/версію/модель, секція "Recent eval runs"
+      рендерить рядки з усіх агентів, порожній стан лишається),
+      сервер: розширити наявний тест дашборда в `evals.it.test.ts`
+      (кілька set-run'ів одного агента → `recent_runs` містить усі,
+      `version` зростає хронологічно, `last_run` = найновіший)
+- [ ] T15 **Per-agent Eval Dashboard drill-down + Compare-модалка з
+      system-prompt diff + Promote (Open questions, 2026-08-19).**
+      - Схема: `system_prompt_snapshot text` (nullable) на `eval_runs`
+        (`server/src/db/schema/eval.ts`) → нова міграція (`pnpm
+        db:generate`, перевірка по факту як у T2).
+      - `EvalsService.runSet()` (`service.ts`): заповнює
+        `systemPromptSnapshot: agent.systemPrompt` на кожен рядок групи
+        (той самий `agent`, що вже резолвиться на початку методу — без
+        нового запиту).
+      - Контракт `EvalRunRecord` (`eval-ci.ts`, обидві копії) отримує
+        `system_prompt_snapshot: string | null`.
+      - Нова сторінка `client/src/app/eval-dashboard/[agentId]/page.tsx`
+        → `_components/EvalAgentDashboardView` (тонка сторінка делегує,
+        конвенція вже наявних сторінок): 3 картки метрик з дельтою й
+        міні-спарклайном, банер-інсайт (код-генерований, правило вище),
+        повний `LineChart` (recall/precision/citation, oldest→newest),
+        таблиця прогонів з чекбоксами (макс. 2, той самий UX, що T8's
+        історія) + кнопка "Compare".
+      - `EvalDashboardView.tsx` (T14): клік по картці веде на
+        `/eval-dashboard/{agentId}` замість `/agents/{id}?tab=evals`.
+      - Промоція `RunGroup`/`groupRuns`/`caseTransitions` з
+        `EvalsTab/helpers.ts` у спільний шар (другий споживач —
+        react-ui-architecture "promote on second user", той самий патерн
+        T13).
+      - Нова модалка `CompareRunsModal` (у промотованому спільному шарі
+        чи новій `_components/` цієї сторінки — implementer's call):
+        метрики-дельти + cost, текстовий диф `system_prompt_snapshot`
+        двох прогонів (простий лінійний діф, без нової npm-залежності —
+        `client`'s `package.json` не має `diff`/`jsdiff`, і не варто
+        додавати заради одного текстового порівняння), кнопка
+        "Promote v{N}" → викликає наявний `PUT /agents/:id`
+        (`useUpdateAgent` чи еквівалент) з
+        `{system_prompt: run.system_prompt_snapshot}` — жодного нового
+        серверного роуту.
+      → Open questions (вище) → жоден новий AC у формальному EARS-сенсі
+      (UI/агрегація поверх наявних даних + одне нове поле, не нова
+      API-поведінка за межами вже наявних роутів) →
+      нові `EvalAgentDashboardView.test.tsx` (метрики+дельта+банер
+      рендеряться, банер відсутній коли жодна метрика не впала, вибір 2
+      прогонів відкриває Compare), `CompareRunsModal.test.tsx`
+      (диф рендериться, Promote викликає update-мутацію з правильним
+      снепшотом), `server/test/evals.it.test.ts` (bulk-прогін персистує
+      `system_prompt_snapshot`, що дорівнює `agent.systemPrompt` на
+      момент прогону)

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { EvalExpectation } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -14,13 +15,16 @@ import { EvalsService } from './service.js';
  *   PUT    /agents/:id/evals/:caseId     → update (owner-scoped to :id)
  *   DELETE /agents/:id/evals/:caseId     → delete (owner-scoped to :id)
  *   POST   /agents/:id/evals/:caseId/run → run it, persist an eval_runs row
+ *   GET    /agents/:id/eval-runs         → set-run history, newest first (AC-17)
+ *   POST   /agents/:id/eval-runs         → run the WHOLE set, one run_group_id (AC-11)
+ *   GET    /eval-dashboard               → workspace-wide, per-agent latest set-run (AC-20)
  */
 
 const CreateEvalCaseBody = z.object({
   name: z.string().min(1),
   input_diff: z.string().optional(),
   input_meta: z.unknown().optional(),
-  expected_output: z.unknown().optional(),
+  expected_output: z.array(EvalExpectation).optional(),
   notes: z.string().optional(),
 });
 
@@ -80,4 +84,32 @@ export default async function evalsRoutes(appBase: FastifyInstance) {
       return result;
     },
   );
+
+  // ---- Set-run history (AC-17) --------------------------------------------
+  app.get('/agents/:id/eval-runs', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const agent = await app.container.agentsRepo.getById(workspaceId, req.params.id);
+    if (!agent) throw new NotFoundError('Agent not found');
+    return service.listSetRuns(workspaceId, req.params.id);
+  });
+
+  // ---- Bulk set-run (AC-11–AC-14, AC-22, AC-23) ----------------------------
+  // Tighter than the single-run rate limit (unlimited today, a pre-existing
+  // gap out of this spec's scope): bulk fans out to N LLM calls per request.
+  app.post(
+    '/agents/:id/eval-runs',
+    { schema: { params: IdParams }, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const result = await service.runSet(workspaceId, req.params.id, req.log);
+      if (!result) throw new NotFoundError('Agent not found');
+      return result;
+    },
+  );
+
+  // ---- Eval Dashboard (AC-20/AC-21) — workspace-wide, no :repoId ----------
+  app.get('/eval-dashboard', async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    return service.dashboard(workspaceId);
+  });
 }

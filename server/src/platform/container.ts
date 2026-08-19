@@ -29,6 +29,7 @@ import { ReviewRepository } from '../modules/reviews/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { ProjectContextService } from '../modules/project-context/service.js';
+import { EvalsService } from '../modules/evals/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
 
@@ -77,6 +78,7 @@ export class Container {
   private _reviewRepo?: ReviewRepository;
   private _repoIntel?: RepoIntel;
   private _projectContext?: ProjectContextService;
+  private _evalsService?: EvalsService;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
@@ -133,6 +135,17 @@ export class Container {
    */
   get projectContext(): ProjectContextService {
     return (this._projectContext ??= new ProjectContextService(this));
+  }
+
+  /**
+   * Evals module (SPEC-05) — owns eval_cases/eval_runs. DB-backed like
+   * `agentsRepo`/`projectContext`, not an external adapter — no
+   * `ContainerOverrides` entry. Constructed here so consuming modules
+   * (reviews' "turn finding into eval case") use `container.evalsService`
+   * instead of reaching into another module's folder.
+   */
+  get evalsService(): EvalsService {
+    return (this._evalsService ??= new EvalsService(this));
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */

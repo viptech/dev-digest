@@ -281,3 +281,112 @@ client/src/app/repos/[repoId]/onboarding/_components/OnboardingTourPage/Onboardi
 Доказ: client/package.json (немає рядка `@testing-library/user-event` у
 `devDependencies`); client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/DiffTab.test.tsx:56
 (`fireEvent.click(...)`)
+
+## 2026-08-19 · gotcha
+**`Badge` (`@devdigest/ui`) рендерить усі `children` в ОДНОМУ `<span>` — кілька
+JSX-інтерполяцій усередині одного `Badge` зливаються в один текстовий вузол, і
+`getByText("КОРОТКА-ЧАСТИНА")` (точний збіг) НЕ знаходить його**
+Розширення `EvalCaseModal.tsx` (SPEC-05 T13, "POSITIVE CASE"/"NEGATIVE CASE"
+бейдж + людський підсумок поруч) спочатку клав обидва шматки тексту в ОДИН
+`<Badge>{label} · {summary.text}</Badge>` — `Badge.tsx`'s `<span>{children}</span>`
+(без проміжних елементів між текстовими вузлами) робить повний `textContent`
+рівним `"POSITIVE CASE · MUST find ..."`, тож `screen.getByText("POSITIVE
+CASE")` (точний збіг за замовчуванням) не збігається НІ з чим — падає "Unable
+to find an element". Фікс: рендерити короткий лейбл усередині `Badge`, а
+довгий підсумок — окремим `<span>` поруч (поза `Badge`), не всередині нього;
+тоді `getByText("POSITIVE CASE")` (точний) і `getByText(/MUST find/)`
+(regex-підрядок) знаходять кожен свій елемент незалежно. Той самий клас
+пастки, що вже задокументований для дублікатів тексту (записи 2026-07-31/
+2026-08-13), але тут причина не дублікат, а конкатенація кількох
+JSX-інтерполяцій в один текстовий вузол одного елемента.
+Доказ: client/src/vendor/ui/primitives/Badge.tsx:24-48 (`<span>{children}</span>`,
+без розділових елементів); client/src/components/eval-case-modal/EvalCaseModal.tsx:203-210
+(підсумок винесено в окремий `<span>` поруч із `<Badge>`)
+
+## 2026-08-19 · decision
+**`EvalCaseModal` промотовано з `agents/[id]/.../EvalsTab/_components/` у
+`client/src/components/eval-case-modal/` — другий викликач (`FindingsPanel`)
+з іншого фіче-дерева це вимагав, за правилом react-ui-architecture "promote on
+the second user"**
+`FindingsPanel` (репо/pulls-фіча) отримав потребу відкривати той самий
+`EvalCaseModal`, що раніше обслуговував лише `EvalsTab` (agents-фіча) —
+крос-фіче imports (`../../other-feature/...`) — це і є сигнал промоції, не
+привід тягнути імпорт напряму. Нову підпапку названо kebab-case
+(`eval-case-modal`), за конвенцією вже наявних `client/src/components/*`
+(`app-shell`, `diff-viewer`, `run-cost-badge`), а не PascalCase, як у
+feature-local `_components/`. Усередині компонента імпорти хуків/утиліт
+переведено на `@/lib/hooks/evals` (alias), а не порахований `../`-ланцюжок —
+уникає класу пасток із записів 2026-08-02 про неправильний підрахунок
+глибини відносних імпортів у цьому ж дереві.
+Доказ: client/src/components/eval-case-modal/EvalCaseModal.tsx:6-7 (alias-
+імпорти), client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsPanel/FindingsPanel.tsx:13
+(другий викликач), .claude/skills/react-ui-architecture/SKILL.md ("promote on
+the second user" / "A relative import climbs out of one feature and into
+another")
+
+## 2026-08-19 · decision
+**recall/precision/citation_accuracy не мали жодної кольорової конвенції в
+кодовій базі — `METRIC_COLOR` (T14) вводить її вперше**
+До Eval Dashboard'а (T14) ці три метрики скрізь рендерились простим текстом
+без кольору (`EvalsTab.tsx`, старий `EvalCaseModal`) — жодного "вже наявного"
+кольору не було, хоча план це й припускав. Зафіксовано: recall=`var(--accent)`
+(синій), precision=`var(--ok)` (зелений), citation_accuracy=`var(--warn)`
+(жовтогарячий) — узгоджено з референс-макетом курсу. Якщо ці метрики
+з'являться в `EvalsTab`/`EvalCaseModal` пізніше — перевикористовувати цю саму
+палітру, а не вигадувати нову.
+Доказ: client/src/app/eval-dashboard/_components/EvalDashboardView/styles.ts:4-9
+(`METRIC_COLOR`)
+
+## 2026-08-19 · gotcha
+**`EvalsTab.tsx` тепер рендерить ДВА різних лічильники з ідентичним
+next-intl форматом `"{count} cases"` (заголовок кейсів і кожен рядок
+історії сет-ранів) — колізія `getByText`, коли обидва числа збігаються**
+`evalsTab.casesCount` (новий, для "N cases" лічильника над списком кейсів) і
+вже наявний `evalsTab.historyCasesCount` (для кожного рядка "Set-run
+history") — обидва мають рядок-формат `"{count} cases"`. Коли кількість
+поточних eval-кейсів агента дорівнює кількості кейсів, що реально
+виконались в конкретному історичному сет-рані (типовий фікстур-дефолт: 1
+кейс визначено, 1 кейс побіг), `screen.getByText("1 cases")` знаходить ДВА
+елементи одночасно і падає. Це той самий клас пастки, що вже
+задокументований (2026-07-31, 2026-08-13) — фікс тут: у фікстурі тесту
+свідомо тримати РІЗНУ кількість поточних кейсів і кейсів у конкретному
+історичному сет-рані (напр. 2 визначено, 1 виконано), а не однакове число,
+замість переходу на `getAllByText`.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.test.tsx
+(тест "a single set-run renders in history..." — коментар пояснює вибір
+`cases.length = 2` проти `historyRows`-групи з 1 кейсом); client/messages/en/eval.json
+(`evalsTab.casesCount`/`evalsTab.historyCasesCount` — обидва `"{count} cases"`)
+
+## 2026-08-19 · gotcha
+**`@devdigest/ui`'s `icon=` prop не має ключа `"Pencil"`, попри те що
+underlying lucide-імпорт називається саме `Pencil` — валідний ключ `"Edit"`**
+`icons.tsx:147` аліасить `Edit: Pencil` навмисно ("prototype used 'Edit';
+lucide exports Pencil/Edit — alias to keep API"), тож `Icon`/`Button icon=`
+приймає лише `"Edit"`. `icon="Pencil"` не падає одразу — валиться лише на
+`tsc --noEmit` величезною union-type помилкою, що не вказує прямо на фікс.
+Впіймано під час верифікації плану evals-tab-mockup-alignment: `implementer`-
+агент (без Bash у своїй сесії, див. корневий INSIGHTS.md) не міг прогнати
+typecheck сам і залишив `icon="Pencil"` в новій кнопці редагування рядка
+кейсу.
+Доказ: client/src/vendor/ui/icons.tsx:147; client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.tsx:263 (виправлено на `icon="Edit"`)
+
+## 2026-08-19 · gotcha
+**Блок карток метрик (rядок 156+) і секція Compare (рядок 303+) в
+`EvalsTab.tsx` рендерять ОДНАКОВУ дельту, коли `groups` має рівно 2 записи
+— колізія `getByText`, відмінна від уже задокументованої Badge-пастки**
+Обидва блоки рахують дельту з того самого `groups` (`groupRuns(historyRows)`,
+`EvalsTab.tsx:83`): картки зверху завжди показують "найновіший сет-ран
+проти попереднього" (`metricCards`), Compare-секція — дельту між ДВОМА
+ОБРАНИМИ користувачем сет-ранами. Коли в фікстурі/сценарії всього 2
+run_group'и, ці дві пари збігаються — і обидва блоки рендерять однаковий
+текст (напр. "▼ Δ 50%") в РІЗНИХ, легітимно окремих елементах (не один
+елемент зі склеєними текстовими вузлами, як Badge-пастка 2026-08-19 вище).
+Незкоуплений `screen.getByText(/Δ 50%/)` тоді знаходить 2 елементи й падає,
+хоча з компонентом усе гаразд. Фікс — інший, ніж у Badge-пастці: скоупити
+запит через `within()` на контейнер конкретної секції (напр.
+`within(screen.getByText("Comparing set-runs").closest("div")!)`), а не
+міняти розбиття тексту по елементах.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.tsx:83,156,303
+(спільне джерело `groups`, картки метрик, заголовок Compare-секції);
+client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.test.tsx
+(тест "selecting two set-runs..." — виправлено скоупом `within(compareSection)`)

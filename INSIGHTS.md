@@ -92,3 +92,41 @@ not just eval-0"), просто пропускається з "No eval directori
 Обхід — не класти `total_duration_seconds` всередину `grading.json`, лишати
 timing-дані тільки в сусідньому `timing.json`.
 Доказ: `~/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown/skills/skill-creator/scripts/aggregate_benchmark.py:86-152`
+
+## 2026-08-19 · gotcha
+**`Bash`-тул відсутній у сесії `implementer`-агента з самого початку (SPEC-05
+T13) — не "стався збій", а взагалі не був у списку доступних інструментів**
+Задача прямо попереджала, що це вже траплялось двічі раніше в цьому ж плані
+("both times caught and fixed by the coordinator running tests manually") —
+підтверджено втретє: у списку `functions` цієї сесії був лише
+`Read/Edit/Write/Skill/Grep/Glob`, без `Bash`. Наслідок — неможливо виконати
+`pnpm typecheck`/`pnpm test`/`pnpm run verify:l06`, і неможливо фізично
+перемістити/видалити файли (немає інструменту видалення) — довелось лишити
+старий `EvalCaseModal`-каталог (`client/src/app/agents/[id]/_components/
+AgentEditor/_components/EvalsTab/_components/EvalCaseModal/`) осиротілим
+замість справжнього `mv`, коли компонент промотили в
+`client/src/components/eval-case-modal/`. Правило: щойно виявив відсутність
+`Bash` у списку інструментів — одразу зафіксувати це в звіті координатору
+(а не намагатись "симулювати" typecheck вручну чи мовчки обходити відсутність
+видалення файлів) — так само, як цей запис.
+Доказ: system prompt цієї сесії (`<functions>`-блок без `Bash`), задача-промпт
+секції "Run the full test suite afterward... this has happened twice before"
+
+## 2026-08-19 · gotcha
+**Відсутність `Bash` у сесії `implementer` для SPEC-05-евалів — не разовий
+збій, а системне: підтверджено ЧЕТВЕРТИЙ раз, на іншому плані того ж
+"сімейства" (`evals-tab-mockup-alignment.md`)**
+Продовжує запис вище (2026-08-19, "втретє") — цього разу для окремого,
+пізнішого плану (`.claude/plans/evals-tab-mockup-alignment.md`, той самий
+`EvalsTab`/`eval-dashboard` кут кодової бази), і знову список `functions`
+сесії містив лише `Read/Edit/Write/Skill/Grep/Glob`, без `Bash`. Візерунок:
+проблема прив'язана не до конкретного плану чи задачі, а до того, ЯК
+координатор запускає `implementer`-агента для цієї гілки роботи (evals/
+SPEC-05) — варто перевірити конфігурацію дозволів інструментів для цього
+конкретного ланцюжка агентів, а не List кожен раз як окремий інцидент.
+Наслідок для виконавця: імплементація (Read/Edit/Write) пройшла повністю, але
+`pnpm test`/`pnpm typecheck` в `client/` та `pnpm exec vitest run` в `server/`
+не були запущені цією сесією — координатор/наступна сесія має прогнати їх
+вручну перед тим, як вважати роботу підтвердженою.
+Доказ: system prompt цієї сесії (`<functions>`-блок без `Bash`); той самий
+симптом задокументовано вище для іншого плану того ж SPEC-05 evals-треку.

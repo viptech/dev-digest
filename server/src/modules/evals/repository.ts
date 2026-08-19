@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 
@@ -27,11 +27,16 @@ export interface UpdateEvalCase {
 
 export interface InsertEvalRun {
   caseId: string;
+  /** Shared by every case's row within one bulk set-run; `null` for a
+   *  single-case run (SPEC-05). */
+  runGroupId?: string | null;
   actualOutput: unknown;
   pass: boolean;
-  recall: number;
-  precision: number;
-  citationAccuracy: number;
+  /** `null` when the case's run failed (AC-14) — excluded from aggregates,
+   *  never coerced to 0. */
+  recall: number | null;
+  precision: number | null;
+  citationAccuracy: number | null;
   durationMs: number;
   costUsd: number | null;
 }
@@ -114,6 +119,7 @@ export class EvalsRepository {
       .insert(t.evalRuns)
       .values({
         caseId: values.caseId,
+        runGroupId: values.runGroupId ?? null,
         actualOutput: values.actualOutput as object,
         pass: values.pass,
         recall: values.recall,
@@ -139,5 +145,62 @@ export class EvalsRepository {
       if (!out.has(row.caseId)) out.set(row.caseId, row); // first hit per case = newest (orderBy desc)
     }
     return out;
+  }
+
+  /** Every set-run row (i.e. `run_group_id IS NOT NULL`) for this owner,
+   *  newest first, each joined with its case's name (AC-17 run history). */
+  async listSetRunsByOwner(
+    workspaceId: string,
+    ownerKind: 'skill' | 'agent',
+    ownerId: string,
+  ): Promise<Array<EvalRunRow & { caseName: string }>> {
+    const rows = await this.db
+      .select({ run: t.evalRuns, caseName: t.evalCases.name })
+      .from(t.evalRuns)
+      .innerJoin(t.evalCases, eq(t.evalRuns.caseId, t.evalCases.id))
+      .where(
+        and(
+          eq(t.evalCases.workspaceId, workspaceId),
+          eq(t.evalCases.ownerKind, ownerKind),
+          eq(t.evalCases.ownerId, ownerId),
+          isNotNull(t.evalRuns.runGroupId),
+        ),
+      )
+      .orderBy(desc(t.evalRuns.ranAt));
+    return rows.map((r) => ({ ...r.run, caseName: r.caseName }));
+  }
+
+  /** `eval_cases` count per `owner_id`, workspace-wide (Eval Dashboard,
+   *  AC-20) — one aggregate query, not one per agent. */
+  async caseCountsByOwner(workspaceId: string, ownerKind: 'skill' | 'agent'): Promise<Map<string, number>> {
+    const rows = await this.db
+      .select({ ownerId: t.evalCases.ownerId, count: sql<number>`count(*)` })
+      .from(t.evalCases)
+      .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalCases.ownerKind, ownerKind)))
+      .groupBy(t.evalCases.ownerId);
+    return new Map(rows.map((r) => [r.ownerId, Number(r.count)]));
+  }
+
+  /** Every set-run row workspace-wide (any owner), newest first, joined with
+   *  its case's `owner_id`+name (Eval Dashboard, AC-20) — one aggregate
+   *  query; grouping into "latest run-group per agent" happens in the
+   *  service layer, not per-agent queries here. */
+  async allSetRuns(
+    workspaceId: string,
+    ownerKind: 'skill' | 'agent',
+  ): Promise<Array<EvalRunRow & { ownerId: string; caseName: string }>> {
+    const rows = await this.db
+      .select({ run: t.evalRuns, ownerId: t.evalCases.ownerId, caseName: t.evalCases.name })
+      .from(t.evalRuns)
+      .innerJoin(t.evalCases, eq(t.evalRuns.caseId, t.evalCases.id))
+      .where(
+        and(
+          eq(t.evalCases.workspaceId, workspaceId),
+          eq(t.evalCases.ownerKind, ownerKind),
+          isNotNull(t.evalRuns.runGroupId),
+        ),
+      )
+      .orderBy(desc(t.evalRuns.ranAt));
+    return rows.map((r) => ({ ...r.run, ownerId: r.ownerId, caseName: r.caseName }));
   }
 }

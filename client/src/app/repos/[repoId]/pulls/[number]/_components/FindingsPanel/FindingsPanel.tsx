@@ -9,6 +9,8 @@ import type { FindingRecord } from "@devdigest/shared";
 import { FindingCard } from "../FindingCard";
 import { useFindingAction } from "../../../../../../../lib/hooks/reviews";
 import { severityCounts } from "@/lib/findings";
+import type { EvalCaseDraft } from "@/lib/hooks/evals";
+import { EvalCaseModal } from "@/components/eval-case-modal";
 import { KEY_TO_ACTION, SEVERITY_ORDER } from "./constants";
 import { visibleFindings } from "./helpers";
 import { s } from "./styles";
@@ -39,6 +41,13 @@ export function FindingsPanel({
   const [hideLow, setHideLow] = React.useState(false);
   const [focusIdx, setFocusIdx] = React.useState(0);
   const [activeSeverities, setActiveSeverities] = React.useState<Set<Severity>>(new Set());
+  // SPEC-05 T13 — "Turn into eval case" (on any FindingCard below) bubbles
+  // its fetched draft up here: FindingsPanel is the nearest common ancestor
+  // of every FindingCard, and only one draft can be open at a time.
+  const [evalDraft, setEvalDraft] = React.useState<{
+    draft: EvalCaseDraft;
+    seededFrom: "accepted" | "dismissed";
+  } | null>(null);
 
   // A jump target must be visible regardless of whatever filter was active —
   // clear them so the targeted card is guaranteed to render.
@@ -82,6 +91,14 @@ export function FindingsPanel({
 
   return (
     <div>
+      {evalDraft && (
+        <EvalCaseModal
+          agentId={evalDraft.draft.owner_id}
+          draft={evalDraft.draft}
+          seededFrom={evalDraft.seededFrom}
+          onClose={() => setEvalDraft(null)}
+        />
+      )}
       <div style={s.toolbar}>
         <div style={s.severityChips}>
           {SEVERITY_CHIPS.map((sev) => (
@@ -119,6 +136,7 @@ export function FindingsPanel({
               repoFullName={repoFullName}
               headSha={headSha}
               onAction={(act) => action.mutate({ findingId: f.id, action: act, prId })}
+              onOpenEvalCaseDraft={(draft, seededFrom) => setEvalDraft({ draft, seededFrom })}
             />
           ))
         )}

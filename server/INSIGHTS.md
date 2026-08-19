@@ -398,3 +398,58 @@ join'ів/лукапів — і це нормальна, прийнята пра
 Доказ: server/src/modules/repos/repository.ts:7; прецеденти —
 server/src/modules/repo-intel/repository.ts:136-148 (`getRepoBasics`),
 server/src/modules/project-context/repository.ts (`getRepoForContext`)
+
+## 2026-08-19 · gotcha
+**GitHub's `pr_files.patch` уже містить свій `@@ ... @@`-заголовок хунка — бракує
+лише file-level `diff --git`/`---`/`+++` рядків, не чотирьох заголовків**
+При реконструкції unified diff з `pr_files.patch`+`.path` (SPEC-05 T6,
+`POST /findings/:id/eval-case`) легко припустити, що `.patch` — це "голе тіло
+хунка" без ЖОДНОГО заголовка, і завжди синтезувати `@@ -0,0 +1,<n> @@` собі. Але
+реальний GitHub API (і мок `MockGitHubClient.getPullRequest`'s
+`files[0].patch`) повертає рядок, що вже ПОЧИНАЄТЬСЯ з власного
+`@@ -oldStart,oldLines +newStart,newLines @@` — те саме підтверджує наявний
+`evals.it.test.ts`'s `DIFF`-фікстура, де `@@ -1,2 +1,5 @@` йде відразу після
+синтетичних `---`/`+++` рядків. Правильна реконструкція: перевірити, чи
+`.patch` вже починається з `@@ ... @@` (regex `/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/`)
+— і синтезувати заголовок лише як fallback, коли його немає, а не завжди.
+Доказ: server/src/adapters/mocks.ts:177 (`patch: '@@ -10,3 +10,4 @@\n...'`),
+server/src/modules/evals/service.ts:409-415 (`reconstructSingleFileDiff`)
+
+## 2026-08-19 · gotcha
+**Заміна `matchFindings()`'s точного збігу множин на `scoreEvalCase()`'s
+"нейтральна зона" (AC-7) тихо перевертає pass/fail існуючого інтеграційного
+тесту, написаного під СТАРУ семантику**
+`evals.it.test.ts`'s тест "with a corner-case skill linked+enabled..." навмисно
+демонстрував, що ввімкнення скіла змінює результат прогону: зі старим
+`matchFindings` (`expected=[]`, `actual=[1 finding]` → `pass=false`, бо
+`actual.length !== expected.length`). Нова формула (SPEC-05 AC-7) трактує
+знахідку поза ВСІМА розміченими зонами як нейтральну — не карає precision — тож
+той самий сценарій (`expected_output: []`, тобто взагалі без зон) тепер дає
+`pass=true`. Це не регресія, а навмисний наслідок формули з Goals спеки — але
+дослівний старий assert (`traces_passed).toBe(0)`) ламається мовчки після
+переходу на `scoreEvalCase()`, якщо його не оновити разом з T3/T4.
+Доказ: server/src/modules/evals/helpers.ts:18-56 (`scoreEvalCase` doc-comment
+з формулою), server/test/evals.it.test.ts (тест перейменовано й assert
+змінено на `toBe(1)` з коментарем-поясненням)
+
+## 2026-08-19 · gotcha
+**Той самий `argv[1]`-guard баг, що вже задокументований для `migrate.ts`
+(2026-08-11), ламає й `seed.ts` — `pnpm db:seed` теж мовчки нічого не робить**
+`pnpm db:seed` (і прямий `tsx src/db/seed.ts`) завершується з exit 0, без
+жодного виводу — ні `✓ seeded {...}`, ні помилки — і без жодного нового
+рядка в БД. Причина та сама: CLI-guard `if (import.meta.url === file://
+${process.argv[1]}) {...}` (`seed.ts:539`) ніколи не збігається в цьому клоні,
+бо шлях репозиторію містить пробіл (`.../ai agent/dev-digest`). Через це весь
+блок виклику `seed(handle.db)` просто не виконується — не лише сам
+`console.log`, а взагалі жодна вставка. Перевірено фактично: `SELECT count(*)
+FROM eval_cases` лишався `0` після "успішного" `pnpm db:seed`, і зʼявились 8
+очікуваних рядків лише після прямого виклику `seed(handle.db)` з тимчасового
+скрипта поза `argv[1]`-перевіркою (той самий workaround, що вже
+задокументований для `runMigrations`). Висновок: у цьому репо жоден
+скрипт з таким CLI-guard-паттерном (`db/migrate.ts`, `db/seed.ts`, і
+ймовірно інші) не можна вважати таким, що справді щось зробив, лише за
+exit code чи відсутністю помилки — завжди перевіряй по факту (`SELECT
+count(*)` / `\d <table>`), як і для міграцій.
+Доказ: server/src/db/seed.ts:538-539 (guard), server/src/db/seed.ts:548
+(`console.log('✓ seeded', r)` — цей рядок не зʼявився в жодному прогоні
+цієї сесії)

@@ -1,16 +1,45 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
 
 vi.mock("../../../../../../../lib/hooks/reviews", () => ({
   useFindingAction: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+// FindingCard (rendered by FindingsPanel) now calls
+// useCreateEvalCaseFromFinding(), which needs a real QueryClientProvider in
+// the tree — same precedent as PrBriefCard.test.tsx.
+const evalCaseDraftMutateAsync = vi.fn().mockResolvedValue({
+  owner_id: "ag1",
+  name: "From finding: Hardcoded secret",
+  input_diff: "",
+  input_meta: null,
+  expected_output: [{ type: "must_find", file: "src/config.ts", start_line: 11, end_line: 11 }],
+});
+vi.mock("../../../../../../../lib/hooks/evals", () => ({
+  useCreateEvalCaseFromFinding: () => ({ mutateAsync: evalCaseDraftMutateAsync, isPending: false }),
+}));
+// SPEC-05 T13 — FindingsPanel is the lift point that renders the shared
+// EvalCaseModal for whichever FindingCard's draft is open; stub it here
+// (RTL: test FindingsPanel's own wiring, not EvalCaseModal's internals,
+// which has its own dedicated test suite at
+// client/src/components/eval-case-modal/EvalCaseModal.test.tsx).
+vi.mock("@/components/eval-case-modal", () => ({
+  EvalCaseModal: ({ agentId, seededFrom, onClose }: { agentId: string; seededFrom: string; onClose: () => void }) => (
+    <div data-testid="eval-case-modal-stub" onClick={onClose}>
+      {`modal for ${agentId} (${seededFrom})`}
+    </div>
+  ),
+}));
 
 import { FindingsPanel } from "./FindingsPanel";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  evalCaseDraftMutateAsync.mockClear();
+});
 
 function makeFinding(overrides: Partial<FindingRecord>): FindingRecord {
   return {
@@ -104,5 +133,30 @@ describe("FindingsPanel severity filter", () => {
     expect(screen.getByText("Hardcoded secret")).toBeInTheDocument();
     expect(screen.getByText("Missing Retry-After header")).toBeInTheDocument();
     expect(screen.getByText("Extract helper")).toBeInTheDocument();
+  });
+});
+
+describe("FindingsPanel — eval-case draft lift point (SPEC-05 T13)", () => {
+  it("opens the shared EvalCaseModal with the fetched draft after 'Turn into eval case'", async () => {
+    const accepted = [makeFinding({ id: "f1", accepted_at: "2026-08-19T00:00:00.000Z" })];
+    renderWithIntl(<FindingsPanel findings={accepted} prId="pr1" />);
+
+    expect(screen.queryByTestId("eval-case-modal-stub")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Turn into eval case"));
+
+    await waitFor(() => expect(evalCaseDraftMutateAsync).toHaveBeenCalledWith("f1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("eval-case-modal-stub")).toHaveTextContent("modal for ag1 (accepted)"),
+    );
+  });
+
+  it("closes the modal via its onClose callback", async () => {
+    const accepted = [makeFinding({ id: "f1", accepted_at: "2026-08-19T00:00:00.000Z" })];
+    renderWithIntl(<FindingsPanel findings={accepted} prId="pr1" />);
+    fireEvent.click(screen.getByText("Turn into eval case"));
+    await waitFor(() => expect(screen.getByTestId("eval-case-modal-stub")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("eval-case-modal-stub"));
+    expect(screen.queryByTestId("eval-case-modal-stub")).not.toBeInTheDocument();
   });
 });
