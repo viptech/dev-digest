@@ -6,6 +6,8 @@
     "addSkill": "Add Skill",
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
+    "redirecting": "Taking you to your skills…",
+    "open": "Open {name}",
     "menu": {
       "createFromScratch": "Create from scratch",
       "fromFile": "Import from file",

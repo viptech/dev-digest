@@ -557,3 +557,35 @@ Evals-вкладка `/skills/:id`), користувач бачить "this age
 `evalsTab.noHistory`); викликається з
 client/src/components/eval-owner-tab/EvalOwnerTab.tsx:218,286 (той самий
 `t()` без параметра власника)
+
+## 2026-08-20 · decision
+**Спростовує запис від 2026-08-20 «`/skills/:id` НЕ копіює
+`AgentEditorPage.tsx`'s сайдбар — спека прямо цього не вимагає»**
+Те рішення спиралось на мовчання спеки, а не на референс-мокап. Живий
+UI-фідбек (скриншот референсного мокапу Skill Editor) показав той самий
+список+перемикання, що вже має `AgentEditor`. Виправлено: `SkillEditorView`
+тепер рендерить лівий сайдбар сусідніх скілів (пошук + «Add Skill» +
+`SkillCard`-список, клік перемикає `/skills/{id}?tab={поточний tab}`),
+перевикористовуючи `SkillCard`/`SkillDrawer` з `skills/_components/*` так
+само, як робив колишній `SkillsListView`. Правило на майбутнє: мовчання
+спеки про UI-деталь — це привід уточнити в референс-мокапі/користувача, не
+привід трактувати як «не потрібно».
+Доказ: client/src/app/skills/[id]/_components/SkillEditorView/SkillEditorView.tsx:96-137
+(сайдбар), client/src/app/skills/[id]/_components/SkillEditorView/styles.ts:1-11
+(коментар із поясненням розвороту)
+
+## 2026-08-20 · decision
+**`/skills` більше не окрема grid-сторінка — редіректить на
+`/skills/{перший скіл}`, той самий патерн, що вже є на `/` (root) для
+репозиторіїв**
+Наступний UI-фідбек після додавання сайдбару: раз `/skills/:id` вже сам є
+списком+деталями, окрема проміжна grid-сторінка `/skills` — зайвий клік.
+`SkillsListView` (grid + `filterSkills`) видалена; `/skills/page.tsx`
+перероблена на тонкий редіректор (`useEffect` → `router.replace` на перший
+скіл), що є 1:1 копією вже наявного патерну в `src/app/page.tsx:15-19`
+(редірект на перший репозиторій) — не новий винахід. `filterSkills`
+демотована назад у `SkillEditorView/helpers.ts` (react-ui-architecture:
+«promote on second user» — коли лишився 1 викликач, демоція правильна, не
+залишати в «спільному» місці за інерцією).
+Доказ: client/src/app/skills/page.tsx:26-30 (редірект-`useEffect`);
+client/src/app/skills/[id]/_components/SkillEditorView/helpers.ts:1-11

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, within, cleanup } from "@testing-library/react";
+import { render, screen, within, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../messages/en/skills.json";
 import projectContextMessages from "../../../../../../messages/en/projectContext.json";
@@ -13,13 +13,15 @@ vi.mock("@/components/app-shell", () => ({
 }));
 
 const routerReplace = vi.fn();
+const routerPush = vi.fn();
 let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: routerReplace }),
+  useRouter: () => ({ replace: routerReplace, push: routerPush }),
   useSearchParams: () => searchParams,
 }));
 
 const useSkillMock = vi.fn();
+const useSkillsMock = vi.fn();
 const useUpdateSkillMock = vi.fn();
 const useSkillContextDocsMock = vi.fn();
 const useSetSkillContextDocsMock = vi.fn();
@@ -29,14 +31,27 @@ const useSkillVersionsMock = vi.fn();
 // Wiring all 6 tabs into the body (Step 10) pulls in every tab's own data
 // hook — mock the whole `@/lib/hooks/skills` module here (not just `useSkill`
 // as before Step 10) so Config/Context/Stats/Versions render without a real
-// QueryClient/network (same shape as each tab's own *.test.tsx).
+// QueryClient/network (same shape as each tab's own *.test.tsx). `useSkills`
+// backs the sidebar's sibling-skill list — called unconditionally (before
+// the ErrorState early-return), so every test needs it stubbed too, same as
+// `SkillsListView.test.tsx`'s mock of the same hook.
+// `SkillDrawer` (rendered from the sidebar's "Add Skill" menu, same as
+// `SkillsListView.test.tsx`) imports `useCreateSkill`/`useImportPreview`/
+// `useImportSkill` from this same module via a relative specifier that
+// resolves to the identical file — Vitest mocks by resolved module
+// identity, so these need stubs here too even though this view's own body
+// never calls them.
 vi.mock("@/lib/hooks/skills", () => ({
   useSkill: (id: string | null | undefined) => useSkillMock(id),
+  useSkills: () => useSkillsMock(),
   useUpdateSkill: () => useUpdateSkillMock(),
   useSkillContextDocs: (...args: unknown[]) => useSkillContextDocsMock(...args),
   useSetSkillContextDocs: (...args: unknown[]) => useSetSkillContextDocsMock(...args),
   useSkillStats: (...args: unknown[]) => useSkillStatsMock(...args),
   useSkillVersions: (...args: unknown[]) => useSkillVersionsMock(...args),
+  useCreateSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useImportPreview: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useImportSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 // The Evals tab (`@/components/eval-owner-tab`) reads its data through
@@ -71,10 +86,23 @@ const SKILL = {
   version: 3,
 };
 
+const SIBLING_SKILL = {
+  id: "s2",
+  name: "No Then Chains",
+  description: "house rule",
+  type: "convention" as const,
+  source: "extracted" as const,
+  body: "# Rule 2",
+  enabled: true,
+  version: 1,
+};
+
 afterEach(() => {
   cleanup();
   routerReplace.mockClear();
+  routerPush.mockClear();
   searchParams = new URLSearchParams();
+  useSkillsMock.mockReset();
   useUpdateSkillMock.mockReset();
   useSkillContextDocsMock.mockReset();
   useSetSkillContextDocsMock.mockReset();
@@ -98,6 +126,7 @@ function renderWithIntl(ui: React.ReactElement) {
 // "config" tab body too now that Step 10 wires it in) don't crash on an
 // un-mocked hook return.
 function mockAllTabHooksWithDefaults() {
+  useSkillsMock.mockReturnValue({ data: [SKILL, SIBLING_SKILL] });
   useUpdateSkillMock.mockReturnValue({ mutate: vi.fn(), isPending: false, isSuccess: false, data: undefined });
   useSkillContextDocsMock.mockReturnValue({ data: [] });
   useSetSkillContextDocsMock.mockReturnValue({ mutate: vi.fn(), isPending: false });
@@ -142,18 +171,47 @@ describe("SkillEditorView", () => {
     useSkillMock.mockReturnValue({ data: SKILL, isLoading: false, isError: false, refetch: vi.fn() });
     mockAllTabHooksWithDefaults();
     renderWithIntl(<SkillEditorView id="s1" />);
-    expect(screen.getByText("PR Quality Rubric")).toBeInTheDocument();
+    // The sidebar now also renders a `SkillCard` with this same name, so an
+    // unscoped `getByText("PR Quality Rubric")` matches two nodes — query
+    // the `<h1>` (there's exactly one, in the header) instead, same fix
+    // shape as the header-scoping already used for the version badge below.
+    const heading = screen.getByRole("heading", { level: 1, name: "PR Quality Rubric" });
+    expect(heading).toBeInTheDocument();
     // Scoped to the header container, not the whole document: the default
     // "config" tab body (wired in Step 10) renders `ConfigTab`, which shows
     // its OWN "v{version}" badge too — an unscoped `getByText("v3")` matches
     // both and throws "multiple elements found" (the same duplicate-getByText
     // class documented 8x in client/INSIGHTS.md). The header is the nearest
     // ancestor <div> of the <h1> — `s.header` in styles.ts.
-    const header = screen.getByText("PR Quality Rubric").closest("div")!;
+    const header = heading.closest("div")!;
     expect(within(header).getByText("v3")).toBeInTheDocument();
   });
 
+  it("the sidebar lists sibling skills and switching to one navigates preserving the current tab", () => {
+    useSkillMock.mockReturnValue({ data: SKILL, isLoading: false, isError: false, refetch: vi.fn() });
+    mockAllTabHooksWithDefaults();
+    searchParams = new URLSearchParams("tab=stats");
+    renderWithIntl(<SkillEditorView id="s1" />);
+    expect(screen.getByText("No Then Chains")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("No Then Chains"));
+    expect(routerPush).toHaveBeenCalledWith("/skills/s2?tab=stats");
+  });
+
+  it("filtering the sidebar's search narrows the sibling list", () => {
+    useSkillMock.mockReturnValue({ data: SKILL, isLoading: false, isError: false, refetch: vi.fn() });
+    mockAllTabHooksWithDefaults();
+    renderWithIntl(<SkillEditorView id="s1" />);
+    fireEvent.change(screen.getByPlaceholderText("Search skills…"), { target: { value: "then chains" } });
+    expect(screen.getByText("No Then Chains")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "PR Quality Rubric" })).toBeInTheDocument();
+    // The active skill's own header stays put (search only filters the
+    // sidebar list); its sidebar card, however, is filtered out.
+    const sidebarCards = screen.queryAllByText("PR Quality Rubric");
+    expect(sidebarCards).toHaveLength(1); // only the header <h1> remains
+  });
+
   it("a 404 from useSkill(id) shows ErrorState, not an empty/broken render (AC-3)", () => {
+    useSkillsMock.mockReturnValue({ data: [] });
     useSkillMock.mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -170,6 +228,7 @@ describe("SkillEditorView", () => {
 
   it("switching between all 6 tabs renders each one's expected content", () => {
     useSkillMock.mockReturnValue({ data: SKILL, isLoading: false, isError: false, refetch: vi.fn() });
+    useSkillsMock.mockReturnValue({ data: [SKILL] });
     useUpdateSkillMock.mockReturnValue({ mutate: vi.fn(), isPending: false, isSuccess: false, data: undefined });
     useSkillContextDocsMock.mockReturnValue({ data: [] });
     useSetSkillContextDocsMock.mockReturnValue({ mutate: vi.fn(), isPending: false });
