@@ -5,11 +5,15 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Modal, FormField, TextInput, SelectInput, Textarea } from "@devdigest/ui";
 import type { Provider } from "@devdigest/shared";
-import { useCreateAgent } from "../../../../../../lib/hooks/agents";
+import { useCreateAgent } from "@/lib/hooks/agents";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODAL_WIDTH, PROVIDER_OPTIONS } from "./constants";
 import { s } from "./styles";
 
-/** Create-agent modal — name/description/provider/model/system-prompt. */
+/** Create-agent modal — name/description/provider/model/system-prompt.
+ *  Promoted out of the former `AgentsListView` (SPEC-06 follow-up: `/agents`
+ *  redirects straight to the first agent's editor now, same as `/skills`
+ *  does — see `agents/page.tsx`) so it has two callers: the redirect page's
+ *  empty state, and the Agent Editor sidebar's "Add" action. */
 export function CreateAgentModal({ onClose }: { onClose: () => void }) {
   const t = useTranslations("agents");
   const router = useRouter();

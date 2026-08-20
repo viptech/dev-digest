@@ -6,6 +6,7 @@ import { Button, Checkbox } from "@devdigest/ui";
 import type { SkillVersion } from "@devdigest/shared";
 import { useSkillVersions, useUpdateSkill } from "@/lib/hooks/skills";
 import { diffPromptLines } from "@/lib/text-diff";
+import { VersionDetailModal } from "./VersionDetailModal";
 import { s } from "./styles";
 
 /**
@@ -20,12 +21,19 @@ import { s } from "./styles";
  * entirely on the server-side `bodyChanged` guard
  * (`server/src/modules/skills/repository.ts:85`) to skip a new snapshot
  * (AC-31) — no client-side duplicate check here.
+ *
+ * Each row also has a "View" action opening `VersionDetailModal` with that
+ * version's full body — added alongside the agent-side counterpart
+ * (`agents/[id]/_components/AgentEditor/_components/VersionsTab/
+ * VersionDetailModal.tsx`); a skill version has no other field to show
+ * (`skill_versions` only ever tracks `body`), so it's just the text.
  */
 export function VersionsTab({ skillId }: { skillId: string }) {
   const t = useTranslations("skills");
   const { data: versions, isLoading } = useSkillVersions(skillId);
   const update = useUpdateSkill();
   const [selected, setSelected] = React.useState<number[]>([]);
+  const [viewing, setViewing] = React.useState<SkillVersion | null>(null);
 
   const toggle = (version: number) => {
     setSelected((prev) => {
@@ -68,12 +76,29 @@ export function VersionsTab({ skillId }: { skillId: string }) {
               />
               <span style={s.createdAt}>{new Date(v.created_at).toLocaleString()}</span>
             </div>
-            <Button kind="secondary" size="sm" disabled={update.isPending} onClick={() => restore(v)}>
-              {update.isPending ? t("versions.restoring") : t("versions.restore")}
-            </Button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Button kind="ghost" size="sm" onClick={() => setViewing(v)}>
+                {t("versions.view")}
+              </Button>
+              <Button kind="secondary" size="sm" disabled={update.isPending} onClick={() => restore(v)}>
+                {update.isPending ? t("versions.restoring") : t("versions.restore")}
+              </Button>
+            </div>
           </div>
         ))}
       </div>
+
+      {viewing && (
+        <VersionDetailModal
+          version={viewing}
+          onClose={() => setViewing(null)}
+          onRestore={(v) => {
+            restore(v);
+            setViewing(null);
+          }}
+          restoring={update.isPending}
+        />
+      )}
 
       {selected.length !== 2 && versions.length > 1 && <p style={s.hint}>{t("versions.selectTwoHint")}</p>}
 

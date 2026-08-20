@@ -13,6 +13,7 @@ import { SkillsTab } from "./_components/SkillsTab";
 import { ContextTab } from "./_components/ContextTab";
 import { EvalOwnerTab } from "@/components/eval-owner-tab";
 import { StatsTab } from "./_components/StatsTab";
+import { VersionsTab } from "./_components/VersionsTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
 
@@ -33,6 +34,8 @@ export function AgentEditor({ agent, tab, onTab }: { agent: Agent; tab: string; 
           <EvalOwnerTab ownerKind="agent" ownerId={agent.id} />
         ) : tab === "stats" ? (
           <StatsTab agentId={agent.id} />
+        ) : tab === "versions" ? (
+          <VersionsTab agentId={agent.id} />
         ) : (
           <ConfigTab agent={agent} />
         )}

@@ -6,6 +6,8 @@
     "addSkill": "Add Skill",
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
+    "redirecting": "Taking you to your skills…",
+    "open": "Open {name}",
     "menu": {
       "createFromScratch": "Create from scratch",
       "fromFile": "Import from file",
@@ -133,9 +135,11 @@
   },
   "versions": {
     "loading": "Loading versions…",
+    "view": "View",
     "restore": "Restore",
     "restoring": "Restoring…",
     "selectTwoHint": "Select two versions to see a diff.",
-    "diffHeading": "Diff: v{older} → v{newer}"
+    "diffHeading": "Diff: v{older} → v{newer}",
+    "close": "Close"
   }
 }

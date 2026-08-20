@@ -8,6 +8,7 @@ import type {
   AgentContextDocLink,
   AgentSkillLink,
   AgentStats,
+  AgentVersion,
   ModelInfo,
   Provider,
   ReviewStrategy,
@@ -74,6 +75,17 @@ export function useUpdateAgent() {
       qc.invalidateQueries({ queryKey: ["agents"] });
       qc.setQueryData(["agent", data.id], data);
     },
+  });
+}
+
+/** Config history for an agent, newest version first (Versions tab). Mirrors
+ *  `useSkillVersions` exactly — same shape, same `GET .../versions` route
+ *  convention (`server/src/modules/agents/routes.ts:128`, already wired). */
+export function useAgentVersions(agentId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["agent-versions", agentId],
+    queryFn: () => api.get<AgentVersion[]>(`/agents/${agentId}/versions`),
+    enabled: !!agentId,
   });
 }
 

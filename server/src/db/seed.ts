@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { pathToFileURL } from 'node:url';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
 import { eq, and } from 'drizzle-orm';
@@ -448,6 +449,50 @@ semver-discipline violation).`,
     }
   }
 
+  // ---- backfill the missing `agent_versions` v1 snapshot ----
+  // The insert loop above (and `upsertSkill`'s inline `db.insert(t.agents)`
+  // before it) writes straight into `t.agents`, bypassing
+  // `AgentsRepository.insert()`'s `snapshotVersion` call — so every seeded
+  // agent had NO v1 row in `agent_versions` (Versions tab showed nothing
+  // until a real edit bumped it to v2+, which then looked like the agent's
+  // history *started* at v2). `upsertSkill` above already does this right
+  // for skills (`skillVersions` v1 inserted right alongside `skills`); this
+  // mirrors that. Scoped to `agents.version === 1`: for those the CURRENT
+  // row is exactly what v1 looked like (nothing has edited it since), so
+  // it's a safe, accurate backfill — an agent already bumped to v2+ has a
+  // genuinely lost v1 this can't reconstruct, so it's left alone.
+  // `onConflictDoNothing` on the (agent_id, version) PK makes this safe to
+  // rerun on every `pnpm db:seed`, and it isn't limited to `seedAgents` by
+  // name — it also self-heals any user-created agent that's never been
+  // edited.
+  const unversionedAgents = await db
+    .select()
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.version, 1)));
+  for (const row of unversionedAgents) {
+    const links = await db
+      .select({ skillId: t.agentSkills.skillId })
+      .from(t.agentSkills)
+      .where(eq(t.agentSkills.agentId, row.id));
+    await db
+      .insert(t.agentVersions)
+      .values({
+        agentId: row.id,
+        version: 1,
+        configJson: {
+          provider: row.provider,
+          model: row.model,
+          system_prompt: row.systemPrompt,
+          output_schema: row.outputSchema,
+          strategy: row.strategy,
+          ci_fail_on: row.ciFailOn,
+          repo_intel: row.repoIntel,
+          skills: links.map((l) => l.skillId),
+        },
+      })
+      .onConflictDoNothing();
+  }
+
   // ---- demo eval cases (idempotent by name) — one per control-experiment scenario ----
   async function upsertEvalCase(values: {
     ownerId: string;
@@ -535,8 +580,11 @@ semver-discipline violation).`,
   return { workspaceId, userId };
 }
 
-// CLI entrypoint
-if (import.meta.url === `file://${process.argv[1]}`) {
+// CLI entrypoint. `pathToFileURL`, not a raw `file://` template — see
+// `migrate.ts`'s identical fix for why a plain `file://${process.argv[1]}`
+// silently never matches (and `pnpm db:seed` silently no-ops) under a repo
+// path containing a space or other percent-encoded character.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const url = process.env.DATABASE_URL;
   if (!url) {
     console.error('DATABASE_URL is required');
