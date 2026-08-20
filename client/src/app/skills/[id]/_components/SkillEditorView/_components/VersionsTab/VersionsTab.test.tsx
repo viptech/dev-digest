@@ -92,4 +92,35 @@ describe("VersionsTab", () => {
 
     expect(updateMutate).toHaveBeenCalledWith({ id: "sk1", patch: { body: V1.body } });
   });
+
+  it("View opens a modal with that version's full body", () => {
+    useSkillVersionsMock.mockReturnValue({ data: VERSIONS, isLoading: false });
+    useUpdateSkillMock.mockReturnValue({ mutate: updateMutate, isPending: false });
+    renderWithIntl(<VersionsTab skillId="sk1" />);
+
+    expect(screen.queryByText(/add this/)).not.toBeInTheDocument();
+
+    // VERSIONS[0] is v2 (newest first) — its "View" button is the first one.
+    fireEvent.click(screen.getAllByText("View")[0]!);
+
+    expect(screen.getByText(/add this/)).toBeInTheDocument();
+    expect(screen.getByText(/keep this/)).toBeInTheDocument();
+    expect(screen.getByText("Skill body (Markdown)")).toBeInTheDocument();
+  });
+
+  it("Restore from inside the modal sends that version's body and closes the modal", () => {
+    useSkillVersionsMock.mockReturnValue({ data: VERSIONS, isLoading: false });
+    useUpdateSkillMock.mockReturnValue({ mutate: updateMutate, isPending: false });
+    renderWithIntl(<VersionsTab skillId="sk1" />);
+
+    fireEvent.click(screen.getAllByText("View")[1]!); // v1 (older)
+    expect(screen.getByText(/remove this/)).toBeInTheDocument();
+
+    // Two "Restore" buttons now exist (the row's + the modal's) — the modal's is the last.
+    const restoreButtons = screen.getAllByText("Restore");
+    fireEvent.click(restoreButtons[restoreButtons.length - 1]!);
+
+    expect(updateMutate).toHaveBeenCalledWith({ id: "sk1", patch: { body: V1.body } });
+    expect(screen.queryByText("Skill body (Markdown)")).not.toBeInTheDocument();
+  });
 });

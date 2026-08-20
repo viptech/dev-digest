@@ -589,3 +589,56 @@ UI-фідбек (скриншот референсного мокапу Skill Ed
 залишати в «спільному» місці за інерцією).
 Доказ: client/src/app/skills/page.tsx:26-30 (редірект-`useEffect`);
 client/src/app/skills/[id]/_components/SkillEditorView/helpers.ts:1-11
+
+## 2026-08-20 · dependency
+**Той самий редірект застосований до `/agents` (той же патерн, що `/skills`) —
+виявив приховану залежність сайдбару від старої grid-сторінки**
+`/agents/[id]/page.tsx`'s лівий сайдбар (той, з якого `SkillEditorView`'s
+сайдбар і був скопійований) мав кнопку «Add» → «Create from scratch», яка
+робила `router.push("/agents")`, покладаючись на те, що `/agents` сама
+відрендерить `CreateAgentModal` через свій grid. Це ніде не задокументовано —
+знайшлося тільки при переробці `/agents` на тонкий редіректор: якби
+`CreateAgentModal` просто видалили разом із `AgentsListView`, кнопка почала б
+мовчки нікуди не вести (редірект на першого агента, і все). Правило на
+майбутнє: коли якась сторінка A відкриває create/import-флоу сторінки B через
+`router.push`, а не напряму рендерить модалку — це прихована залежність, яку
+варто підняти на спільний рівень (тут: `CreateAgentModal` піднято з
+`agents/_components/AgentsListView/_components/` у
+`agents/_components/CreateAgentModal/`, і сайдбар тепер відкриває її напряму
+через локальний `useState`, як і зробив `SkillEditorView` з `SkillDrawer`)
+ще до видалення сторінки, яку A на це покладалась.
+Доказ: client/src/app/agents/[id]/page.tsx:86 (`setCreating(true)` замість
+колишнього `router.push("/agents")`); client/src/app/agents/page.tsx:1-64
+(редіректор без власного create UI, окрім empty-state)
+
+## 2026-08-20 · gotcha
+**Версійність агента (`agent_versions`) вже була повністю зроблена на
+бекенді — схема, репозиторій, сервіс, роути, контракт — просто без жодного
+клієнтського споживача**
+На відміну від «unused tables» з root `CLAUDE.md` (порожні таблиці під
+майбутні уроки), тут таблиця НЕ порожня і НЕ невикористана — вона активно
+пишеться при кожному конфіг-апдейті агента (`AgentsRepository.update` →
+`snapshotVersion`), і `GET /agents/:id/versions` та
+`GET /agents/:id/versions/:version` вже існували й працювали. Просто ніхто
+ще не додав `useAgentVersions` на клієнті чи вкладку в `AgentEditor`. Перед
+тим, як писати серверну частину для «додай X як у Y», спочатку перевір
+`server/src/modules/<name>/routes.ts`'s doc-коментар зі списком роутів —
+іноді робота вже зроблена на 80%, і бракує тільки UI.
+Доказ: server/src/modules/agents/routes.ts:19-32 (doc-коментар зі списком
+роутів, versions включно); server/src/modules/agents/repository.ts:148-167
+(`snapshotVersion`, викликається з кожного `update`/`insert`)
+
+## 2026-08-20 · gotcha
+**Підтверджує запис від 2026-07-31 про dual-copy `vendor/shared` — `AgentVersion`/
+`AgentVersionConfig` існували в серверній копії контрактів, але НЕ в
+клієнтській**
+Той самий клас проблеми: `server/src/vendor/shared/contracts/knowledge.ts`
+мав `AgentVersionConfig`/`AgentVersion` (додані разом із серверною
+версійністю), `client/src/vendor/shared/contracts/knowledge.ts` — ні.
+`useAgentVersions` компілювався б без жодної помилки типів (тип просто
+з'явився б як `any`/відсутній), якби я не звірив обидві копії вручну через
+`diff` — типова помилка мовчить, доки хтось реально не спробує використати
+відсутній тип. Перевіряй обидві копії `vendor/shared/contracts/*` при
+будь-якій зміні контракту, а не лише ту, що в пакеті, який редагуєш.
+Доказ: client/src/vendor/shared/contracts/knowledge.ts:249-274 (блок додано
+цією сесією, портований 1:1 із серверної копії)

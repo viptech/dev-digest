@@ -135,9 +135,11 @@
   },
   "versions": {
     "loading": "Loading versions…",
+    "view": "View",
     "restore": "Restore",
     "restoring": "Restoring…",
     "selectTwoHint": "Select two versions to see a diff.",
-    "diffHeading": "Diff: v{older} → v{newer}"
+    "diffHeading": "Diff: v{older} → v{newer}",
+    "close": "Close"
   }
 }

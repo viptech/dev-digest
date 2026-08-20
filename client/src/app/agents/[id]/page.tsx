@@ -8,6 +8,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button, Dropdown, ErrorState, Skeleton, Icon, Badge } from "@devdigest/ui";
 import { AppShell } from "../../../components/app-shell";
 import { AgentCard } from "../_components/AgentCard";
+import { CreateAgentModal } from "../_components/CreateAgentModal";
 import { AgentEditor } from "./_components/AgentEditor";
 import { TABS } from "./_components/AgentEditor/constants";
 import { useAgents, useAgent, useUpdateAgent } from "../../../lib/hooks/agents";
@@ -29,6 +30,7 @@ export default function AgentEditorPage() {
   const { data: agents } = useAgents();
   const { data: agent, isLoading, isError, error, refetch } = useAgent(id);
   const update = useUpdateAgent();
+  const [creating, setCreating] = React.useState(false);
 
   const tab = VALID_TABS.includes(search.get("tab") ?? "") ? search.get("tab")! : "config";
   const setTab = (t: string) => {
@@ -58,6 +60,7 @@ export default function AgentEditorPage() {
 
   return (
     <AppShell crumb={crumb}>
+      {creating && <CreateAgentModal onClose={() => setCreating(false)} />}
       <div style={{ display: "flex", height: "calc(100vh - 52px)" }}>
         {/* left: agent list */}
         <div
@@ -81,7 +84,7 @@ export default function AgentEditorPage() {
                     Add
                   </Button>
                 }
-                items={[{ label: "Create from scratch", icon: "Edit", onClick: () => router.push("/agents") }]}
+                items={[{ label: "Create from scratch", icon: "Edit", onClick: () => setCreating(true) }]}
               />
             </div>
           </div>

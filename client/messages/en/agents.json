@@ -8,10 +8,9 @@
     "breadcrumb": "Agents",
     "title": "Agents",
     "subtitle": "User-created reviewers. Each = provider + model + system prompt + linked skills.",
-    "searchPlaceholder": "Search agents…",
-    "addAgent": "Add Agent",
-    "createFromScratch": "Create from scratch",
     "loadError": "Could not load agents.",
+    "redirecting": "Taking you to your agents…",
+    "open": "Open {name}",
     "emptyTitle": "No agents yet",
     "emptyBody": "An agent is a configured reviewer — a model, a prompt, and the skills it uses. Create one to start reviewing.",
     "emptyCta": "Create your first agent"
@@ -49,7 +48,8 @@
       "context": "Context",
       "evals": "Evals",
       "stats": "Stats",
-      "ci": "CI"
+      "ci": "CI",
+      "versions": "Versions"
     }
   },
   "config": {
@@ -121,5 +121,22 @@
       "trace": "Trace"
     },
     "viewTrace": "View trace"
+  },
+  "versions": {
+    "loading": "Loading versions…",
+    "version": "v{version}",
+    "restore": "Restore",
+    "restoring": "Restoring…",
+    "selectTwoHint": "Select two versions to see a diff.",
+    "promptDiffHeading": "System prompt diff: v{older} → v{newer}",
+    "otherChanges": "Also changed",
+    "fieldChange": "{label}: {from} → {to}",
+    "skillsField": "Skills",
+    "boolOn": "on",
+    "boolOff": "off",
+    "view": "View",
+    "systemPromptLabel": "System prompt",
+    "configLabel": "Config",
+    "close": "Close"
   }
 }
