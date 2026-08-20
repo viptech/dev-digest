@@ -84,6 +84,33 @@ flowchart TB
   HEALTH["/health (liveness) · /health/ready (DB ping → 200/503)"]
 ```
 
+### Skills & Evals (later-lesson modules)
+
+Not shown in the starter diagram above (`skills` is an L02 addition; the
+owner-generalized `evals` routes below are SPEC-05/SPEC-06), but load-bearing
+for anyone touching `modules/skills/` or `modules/evals/`:
+
+- **`skills`** (`modules/skills/routes.ts`) — `GET/POST/PUT/DELETE
+  /skills(/:id)`, `POST /skills/import/preview` · `/skills/import`, `GET
+  /skills/:id/stats` (30-day usage/quality aggregates, Skill Editor's Stats
+  tab), `GET /skills/:id/versions` (`skills.body`-change history, newest
+  first, Skill Editor's Versions tab).
+- **`evals`** (`modules/evals/routes.ts`) — CRUD + run routes exist in two
+  parallel, owner-scoped families sharing one `EvalsService`/`EvalsRepository`
+  parameterized by `ownerKind: 'agent' | 'skill'` (SPEC-06 generalized this
+  from the original agent-only shape): `GET/POST /agents/:id/evals` and
+  `GET/POST /skills/:id/evals`, `PUT/DELETE .../evals/:caseId`, `POST
+  .../evals/:caseId/run`, `GET/POST .../eval-runs` (bulk set-run, `{max: 5,
+  timeWindow: '1 minute'}` rate limit on both owner kinds). A skill-owned run
+  builds a **synthetic in-memory config** — no real `agents` row is read or
+  created — with a fixed generic system prompt and just that one skill's
+  `body`, regardless of its `enabled` flag, so a skill can be tested in
+  isolation before it's linked/enabled on any real agent. `GET
+  /eval-dashboard` stays agent-only by design — skill-owned cases/runs never
+  appear there (`EvalsService.dashboard()` hard-filters on `ownerKind:
+  'agent'`). See
+  [`docs/specs/SPEC-06-skill-editor.md`](../docs/specs/SPEC-06-skill-editor.md).
+
 ## Environment
 
 `server/.env` (copied from `.env.example`):

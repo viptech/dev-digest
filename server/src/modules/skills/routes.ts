@@ -17,6 +17,8 @@ import { SkillsService } from './service.js';
  *   POST   /skills/import/preview   → parse an uploaded .md file, NOT persisted
  *   POST   /skills/import           → persist a confirmed import
  *                                      (source='imported_url', enabled=false)
+ *   GET    /skills/:id/stats        → 30-day usage/quality aggregates (Stats tab, G6)
+ *   GET    /skills/:id/versions     → `body`-change history, newest first (Versions tab, G7)
  */
 
 const CreateSkillBody = z.object({
@@ -104,5 +106,19 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     const skill = await service.importSave(workspaceId, req.body);
     reply.status(201);
     return skill;
+  });
+
+  app.get('/skills/:id/stats', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const stats = await service.getStats(workspaceId, req.params.id);
+    if (!stats) throw new NotFoundError('Skill not found');
+    return stats;
+  });
+
+  app.get('/skills/:id/versions', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const versions = await service.listVersions(workspaceId, req.params.id);
+    if (!versions) throw new NotFoundError('Skill not found');
+    return versions;
   });
 }

@@ -1,21 +1,12 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Button, Drawer, FormField, TextInput, SelectInput, Textarea, Badge } from "@devdigest/ui";
+import { Button, Drawer, FormField, TextInput, SelectInput, Textarea } from "@devdigest/ui";
 import type { SkillType } from "@devdigest/shared";
-import {
-  useSkill,
-  useCreateSkill,
-  useUpdateSkill,
-  useDeleteSkill,
-  useImportPreview,
-  useImportSkill,
-  useSkillContextDocs,
-  useSetSkillContextDocs,
-} from "../../../../lib/hooks/skills";
-import { ContextDocPicker } from "../../../../components/context-doc-picker";
-import { readFileAsText, serializesAs } from "./helpers";
+import { useCreateSkill, useImportPreview, useImportSkill } from "../../../../lib/hooks/skills";
+import { readFileAsText } from "./helpers";
 import { s } from "./styles";
 
 const TYPE_OPTIONS: { value: SkillType; label: string }[] = [
@@ -25,25 +16,22 @@ const TYPE_OPTIONS: { value: SkillType; label: string }[] = [
   { value: "custom", label: "custom" },
 ];
 
+/** Create/import a skill. No longer handles "edit" (SPEC-06) — editing an
+ *  existing skill now lives at `/skills/:id` (`SkillEditorView`'s Config
+ *  tab). There's no `id` to route to until create/import persists one, so
+ *  the drawer stays the entry point for those two modes only. */
 export function SkillDrawer({
   mode,
-  skillId,
   onClose,
 }: {
-  mode: "create" | "edit" | "import";
-  skillId?: string;
+  mode: "create" | "import";
   onClose: () => void;
 }) {
   const t = useTranslations("skills");
-  const pc = useTranslations("projectContext");
-  const { data: existing } = useSkill(mode === "edit" ? skillId : undefined);
+  const router = useRouter();
   const create = useCreateSkill();
-  const update = useUpdateSkill();
-  const del = useDeleteSkill();
   const importPreview = useImportPreview();
   const importSave = useImportSkill();
-  const { data: contextDocs } = useSkillContextDocs(mode === "edit" ? skillId : undefined);
-  const setContextDocs = useSetSkillContextDocs(skillId ?? "");
 
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -51,15 +39,6 @@ export function SkillDrawer({
   const [body, setBody] = React.useState("");
   const [previewed, setPreviewed] = React.useState(false);
   const [importError, setImportError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (mode === "edit" && existing) {
-      setName(existing.name);
-      setDescription(existing.description);
-      setType(existing.type);
-      setBody(existing.body);
-    }
-  }, [mode, existing]);
 
   const onFile = async (file: File) => {
     setImportError(null);
@@ -75,35 +54,24 @@ export function SkillDrawer({
     }
   };
 
+  // Successful create/import navigates into the new Skill Editor route
+  // instead of just closing (AC-4) — same pattern as
+  // `CreateAgentModal.tsx:32`'s `router.push` after `create.mutateAsync`.
   const submit = async () => {
     setImportError(null);
     try {
-      if (mode === "create") {
-        await create.mutateAsync({ name, description, type, body });
-      } else if (mode === "edit" && skillId) {
-        await update.mutateAsync({ id: skillId, patch: { name, description, type, body } });
-      } else if (mode === "import") {
-        await importSave.mutateAsync({ name, description, type, body });
-      }
+      const skill =
+        mode === "create"
+          ? await create.mutateAsync({ name, description, type, body })
+          : await importSave.mutateAsync({ name, description, type, body });
       onClose();
+      router.push(`/skills/${skill.id}?tab=config`);
     } catch {
       setImportError(t("drawer.saveFailed"));
     }
   };
 
-  const onDelete = async () => {
-    if (!skillId) return;
-    setImportError(null);
-    try {
-      await del.mutateAsync(skillId);
-      onClose();
-    } catch {
-      setImportError(t("drawer.deleteFailed"));
-    }
-  };
-
-  const isUntrusted = mode === "edit" && existing && existing.source !== "manual";
-  const saving = create.isPending || update.isPending || importSave.isPending;
+  const saving = create.isPending || importSave.isPending;
   const canSave =
     mode === "import" ? previewed && name.trim().length > 0 : name.trim().length > 0 && body.trim().length > 0;
 
@@ -119,11 +87,6 @@ export function SkillDrawer({
             <div style={s.untrustedNotice}>{importError}</div>
           )}
           <div style={s.footer}>
-            {mode === "edit" && skillId && (
-              <Button kind="ghost" onClick={onDelete} disabled={del.isPending}>
-                {t("preview.delete")}
-              </Button>
-            )}
             <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
               <Button kind="ghost" onClick={onClose}>
                 Cancel
@@ -137,9 +100,6 @@ export function SkillDrawer({
       }
     >
       <div style={s.body}>
-        {isUntrusted && !existing!.enabled && (
-          <div style={s.untrustedNotice}>{t("preview.untrustedNotice")}</div>
-        )}
         {mode === "import" && !previewed && (
           <label style={s.dropzone}>
             <input
@@ -171,20 +131,6 @@ export function SkillDrawer({
             <FormField label={t("file.bodyLabel")} hint={t("preview.bodyHint")} required>
               <Textarea value={body} onChange={setBody} rows={14} mono />
             </FormField>
-            {mode === "edit" && existing && <Badge>{t("preview.version", { version: existing.version })}</Badge>}
-            {mode === "edit" && skillId && (
-              <FormField label={pc("attachedTitle")} hint={pc("serializesAsHint")}>
-                <ContextDocPicker
-                  attachedDocs={contextDocs ?? []}
-                  onSetDocs={(docs) => setContextDocs.mutate(docs)}
-                  isSaving={setContextDocs.isPending}
-                />
-                <div style={s.serializesAs}>
-                  <div style={s.serializesAsLabel}>{pc("serializesAsTitle")}</div>
-                  <pre style={s.serializesAsCode}>{serializesAs(contextDocs ?? [])}</pre>
-                </div>
-              </FormField>
-            )}
           </>
         )}
       </div>

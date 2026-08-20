@@ -28,13 +28,23 @@ flowchart TD
   PULLS --> PR["/pulls/:number<br/>review detail<br/>(overview · diff · findings)"]
 
   AGENTS["/agents"] --> AGENT["/agents/:id<br/>editor (config)"]
+  SKILLS["/skills<br/>skill library"] --> SKILL["/skills/:id<br/>Skill Editor<br/>(Config·Context·Preview·Evals·Stats·Versions)"]
   SETTINGS["/settings/:section<br/>API keys · models"]
 
   PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
   PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments<br/>POST /pulls/:id/review · /findings/:id/(accept|dismiss)"| API
   AGENTS -->|"/agents · /agents/:id"| API
+  SKILLS -->|"/skills · /skills/:id"| API
+  SKILL -->|"GET /skills/:id/(stats|versions)<br/>/skills/:id/evals · /skills/:id/eval-runs"| API
   SETTINGS -->|"/settings · /providers"| API
 ```
+
+`/skills/:id`'s Evals tab reuses the same `EvalOwnerTab` component as
+`/agents/:id`'s Evals tab (`src/components/eval-owner-tab`), parameterized by
+`ownerKind: 'agent' | 'skill'` — it runs the skill's eval set in isolation
+(synthetic in-memory config, no real agent involved) so a skill can be tested
+before being enabled/linked anywhere. See
+[`docs/specs/SPEC-06-skill-editor.md`](../docs/specs/SPEC-06-skill-editor.md).
 
 Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,
 `g`-then-key shortcuts). Pages are thin; feature logic sits in colocated

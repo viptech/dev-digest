@@ -24,6 +24,7 @@ import {
   EvalExpectation,
   EvalCaseInput,
   EvalSetRunResult,
+  FeatureModelId,
 } from '@devdigest/shared';
 
 /**
@@ -413,5 +414,9 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+
+  it("FeatureModelId accepts 'skill_eval' (SPEC-06 T6)", () => {
+    expect(FeatureModelId.parse('skill_eval')).toBe('skill_eval');
   });
 });

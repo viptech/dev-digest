@@ -1,5 +1,5 @@
-import type { Skill, SkillType, SkillSource } from '@devdigest/shared';
-import type { SkillRow } from './repository.js';
+import type { Skill, SkillType, SkillSource, SkillVersion } from '@devdigest/shared';
+import type { SkillRow, SkillVersionRow } from './repository.js';
 
 /**
  * Pure helpers for the skills module — DB row ⇄ DTO mapping and the
@@ -17,6 +17,15 @@ export function toSkillDto(row: SkillRow): Skill {
     enabled: row.enabled,
     version: row.version,
     evidence_files: row.evidenceFiles ?? null,
+  };
+}
+
+export function toSkillVersionDto(row: SkillVersionRow): SkillVersion {
+  return {
+    skill_id: row.skillId,
+    version: row.version,
+    body: row.body,
+    created_at: row.createdAt.toISOString(),
   };
 }
 

@@ -1,6 +1,8 @@
 import type { CSSProperties } from "react";
 
-/** Co-located styles for EvalsTab. */
+/** Co-located styles for `EvalOwnerTab` (moved verbatim from
+ *  `agents/[id]/.../EvalsTab/styles.ts`, Development Plan `skill-editor.md`
+ *  Step 5, SPEC-06 AC-17 — no visual changes). */
 export const s = {
   wrap: { padding: "20px 24px" } satisfies CSSProperties,
   headerRow: { display: "flex", alignItems: "center", gap: 12, marginBottom: 16 } satisfies CSSProperties,
@@ -58,7 +60,7 @@ export const s = {
   } satisfies CSSProperties,
   metricCardValue: (color: string): CSSProperties => ({ fontSize: 20, fontWeight: 700, color }),
   // Reuses the existing Compare section's `up ? "var(--ok)" : "var(--crit)"`
-  // convention (EvalsTab.tsx's comparison block) for the delta arrow.
+  // convention (EvalOwnerTab.tsx's comparison block) for the delta arrow.
   metricCardDelta: (up: boolean): CSSProperties => ({
     fontSize: 11,
     fontWeight: 600,

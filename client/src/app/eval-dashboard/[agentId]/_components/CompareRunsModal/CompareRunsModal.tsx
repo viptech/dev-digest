@@ -7,7 +7,8 @@ import { useUpdateAgent } from "@/lib/hooks/agents";
 import { ApiError } from "@/lib/api";
 import { METRIC_COLOR } from "@/lib/eval-metrics";
 import type { VersionedRunGroup } from "@/lib/eval-runs";
-import { computeMetricDeltas, averageCost, diffPromptLines } from "./helpers";
+import { diffPromptLines } from "@/lib/text-diff";
+import { computeMetricDeltas, averageCost } from "./helpers";
 import { s } from "./styles";
 
 function pct(v: number): string {

@@ -5,9 +5,11 @@ import type { EvalCaseWithLastRun } from "@/lib/hooks/evals";
 // `@/lib/eval-runs` (SPEC-05 T15, Development Plan Addendum 3) once the new
 // per-agent Eval Dashboard drill-down page became a second consumer
 // (react-ui-architecture "promote on second user", same rule that already
-// promoted `EvalCaseModal`/T13 and `METRIC_COLOR`). `EvalsTab.tsx` imports
-// those directly from `@/lib/eval-runs` now; only the RunGroup TYPE is
-// still needed here, for `deriveMetricCards`'s signature below.
+// promoted `EvalCaseModal`/T13 and `METRIC_COLOR`). This file (moved here
+// verbatim from `agents/[id]/.../EvalsTab/helpers.ts`, Development Plan
+// `skill-editor.md` Step 5, SPEC-06 AC-17) imports those directly from
+// `@/lib/eval-runs`; only the RunGroup TYPE is still needed here, for
+// `deriveMetricCards`'s signature below.
 import { METRIC_KEYS, type MetricKey, type RunGroup } from "@/lib/eval-runs";
 
 /** MUST FIND/MUST NOT FLAG badge + severity-category tag for one case row —

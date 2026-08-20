@@ -28,8 +28,11 @@ function pct(v: number): string {
 export function EvalAgentDashboardView({ agentId }: { agentId: string }) {
   const t = useTranslations("eval");
   const { data: agent, isLoading: agentLoading, isError: agentError } = useAgent(agentId);
-  const { data: historyRows, isLoading: historyLoading, isError: historyError } = useEvalRunHistory(agentId);
-  const { data: cases } = useEvalCases(agentId);
+  const { data: historyRows, isLoading: historyLoading, isError: historyError } = useEvalRunHistory({
+    ownerKind: "agent",
+    ownerId: agentId,
+  });
+  const { data: cases } = useEvalCases({ ownerKind: "agent", ownerId: agentId });
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [comparing, setComparing] = React.useState(false);
 

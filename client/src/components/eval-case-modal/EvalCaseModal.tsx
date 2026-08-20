@@ -9,13 +9,24 @@ import { ApiError } from "@/lib/api";
 import { isValidJson, appendSkeletonExpectation, parseDiffFilePaths, deriveExpectationSummary } from "./helpers";
 import { s } from "./styles";
 
-/** Create/edit an eval case for this agent: name + input (diff or PR
+/** Create/edit an eval case for this owner: name + input (diff or PR
  *  title/body/files) on the left, expected-output JSON on the right. Can
  *  also trigger a run for an existing case and show its last result.
  *
  *  Promoted to the shared components layer (SPEC-05 T13) — it now has two
- *  callers: `EvalsTab` (agents feature, edit/create-new) and `FindingsPanel`
- *  (repos/pulls feature, "Turn into eval case" seeded drafts).
+ *  callers: `EvalsTab`/`EvalOwnerTab` (agents/skills features,
+ *  edit/create-new) and `FindingsPanel` (repos/pulls feature, "Turn into
+ *  eval case" seeded drafts, always agent-owned).
+ *
+ *  `ownerKind` (SPEC-06 AC-21, Development Plan `skill-editor.md` Step 5):
+ *  inspection during that step found the hooks this component calls
+ *  (`useCreateEvalCase`/`useUpdateEvalCase`/`useRunEvalCase`) were
+ *  generalized to require `{ ownerKind, ownerId }` — so this modal needs a
+ *  minimal, additive `ownerKind` prop (defaulting to `"agent"`) to keep
+ *  routing to the right base path for a skill-owned case; `agentId` doubles
+ *  as the generic owner id and keeps its existing name so the two
+ *  already-agent-only callers (`FindingsPanel`, its own test file) need no
+ *  changes.
  *
  *  Seeded mode (`draft`/`seededFrom` set): the finding→eval-case button
  *  builds an UNSAVED draft server-side and opens it here for review before
@@ -23,12 +34,16 @@ import { s } from "./styles";
  *  paths) is still the only way it's ever written to `eval_cases`. */
 export function EvalCaseModal({
   agentId,
+  ownerKind = "agent",
   existing,
   draft,
   seededFrom,
   onClose,
 }: {
   agentId: string;
+  /** `'skill'` for a skill-owned case (SPEC-06); defaults to `'agent'` so
+   *  existing callers (agents' EvalsTab, FindingsPanel) need no change. */
+  ownerKind?: "agent" | "skill";
   existing?: EvalCaseWithLastRun;
   /** An unsaved draft from `POST /findings/:id/eval-case` (SPEC-05 T13) —
    *  pre-fills the form but, unlike `existing`, has no persisted `id`: Save
@@ -40,9 +55,10 @@ export function EvalCaseModal({
   onClose: () => void;
 }) {
   const t = useTranslations("eval");
-  const create = useCreateEvalCase(agentId);
-  const update = useUpdateEvalCase(agentId);
-  const run = useRunEvalCase(agentId);
+  const owner = { ownerKind, ownerId: agentId };
+  const create = useCreateEvalCase(owner);
+  const update = useUpdateEvalCase(owner);
+  const run = useRunEvalCase(owner);
   const [error, setError] = React.useState<string | null>(null);
   const [running, setRunning] = React.useState(false);
   const [runOnSave, setRunOnSave] = React.useState(false);

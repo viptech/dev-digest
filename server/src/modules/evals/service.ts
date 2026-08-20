@@ -3,9 +3,11 @@ import type { EvalCase, EvalExpectation, EvalRun, EvalRunRecord, EvalSetRunResul
 import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
 import { reviewPullRequest } from '@devdigest/reviewer-core';
 import type { Container } from '../../platform/container.js';
-import type { AgentRow, EvalCaseRow, EvalRunRow } from '../../db/rows.js';
+import type { EvalCaseRow, EvalRunRow } from '../../db/rows.js';
 import { AgentsRepository } from '../agents/repository.js';
 import { EvalsRepository } from './repository.js';
+import { resolveFeatureModel } from '../settings/feature-models.js';
+import { SKILL_EVAL_SYSTEM_PROMPT } from './constants.js';
 import { NotFoundError, ValidationError } from '../../platform/errors.js';
 import {
   toEvalCaseDto,
@@ -15,6 +17,20 @@ import {
   parseGroundingRatio,
   computeActualCount,
 } from './helpers.js';
+
+/** `ownerKind` of an eval case/run: an agent's own set, or a skill tested in
+ *  isolation before it's linked to any agent (SPEC-06 G5). */
+export type EvalOwnerKind = 'agent' | 'skill';
+
+/** The narrow run config `executeCase` actually needs — either a real
+ *  `AgentRow` (structurally compatible, agent branch) or a synthetic
+ *  in-memory object built for a skill-under-test (SPEC-06 AC-14). No
+ *  persisted "system agent" row is ever created for the skill branch. */
+export interface EvalRunConfig {
+  provider: Provider;
+  model: string;
+  systemPrompt: string;
+}
 
 /** Minimal structured logger (pino-compatible: (obj, msg)) — same shape as
  *  reviews/run-executor.ts's Logger, redeclared locally to avoid reaching
@@ -95,8 +111,8 @@ export class EvalsService {
     this.agents = container.agentsRepo;
   }
 
-  async list(workspaceId: string, agentId: string): Promise<EvalCaseWithLastRun[]> {
-    const rows = await this.repo.listByOwner(workspaceId, 'agent', agentId);
+  async list(workspaceId: string, ownerKind: EvalOwnerKind, ownerId: string): Promise<EvalCaseWithLastRun[]> {
+    const rows = await this.repo.listByOwner(workspaceId, ownerKind, ownerId);
     const lastRuns = await this.repo.latestRunByCase(rows.map((r) => r.id));
     return rows.map((row) => {
       const run = lastRuns.get(row.id);
@@ -119,11 +135,16 @@ export class EvalsService {
     });
   }
 
-  async create(workspaceId: string, agentId: string, input: CreateEvalCaseInput): Promise<EvalCase> {
+  async create(
+    workspaceId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
+    input: CreateEvalCaseInput,
+  ): Promise<EvalCase> {
     const row = await this.repo.insert({
       workspaceId,
-      ownerKind: 'agent',
-      ownerId: agentId,
+      ownerKind,
+      ownerId,
       name: input.name,
       inputDiff: input.input_diff ?? null,
       inputMeta: input.input_meta ?? null,
@@ -135,12 +156,13 @@ export class EvalsService {
 
   async update(
     workspaceId: string,
-    agentId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
     caseId: string,
     patch: UpdateEvalCaseInput,
   ): Promise<EvalCase | undefined> {
     const existing = await this.repo.getById(workspaceId, caseId);
-    if (!existing || existing.ownerId !== agentId) return undefined;
+    if (!existing || existing.ownerKind !== ownerKind || existing.ownerId !== ownerId) return undefined;
 
     const row = await this.repo.update(workspaceId, caseId, {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
@@ -152,9 +174,9 @@ export class EvalsService {
     return row ? toEvalCaseDto(row) : undefined;
   }
 
-  async delete(workspaceId: string, agentId: string, caseId: string): Promise<boolean> {
+  async delete(workspaceId: string, ownerKind: EvalOwnerKind, ownerId: string, caseId: string): Promise<boolean> {
     const existing = await this.repo.getById(workspaceId, caseId);
-    if (!existing || existing.ownerId !== agentId) return false;
+    if (!existing || existing.ownerKind !== ownerKind || existing.ownerId !== ownerId) return false;
     return this.repo.deleteById(workspaceId, caseId);
   }
 
@@ -166,7 +188,7 @@ export class EvalsService {
    * resolves `agent`/`skillBodies` ONCE for a whole set, never per case.
    */
   private async executeCase(
-    agent: AgentRow,
+    runConfig: EvalRunConfig,
     skillBodies: string[],
     evalCase: EvalCaseRow,
     runGroupId: string | null,
@@ -177,14 +199,14 @@ export class EvalsService {
     }
 
     const diff = parseUnifiedDiff(evalCase.inputDiff ?? '');
-    const llm = await this.container.llm(agent.provider as Provider);
+    const llm = await this.container.llm(runConfig.provider as Provider);
     const meta = (evalCase.inputMeta ?? {}) as { title?: string; body?: string };
     const task = meta.title ? `Review: "${meta.title}"` : undefined;
 
     const start = Date.now();
     const outcome = await reviewPullRequest({
-      systemPrompt: agent.systemPrompt,
-      model: agent.model,
+      systemPrompt: runConfig.systemPrompt,
+      model: runConfig.model,
       diff,
       llm,
       strategy: 'single-pass',
@@ -216,51 +238,107 @@ export class EvalsService {
   }
 
   /**
-   * Run one eval case against the agent's LIVE config (system prompt, model,
-   * and its currently linked+enabled skills — same resolution Plan A wired
-   * into run-executor.ts). No repo-intel enrichment: an eval case is an
-   * isolated fixture diff, not tied to a cloned repo.
+   * Resolve the run config + skill bodies for one eval-case/set-run, given
+   * the case's owner. Shared by `run()`/`runSet()` so each resolves it
+   * exactly ONCE per call, never per case.
+   *  - `'agent'` branch: the agent's LIVE config (system prompt, model) and
+   *    its currently linked+enabled skills — same resolution Plan A wired
+   *    into run-executor.ts.
+   *  - `'skill'` branch (SPEC-06 AC-14/AC-15): a SYNTHETIC in-memory config,
+   *    never a persisted agent row — `SKILL_EVAL_SYSTEM_PROMPT` +
+   *    `resolveFeatureModel(..., 'skill_eval')`, and the skill-under-test's
+   *    OWN body as its only "linked skill", with NO `enabled` filter (unlike
+   *    the agent branch) — the whole point is testing a not-yet-enabled
+   *    skill before it's turned on for real.
+   * Returns `undefined` when the owner isn't found in this workspace.
+   */
+  private async resolveRunConfig(
+    workspaceId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
+  ): Promise<{ runConfig: EvalRunConfig; skillBodies: string[] } | undefined> {
+    if (ownerKind === 'agent') {
+      const agent = await this.agents.getById(workspaceId, ownerId);
+      if (!agent) return undefined;
+
+      const linkedSkills = await this.agents.linkedSkills(ownerId);
+      const skillBodies = linkedSkills.filter((l) => l.skill.enabled).map((l) => l.skill.body);
+
+      return {
+        runConfig: { provider: agent.provider as Provider, model: agent.model, systemPrompt: agent.systemPrompt },
+        skillBodies,
+      };
+    }
+
+    const skill = await this.container.skillsRepo.getById(workspaceId, ownerId);
+    if (!skill) return undefined;
+
+    const { provider, model } = await resolveFeatureModel(this.container, workspaceId, 'skill_eval');
+    return {
+      runConfig: { provider, model, systemPrompt: SKILL_EVAL_SYSTEM_PROMPT },
+      skillBodies: [skill.body],
+    };
+  }
+
+  /**
+   * Run one eval case against its owner's resolved run config. No repo-intel
+   * enrichment: an eval case is an isolated fixture diff, not tied to a
+   * cloned repo.
    */
   async run(
     workspaceId: string,
-    agentId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
     caseId: string,
   ): Promise<{ case: EvalCase; run: EvalRun } | undefined> {
     const evalCase = await this.repo.getById(workspaceId, caseId);
-    if (!evalCase || evalCase.ownerId !== agentId) return undefined;
+    if (!evalCase || evalCase.ownerKind !== ownerKind || evalCase.ownerId !== ownerId) return undefined;
 
-    const agent = await this.agents.getById(workspaceId, agentId);
-    if (!agent) return undefined;
+    const resolved = await this.resolveRunConfig(workspaceId, ownerKind, ownerId);
+    if (!resolved) return undefined;
 
-    const linkedSkills = await this.agents.linkedSkills(agentId);
-    const skillBodies = linkedSkills.filter((l) => l.skill.enabled).map((l) => l.skill.body);
-
-    const { case: dto, runRow } = await this.executeCase(agent, skillBodies, evalCase, null);
+    // SPEC-06 AC-16 (ubiquitous — every row a skill-run produces, not just
+    // runSet's bulk rows) requires the snapshot on skill-owned single runs
+    // too. Agent-owned single runs keep the pre-existing `null` convention
+    // (SPEC-05 T15 never required it there) — scoped to 'skill' only so this
+    // doesn't change agent behavior outside SPEC-06's scope.
+    const systemPromptSnapshot = ownerKind === 'skill' ? resolved.runConfig.systemPrompt : null;
+    const { case: dto, runRow } = await this.executeCase(
+      resolved.runConfig,
+      resolved.skillBodies,
+      evalCase,
+      null,
+      systemPromptSnapshot,
+    );
     return { case: dto, run: toEvalRunDto(runRow) };
   }
 
   /**
-   * Bulk-run every eval case in the agent's set (SPEC-05 AC-11/AC-12/AC-13/
-   * AC-14): resolve the agent + its linked skills ONCE, run each case
+   * Bulk-run every eval case in the owner's set (SPEC-05 AC-11/AC-12/AC-13/
+   * AC-14, generalized to `ownerKind` by SPEC-06 AC-12): resolve the run
+   * config + skill bodies ONCE via `resolveRunConfig`, run each case
    * sequentially (bounds peak concurrent LLM calls to 1; set sizes here are
    * small, this is a manually-triggered button, not a hot path), persisting
    * every case's row under one shared `run_group_id`. A case whose LLM call
    * throws is recorded as `pass: false` with null metrics and does NOT abort
    * the rest of the set (AC-14). Every row (including a failed one) also
-   * carries `system_prompt_snapshot: agent.systemPrompt` (T15) — the SAME
-   * `agent` already resolved below, no extra query.
+   * carries `system_prompt_snapshot: runConfig.systemPrompt` (T15/SPEC-06
+   * AC-16) — the SAME run config already resolved below, no extra query.
    */
-  async runSet(workspaceId: string, agentId: string, logger?: Logger): Promise<EvalSetRunResult | undefined> {
-    const agent = await this.agents.getById(workspaceId, agentId);
-    if (!agent) return undefined;
+  async runSet(
+    workspaceId: string,
+    ownerKind: EvalOwnerKind,
+    ownerId: string,
+    logger?: Logger,
+  ): Promise<EvalSetRunResult | undefined> {
+    const resolved = await this.resolveRunConfig(workspaceId, ownerKind, ownerId);
+    if (!resolved) return undefined;
+    const { runConfig, skillBodies } = resolved;
 
-    const cases = await this.repo.listByOwner(workspaceId, 'agent', agentId);
+    const cases = await this.repo.listByOwner(workspaceId, ownerKind, ownerId);
     if (cases.length === 0) {
-      throw new ValidationError('This agent has no eval cases to run');
+      throw new ValidationError(`This ${ownerKind} has no eval cases to run`);
     }
-
-    const linkedSkills = await this.agents.linkedSkills(agentId);
-    const skillBodies = linkedSkills.filter((l) => l.skill.enabled).map((l) => l.skill.body);
 
     const runGroupId = randomUUID();
     const cases_: EvalSetRunResult['cases'] = [];
@@ -275,7 +353,7 @@ export class EvalsService {
     for (const evalCase of cases) {
       const start = Date.now();
       try {
-        const { runRow } = await this.executeCase(agent, skillBodies, evalCase, runGroupId, agent.systemPrompt);
+        const { runRow } = await this.executeCase(runConfig, skillBodies, evalCase, runGroupId, runConfig.systemPrompt);
         cases_.push(toEvalRunRecordDto(runRow, evalCase.name));
         if (runRow.recall != null) {
           recallSum += runRow.recall;
@@ -293,7 +371,7 @@ export class EvalsService {
         failedCount += 1;
         // Never log prose (rationale/actual_output) — only ids/metrics (NFR).
         logger?.warn(
-          { caseId: evalCase.id, agentId, runGroupId, error: err instanceof Error ? err.message : String(err) },
+          { caseId: evalCase.id, ownerKind, ownerId, runGroupId, error: err instanceof Error ? err.message : String(err) },
           'eval set-run: one case failed, continuing with the rest of the set',
         );
         const failedRow = await this.repo.insertRun({
@@ -306,7 +384,7 @@ export class EvalsService {
           citationAccuracy: null,
           durationMs: Date.now() - start,
           costUsd: null,
-          systemPromptSnapshot: agent.systemPrompt,
+          systemPromptSnapshot: runConfig.systemPrompt,
         });
         cases_.push(toEvalRunRecordDto(failedRow, evalCase.name));
       }
@@ -316,7 +394,7 @@ export class EvalsService {
       // A failed case is excluded from the average's denominator for that
       // metric, never coerced to 0 — logged explicitly per the Development Plan.
       logger?.info(
-        { agentId, runGroupId, casesTotal: cases.length, failedCount },
+        { ownerKind, ownerId, runGroupId, casesTotal: cases.length, failedCount },
         'eval set-run: excluding failed case(s) from the aggregate denominator',
       );
     }
@@ -332,10 +410,10 @@ export class EvalsService {
     };
   }
 
-  /** Historical set-runs for this agent, grouped by `run_group_id` on the
+  /** Historical set-runs for this owner, grouped by `run_group_id` on the
    *  client side, newest first (AC-17). */
-  async listSetRuns(workspaceId: string, agentId: string): Promise<EvalRunRecord[]> {
-    const rows = await this.repo.listSetRunsByOwner(workspaceId, 'agent', agentId);
+  async listSetRuns(workspaceId: string, ownerKind: EvalOwnerKind, ownerId: string): Promise<EvalRunRecord[]> {
+    const rows = await this.repo.listSetRunsByOwner(workspaceId, ownerKind, ownerId);
     return rows.map((row) => toEvalRunRecordDto(row, row.caseName));
   }
 

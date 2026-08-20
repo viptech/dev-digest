@@ -11,8 +11,9 @@ import {
   useDeleteEvalCase,
   useRunEvalSet,
   useEvalRunHistory,
-} from "../../../../../../../lib/hooks/evals";
-import { ApiError } from "../../../../../../../lib/api";
+  type EvalOwner,
+} from "@/lib/hooks/evals";
+import { ApiError } from "@/lib/api";
 import { EvalCaseModal } from "@/components/eval-case-modal";
 import { METRIC_COLOR } from "@/lib/eval-metrics";
 import { groupRuns, caseTransitions, toggleRunSelection, type RunGroup } from "@/lib/eval-runs";
@@ -39,9 +40,10 @@ function mustFindTagText(tag: Extract<CaseTag, { kind: "must_find" }>): string |
   return null;
 }
 
-/** Evals tab — list eval cases for this agent, open the case modal to
- *  create/edit one, run a case, or delete it. Each row shows the last run's
- *  pass/fail result (or "never run") once a run completes.
+/** Evals tab — list eval cases for an owner (an agent or, since SPEC-06, a
+ *  skill tested in isolation), open the case modal to create/edit one, run a
+ *  case, or delete it. Each row shows the last run's pass/fail result (or
+ *  "never run") once a run completes.
  *
  *  Also (SPEC-05, T8): a "Run all" button that runs the WHOLE set in one
  *  bulk call, a history list of past set-runs grouped by `run_group_id`
@@ -51,20 +53,29 @@ function mustFindTagText(tag: Extract<CaseTag, { kind: "must_find" }>): string |
  *  shown for a single run (AC-25); recall/precision/citation_accuracy are
  *  always rendered as separate values, never one collapsed score (AC-24).
  *
- *  Restructured (Development Plan evals-tab-mockup-alignment.md) to match
- *  the course reference mockup: a 4-card eval-metrics header block + a
- *  "View full dashboard →" link above the case list, richer per-case rows
- *  (status icon, MUST FIND/MUST NOT FLAG badge, "expected N, got M"
- *  subtitle, severity-category tag), and reordered Run all/New case
- *  buttons — the Run all/History/Compare sections below are unchanged,
- *  only moved. */
-export function EvalsTab({ agentId }: { agentId: string }) {
+ *  Promoted here (Development Plan `skill-editor.md` Step 5, SPEC-06 T8/
+ *  AC-17) from `agents/[id]/.../AgentEditor/_components/EvalsTab/` — a
+ *  second caller from another feature tree (the new skill editor's Evals
+ *  tab) is the react-ui-architecture "promote on second user" trigger, the
+ *  same rule that already promoted `EvalCaseModal`. Every prior behavior is
+ *  unchanged; only the hardcoded `agentId` prop became `{ ownerKind,
+ *  ownerId }`, threaded into the generalized `@/lib/hooks/evals` hooks and
+ *  into `EvalCaseModal`'s new (additive, default `"agent"`) `ownerKind`
+ *  prop.
+ *
+ *  The "View full dashboard →" link only makes sense for an agent — the
+ *  workspace Eval Dashboard stays agent-only (AC-20, SPEC-05 Non-goal SPEC-06
+ *  does not reopen) and never shows a skill-owned set-run — so it's omitted
+ *  entirely for `ownerKind === "skill"` rather than linking somewhere that
+ *  will never reflect this tab's own data. */
+export function EvalOwnerTab({ ownerKind, ownerId }: EvalOwner) {
   const t = useTranslations("eval");
-  const { data: cases, isLoading } = useEvalCases(agentId);
-  const run = useRunEvalCase(agentId);
-  const del = useDeleteEvalCase(agentId);
-  const runSet = useRunEvalSet(agentId);
-  const { data: historyRows } = useEvalRunHistory(agentId);
+  const owner: EvalOwner = { ownerKind, ownerId };
+  const { data: cases, isLoading } = useEvalCases(owner);
+  const run = useRunEvalCase(owner);
+  const del = useDeleteEvalCase(owner);
+  const runSet = useRunEvalSet(owner);
+  const { data: historyRows } = useEvalRunHistory(owner);
   const [editing, setEditing] = React.useState<string | "new" | null>(null);
   const [runningId, setRunningId] = React.useState<string | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
@@ -141,16 +152,18 @@ export function EvalsTab({ agentId }: { agentId: string }) {
   return (
     <div style={s.wrap}>
       {(editing === "new" || editingCase) && (
-        <EvalCaseModal agentId={agentId} existing={editingCase} onClose={() => setEditing(null)} />
+        <EvalCaseModal agentId={ownerId} ownerKind={ownerKind} existing={editingCase} onClose={() => setEditing(null)} />
       )}
 
       {metricCards && (
         <>
           <div style={s.metricsSectionHeaderRow}>
             <SectionLabel>{t("evalsTab.metricsHeading")}</SectionLabel>
-            <Link href="/eval-dashboard" style={s.dashboardLink}>
-              {t("evalsTab.viewFullDashboard")}
-            </Link>
+            {ownerKind === "agent" && (
+              <Link href="/eval-dashboard" style={s.dashboardLink}>
+                {t("evalsTab.viewFullDashboard")}
+              </Link>
+            )}
           </div>
           <div style={s.metricsRow}>
             {metricCards.cards.map((card) => (

@@ -469,3 +469,60 @@ Fastify зі `ZodTypeProvider` серіалізує/обрізає відпов�
 Доказ: server/src/modules/evals/routes.ts:39-114 (жодного `response` у
 `{ schema: {...} }` жодного роута), server/src/modules/evals/helpers.ts:118-133
 (`toEvalRunRecordDto`, єдине місце, де довелось додати поле)
+
+## 2026-08-20 · gotcha
+**`MockLLMProvider`'s конструктор типізований вужче (`'openai' | 'anthropic'`),
+ніж `LLMProvider.id` (`'openai' | 'anthropic' | 'openrouter'`), і це НІКОЛИ не
+спливає — бо `server/tsconfig.json`'s `include` взагалі не покриває `test/`**
+`new MockLLMProvider('openrouter', {...})` (вже усталений патерн у
+`agent-stats.it.test.ts:76`, `reviews-skills.it.test.ts:97`,
+`conventions.it.test.ts:80`, і тепер у новому
+`evals-skill-owner.it.test.ts`) мав би бути помилкою компіляції — рядковий
+літерал `'openrouter'` не належить параметру, явно анотованому як
+`'openai' | 'anthropic'`. Компілюється лише тому, що `server/tsconfig.json`
+має `"include": ["src/**/*.ts"]` — каталог `test/` не типчекається НІ
+`pnpm typecheck`, НІ Vitest (він лише стрипає типи, не перевіряє їх). Це не
+регресія і не потребує фіксу заради нового коду, але якщо колись
+`server/tsconfig.json`'s `include` розшириться на `test/**` (чи зʼявиться
+окремий `tsconfig.test.json`), усі ці виклики одночасно почервоніють —
+правильний фікс тоді: розширити `MockLLMProvider`'s конструктор до
+`id: 'openai' | 'anthropic' | 'openrouter'`, а не переписувати кожен
+виклик.
+Доказ: server/src/adapters/mocks.ts:59,63 (звужений тип конструктора) vs
+server/src/vendor/shared/adapters.ts:83 (`LLMProvider.id` — усі три);
+server/tsconfig.json:28 (`"include": ["src/**/*.ts"]`, без `test/`)
+
+## 2026-08-20 · gotcha
+**`agent_skills`'s єдиний індекс — композитний PK `(agent_id, skill_id)`, тож
+запит "усі агенти, що лінкують СКІЛ X" (`WHERE skill_id = ?`) не може
+використати лідируючий edge цього індексу**
+Нова `SkillStatsRepository.getWindowData` (дзеркалить
+`agents/stats-repository.ts` на один hop далі — `agent_skills → agent_runs →
+reviews → findings`) читає `agent_skills` у "неприродному" для існуючого PK
+напрямку: PK впорядкований `(agent_id, skill_id)`, а Stats-таб скіла фільтрує
+за самим `skill_id`. Це прийнято свідомо (SPEC-06 Development Plan constraints:
+"existing FKs/PKs only — no new index needed"), бо `agent_skills` — маленька
+link-таблиця, а не через те, що це справді index-friendly в generic
+PostgreSQL-сенсі. Якщо ця таблиця колись виросте (масштаб проекту зміниться),
+`CREATE INDEX ON agent_skills (skill_id)` — перший кандидат, а не
+переписування query-шейпу.
+Доказ: server/src/db/schema/agents.ts:51-63 (`primaryKey({ columns: [t.agentId,
+t.skillId] })`, без окремого `index(...)`); server/src/modules/skills/stats-repository.ts:29-32
+(`WHERE skill_id = ?` — фільтр по НЕ-лідируючому стовпцю композитного PK)
+
+## 2026-08-20 · gotcha
+**`reviews.run_id` — це просто `uuid`-колонка без `.references()`, попри те що
+весь код де-факто трактує її як 1:1 FK до `agent_runs.id`**
+При написанні join'а `findings → reviews (by run_id) → agent_runs` для
+`SkillStatsRepository` виявилось, що `reviews.runId` не оголошений через
+`.references(() => agentRuns.id)` — це "гола" `uuid('run_id')` колонка, на
+відміну від `reviews.prId`/`reviews.workspaceId`, які реальні FK. Цілісність
+(один review на run) ніде на рівні БД не забезпечена — вона тримається лише на
+дисципліні коду (`review.repo.ts:92` явно робить `.limit(1)`, покладаючись на
+це як на факт, а не перевіряючи). Будь-який новий прямий insert у `reviews`
+(як у нових `*.it.test.ts` фікстурах) мусить сам стежити, щоб не завести
+другий review з тим самим `run_id` — БД цього не заборонить.
+Доказ: server/src/db/schema/reviews.ts:9-26 (`runId: uuid('run_id'),` — без
+`.references()`, на контрасті з `prId`/`workspaceId` в тому ж об'єкті);
+server/src/modules/reviews/repository/review.repo.ts:92 (`.limit(1)` на
+запиті "review по run_id")

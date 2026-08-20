@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, within, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import messages from "../../../../../../../../messages/en/eval.json";
+import messages from "../../../messages/en/eval.json";
 
 const runMutateAsync = vi.fn().mockResolvedValue(undefined);
 const delMutateAsync = vi.fn().mockResolvedValue(undefined);
@@ -26,7 +26,10 @@ function evalCase(over: Record<string, unknown> = {}) {
 let cases: unknown[] = [evalCase()];
 let historyRows: unknown[] = [];
 
-vi.mock("../../../../../../../lib/hooks/evals", () => ({
+// Moved from `agents/[id]/.../AgentEditor/_components/EvalsTab/EvalsTab.test.tsx`
+// (Development Plan `skill-editor.md` Step 5, SPEC-06 T8/AC-17) — mocked via
+// the `@/` alias (not a counted `../` chain, client/INSIGHTS.md 2026-08-02).
+vi.mock("@/lib/hooks/evals", () => ({
   useEvalCases: () => ({ data: cases, isLoading: false }),
   useRunEvalCase: () => ({ mutateAsync: runMutateAsync, isPending: false, data: undefined }),
   useDeleteEvalCase: () => ({ mutateAsync: delMutateAsync, isPending: false }),
@@ -36,7 +39,7 @@ vi.mock("../../../../../../../lib/hooks/evals", () => ({
   useEvalRunHistory: () => ({ data: historyRows }),
 }));
 
-import { EvalsTab } from "./EvalsTab";
+import { EvalOwnerTab } from "./EvalOwnerTab";
 
 afterEach(() => {
   cleanup();
@@ -73,15 +76,15 @@ function runRecord(over: Record<string, unknown> = {}) {
   };
 }
 
-describe("EvalsTab", () => {
+describe("EvalOwnerTab", () => {
   it("lists eval cases", () => {
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     expect(screen.getByText("stripe-key-leak")).toBeInTheDocument();
   });
 
   it("shows 'never run' badge and the 'expected N findings' subtitle for a case with no last_run", () => {
     cases = [evalCase({ expected_output: [{ type: "must_find", file: "src/a.ts" }] })];
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     expect(screen.getByText("never run")).toBeInTheDocument();
     expect(screen.getByText("expected 1 finding(s)")).toBeInTheDocument();
   });
@@ -93,7 +96,7 @@ describe("EvalsTab", () => {
         last_run: { pass: true, recall: 1, ran_at: "2026-01-01T00:00:00.000Z", actual_count: 1 },
       }),
     ];
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     expect(screen.getByText("expected 1 finding(s), got 1")).toBeInTheDocument();
   });
 
@@ -106,21 +109,21 @@ describe("EvalsTab", () => {
         last_run: { pass: true, recall: 1, ran_at: "2026-01-01T00:00:00.000Z", actual_count: 1 },
       }),
     ];
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     expect(screen.getByText("MUST FIND")).toBeInTheDocument();
     expect(screen.getByText("CRITICAL - security")).toBeInTheDocument();
   });
 
   it("shows the MUST NOT FLAG badge and 'assert empty' for a must_not_flag-only expected_output", () => {
     cases = [evalCase({ expected_output: [{ type: "must_not_flag", file: "src/a.ts" }] })];
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     expect(screen.getByText("MUST NOT FLAG")).toBeInTheDocument();
     expect(screen.getByText("assert empty")).toBeInTheDocument();
   });
 
   it("shows neither badge nor tag for a case with an empty expected_output", () => {
     cases = [evalCase({ expected_output: [] })];
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     expect(screen.queryByText("MUST FIND")).not.toBeInTheDocument();
     expect(screen.queryByText("MUST NOT FLAG")).not.toBeInTheDocument();
     expect(screen.queryByText("assert empty")).not.toBeInTheDocument();
@@ -132,32 +135,32 @@ describe("EvalsTab", () => {
       evalCase({ id: "c1", last_run: { pass: true, recall: 1, ran_at: "2026-01-01T00:00:00.000Z", actual_count: 1 } }),
       evalCase({ id: "c2", name: "phantom-api-call", last_run: { pass: false, recall: 0, ran_at: "2026-01-01T00:00:00.000Z", actual_count: 0 } }),
     ];
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     expect(screen.getByText("1 / 2 passing")).toBeInTheDocument();
     expect(screen.getByText("2 cases")).toBeInTheDocument();
   });
 
   it("clicking the Run icon-button triggers useRunEvalCase with the case id", () => {
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     expect(runMutateAsync).toHaveBeenCalledWith("c1");
   });
 
   it("shows an inline error when running a case fails", async () => {
     runMutateAsync.mockRejectedValueOnce(new Error("boom"));
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     await waitFor(() => expect(screen.getByText("Run failed. Please try again.")).toBeInTheDocument());
   });
 
   it("'Run all' triggers the bulk set-run mutation", () => {
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     fireEvent.click(screen.getByText("Run all"));
     expect(runSetMutateAsync).toHaveBeenCalled();
   });
 
   it("no history yet → no metrics-card block, empty state, no compare prompt, no regression indicator", () => {
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     expect(screen.queryByText("RECALL")).not.toBeInTheDocument();
     expect(screen.getByText(/No set-runs yet/)).toBeInTheDocument();
     expect(screen.queryByText(/Select exactly two/)).not.toBeInTheDocument();
@@ -172,7 +175,7 @@ describe("EvalsTab", () => {
     // gotcha: duplicate fixture text breaks exact-match getByText).
     cases = [evalCase({ id: "c1" }), evalCase({ id: "c2", name: "phantom-api-call" })];
     historyRows = [runRecord({ id: "r1", run_group_id: "g1" })];
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     expect(screen.getByText("2 cases")).toBeInTheDocument();
     expect(screen.getByText("1 cases")).toBeInTheDocument();
     // Only one run_group exists — comparison view (and any delta arrow) must not render.
@@ -185,7 +188,7 @@ describe("EvalsTab", () => {
       runRecord({ id: "r1-old", run_group_id: "g1", ran_at: "2026-08-01T00:00:00.000Z", pass: true, recall: 1, precision: 1 }),
       runRecord({ id: "r1-new", run_group_id: "g2", ran_at: "2026-08-10T00:00:00.000Z", pass: false, recall: 1, precision: 0.5 }),
     ];
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
     const checkboxes = screen.getAllByLabelText("Select to compare");
     expect(checkboxes).toHaveLength(2);
     fireEvent.click(checkboxes[0]!);
@@ -212,7 +215,7 @@ describe("EvalsTab", () => {
       runRecord({ id: "r-old", run_group_id: "g1", ran_at: "2026-08-01T00:00:00.000Z", recall: 0.5, precision: 0.4, citation_accuracy: 0.3, pass: true }),
       runRecord({ id: "r-new", run_group_id: "g2", ran_at: "2026-08-10T00:00:00.000Z", recall: 1, precision: 0.8, citation_accuracy: 0.6, pass: true }),
     ];
-    renderWithIntl(<EvalsTab agentId="ag1" />);
+    renderWithIntl(<EvalOwnerTab ownerKind="agent" ownerId="ag1" />);
 
     expect(screen.getByText("RECALL")).toBeInTheDocument();
     expect(screen.getByText("PRECISION")).toBeInTheDocument();
@@ -231,5 +234,23 @@ describe("EvalsTab", () => {
     expect(screen.getByText(/Δ 30%/)).toBeInTheDocument();
 
     expect(screen.getByText("View full dashboard →")).toBeInTheDocument();
+  });
+
+  // ---- SPEC-06 T8/AC-17 — skill-owner scenarios --------------------------
+  it("skill owner: renders the same tab (cases, run all) with no crash and no agent-only dashboard link", () => {
+    historyRows = [
+      runRecord({ id: "r-old", run_group_id: "g1", ran_at: "2026-08-01T00:00:00.000Z", recall: 0.5, precision: 0.4, citation_accuracy: 0.3, pass: true }),
+    ];
+    renderWithIntl(<EvalOwnerTab ownerKind="skill" ownerId="sk1" />);
+    expect(screen.getByText("stripe-key-leak")).toBeInTheDocument();
+    // AC-20 — the workspace Eval Dashboard stays agent-only; a skill-owned
+    // tab must not link to a page that will never show its own data.
+    expect(screen.queryByText("View full dashboard →")).not.toBeInTheDocument();
+  });
+
+  it("skill owner: 'Run all' still triggers the bulk set-run mutation (base path asserted in lib/hooks/evals.test.ts)", () => {
+    renderWithIntl(<EvalOwnerTab ownerKind="skill" ownerId="sk1" />);
+    fireEvent.click(screen.getByText("Run all"));
+    expect(runSetMutateAsync).toHaveBeenCalled();
   });
 });

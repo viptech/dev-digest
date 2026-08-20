@@ -405,3 +405,155 @@ client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab
 Доказ: client/src/app/eval-dashboard/[agentId]/page.tsx (тека існує, `Glob`
 на `client/src/app/eval-dashboard/**` під час цієї сесії повернув 0
 результатів для неї, `Grep` на `"eval-dashboard"` — знайшов миттєво)
+
+## 2026-08-20 · gotcha
+**Твердження плану "`EvalCaseModal` не потребує змін" (SPEC-06 AC-21) не
+витримало інспекції — компонент брав голий `agentId: string`, а не
+`ownerKind`/`ownerId`**
+Development Plan `skill-editor.md` Step 5.3 стверджував, що
+`EvalCaseModal` "вже приймає ownerKind/ownerId структурно сумісні пропси".
+Інспекція коду ДО зміни показала протилежне: пропс називався `agentId:
+string`, і компонент викликав `useCreateEvalCase(agentId)`/
+`useUpdateEvalCase(agentId)`/`useRunEvalCase(agentId)` голим рядком. Після
+генералізації цих трьох хуків (Step 5.1) до сигнатури `{ ownerKind:
+'agent'|'skill'; ownerId: string }` виклики всередині `EvalCaseModal`
+зламались би для skill-owned кейсу без знання `ownerKind`. Мінімальний
+адитивний фікс: доданий optional `ownerKind?: "agent"|"skill" = "agent"`
+пропс (назва `agentId` лишена без змін, тепер це просто generic ownerId) —
+обидва існуючі агент-only викликачі (`FindingsPanel.tsx`,
+`EvalCaseModal.test.tsx`) не потребували жодної зміни. Висновок: план, що
+каже "X не потребує змін" з посиланням на AC, все одно варто перевіряти
+інспекцією коду буквально, а не довіряти формулюванню.
+Доказ: client/src/components/eval-case-modal/EvalCaseModal.tsx:58 (`const
+owner = { ownerKind, ownerId: agentId };`, годує всі три хуки)
+
+## 2026-08-20 · gotcha
+**`EvalAgentDashboardView.tsx` — третій, недокументований у плані викликач
+`useEvalCases`/`useEvalRunHistory`, не згаданий у жодному Step/"Modules
+involved" `skill-editor.md`**
+Плани, що генералізують сигнатуру спільного хука (тут: `useEvalCases`/
+`useEvalRunHistory` з голого `agentId: string` на `{ownerKind, ownerId}`,
+Development Plan `skill-editor.md` Step 5.1), перелічують лише "відомі"
+викликачі (тут план називав `AgentEditor`'s Evals tab і `EvalCaseModal`) —
+але per-agent Eval Dashboard drill-down (`app/eval-dashboard/[agentId]`)
+викликає ті самі два хуки і жодного разу не згадується в плані. Без
+project-wide grep по імені хука (не по назві фічі з плану) зміна сигнатури
+ламає typecheck у файлі, який ніхто не очікував чіпати. Правило: перед
+зміною сигнатури спільного хука — `Grep` на саме ім'я хука по всьому
+`client/src`, а не покладатись на список викликачів із плану.
+Доказ: client/src/app/eval-dashboard/[agentId]/_components/EvalAgentDashboardView/EvalAgentDashboardView.tsx:35
+(`useEvalCases({ ownerKind: "agent", ownerId: agentId })`, до фіксу —
+`useEvalCases(agentId)`)
+
+## 2026-08-20 · decision
+**`/skills/:id` (SPEC-06 Step 6) НЕ копіює `AgentEditorPage.tsx`/`AgentEditor.tsx`'s
+файловий розподіл 1:1 — уся `?tab=`/`ErrorState`/header-логіка живе в
+`SkillEditorView`, `page.tsx` — лише `useParams`-обгортка**
+Для агентів `page.tsx` тримає `?tab=`-стан, `ErrorState`-гілку і хедер, а
+`AgentEditor` — лише таб-бар+тіло (бо `page.tsx` ще й рендерить лівий
+сайдбар сусідніх агентів, якого спека для скілів прямо НЕ вимагає). Для
+скілів увесь цей стан перенесено В `SkillEditorView` саму — `page.tsx`
+звівся до `const {id} = useParams(); return <SkillEditorView id={id} />;`.
+Причина: без сайдбару в `page.tsx` не лишається власної відповідальності,
+яку варто тримати окремо від делегованого view; побічний виграш —
+`SkillEditorView` тестується напряму (`<SkillEditorView id="s1" />`) без
+мокання `next/navigation`'s `useParams`, на відміну від `AgentEditorPage`
+(яка взагалі не має власного `.test.tsx` — надто важка для змоку
+цілком). Якщо наступна фіча копіює "AgentEditorPage-патерн" для роуту без
+сайдбару-сусідів, обирай цей (тонший `page.tsx`) варіант, а не буквальну
+копію agent-розподілу.
+Доказ: client/src/app/skills/[id]/page.tsx (7 рядків, лише useParams+delegate);
+client/src/app/skills/[id]/_components/SkillEditorView/SkillEditorView.tsx
+(useSearchParams/useRouter/useSkill/ErrorState усі тут, не в page.tsx)
+
+## 2026-08-20 · decision
+**Промоція `diffPromptLines`/`PromptDiffLine` у `@/lib/text-diff` (SPEC-06
+AC-29, Development Plan `skill-editor.md` Step 9) не потребувала ЖОДНОЇ
+зміни в `CompareRunsModal.test.tsx`**
+План прямо казав "Update `CompareRunsModal.test.tsx` accordingly" при
+промоції, але інспекція показала, що тест ніколи не імпортував
+`diffPromptLines`/`PromptDiffLine` напряму з `./helpers` — він лише рендерить
+`<CompareRunsModal>` і перевіряє видимий текст діффу. Єдина зміна лишилась
+локальною до `CompareRunsModal.tsx` (новий import з `@/lib/text-diff` замість
+`./helpers`) і до самого `helpers.ts` (видалення промотованого коду). Урок:
+"update the test accordingly" у плані промоції варто верифікувати grep'ом на
+ім'я симовлу в тестовому файлі, а не виконувати наосліп — інколи "accordingly"
+означає "нічого".
+Доказ: client/src/app/eval-dashboard/[agentId]/_components/CompareRunsModal/CompareRunsModal.test.tsx
+(жодного `import ... from "./helpers"` у файлі); client/src/lib/text-diff.ts
+(нове місце); client/src/app/eval-dashboard/[agentId]/_components/CompareRunsModal/CompareRunsModal.tsx:10
+(`import { diffPromptLines } from "@/lib/text-diff"`)
+
+## 2026-08-20 · decision
+**`VersionsTab`'s Restore-кнопка — незалежна дія на КОЖНОМУ рядку версії, НЕ
+прив'язана до 2-чекбоксового вибору для diff (AC-29 vs AC-30, різні
+механізми на тому самому списку)**
+Формулювання плану ("a Restore button on a selected version") було
+неоднозначним — могло означати "лише на версії, вибраній чекбоксом". Обрано
+інше трактування: `VersionsTab.tsx` рендерить Restore-кнопку на КОЖНОМУ
+рядку `skill_versions`, незалежно від чекбокс-стану, що використовується
+виключно для diff-вибору (рівно 2). Це дозволяє відновити будь-яку версію
+одним кліком, без попереднього вибору для порівняння — узгоджується з AC-30
+("КОЛИ користувач тисне Restore на версії V", без згадки про попередній
+вибір). Якщо Step 10/рев'ювер очікує іншу поведінку (Restore лише при
+активному виборі), це свідома, а не випадкова розбіжність.
+Доказ: client/src/app/skills/[id]/_components/SkillEditorView/_components/VersionsTab/VersionsTab.tsx:61-74
+(Restore-кнопка в `versions.map(...)`, чекбокс-стан `selected` впливає лише
+на `older`/`newer`/diff-блок нижче)
+
+## 2026-08-20 · gotcha
+**Підключення всіх 6 табів у `SkillEditorView`'s тіло (Step 10) ламає
+`SkillEditorView.test.tsx`'s мінімальний мок `@/lib/hooks/skills` — до цього
+файл мокав лише `useSkill`, бо тіло було порожньою заглушкою**
+Поки `<div style={s.body} />` була заглушкою (Step 6-9), тест-файл виду
+"вигляду шапки/таб-бару" мокав лише `useSkill`. Щойно дефолтний таб
+("config") реально рендерить `ConfigTab`, той викликає `useUpdateSkill` з
+того самого модуля `@/lib/hooks/skills` — а мок цього модуля НЕ мав такого
+експорту, тож виклик падав із "useUpdateSkill is not a function" у КОЖНОМУ
+з уже наявних тестів (не лише в новому), бо всі вони рендерять
+`SkillEditorView` без явного `?tab=` → дефолтний "config". Довелось
+розширити мок `@/lib/hooks/skills` до всіх хуків, які реально викликають
+6 підключених табів (`useUpdateSkill`, `useSkillContextDocs`,
+`useSetSkillContextDocs`, `useSkillStats`, `useSkillVersions`), додати мок
+`@/lib/hooks/evals` (Evals-таб читає дані звідти напряму через
+`useQuery`/`useMutation`, без QueryClientProvider в тесті) і замокати
+`@/components/context-doc-picker` як passthrough (той самий патерн, що вже
+є в `AgentEditor.test.tsx`). Той самий крок також зламав тест "shows the
+skill's name and version badge in the header" — `ConfigTab` рендерить
+власний `"v{version}"`-бейдж, ідентичний хедерному, тож нескоупний
+`getByText("v3")` тепер знаходить 2 елементи; фікс — `within()` на
+найближчому `<div>`-предку `<h1>` (сам `s.header`-контейнер), а не зміна
+`ConfigTab`/хедера. Правило: будь-яке підключення "порожньої заглушки" до
+реального дочірнього дерева в уже наявному тест-файлі вимагає перегляду
+ВСІХ моків цього файлу на повноту, не лише додавання нових тестів для
+нової поведінки.
+Доказ: client/src/app/skills/[id]/_components/SkillEditorView/SkillEditorView.test.tsx
+(мок `@/lib/hooks/skills` розширено з 1 до 6 експортів, доданий мок
+`@/lib/hooks/evals` і `@/components/context-doc-picker`, тест "shows the
+skill's name..." скоупить `within(header)`)
+
+## 2026-08-20 · gotcha
+**SPEC-06's твердження "`eval`-неймспейс уже ownerKind-агностичний" — вірне
+для *ключів*, але НЕ для *копірайтингу* двох конкретних рядків**
+Аудит i18n для Skill Editor (Development Plan Step 11, T16) перевірив кожен
+`t("evalsTab.*")`-виклик у промотованому `EvalOwnerTab`
+(`client/src/components/eval-owner-tab/EvalOwnerTab.tsx`) проти
+`client/messages/en/eval.json`. Усі використані ключі існують і саме
+`evalsTab`-неймспейс (не плутати з agent-only `dashboardPage`/
+`agentDashboardPage`) дійсно не має НОВИХ ключів, специфічних під owner —
+але два вже наявні рядки в цьому самому неймспейсі жорстко кодують слово
+"agent" у копірайтингу: `evalsTab.emptyCases` ("...assert this agent's
+expected findings...") і `evalsTab.noHistory` ("...run this agent's whole
+eval set."). Коли `EvalOwnerTab` рендериться з `ownerKind: "skill"` (нова
+Evals-вкладка `/skills/:id`), користувач бачить "this agent's" на сторінці
+скіла — косметична, але фактична неточність копірайтингу. НЕ виправлено в
+рамках Step 11 (T16 явно скоупив задачу лише на нові ключі під
+`skills.json` + перевірку перевикористання `detail.*`-блоку, і launching-
+інструкція для цього кроку explicit заборонила чіпати `eval`-неймспейс) —
+задокументовано тут для наступної сесії/рев'ю, яка вирішить, чи
+параметризувати ці два рядки (`{ownerLabel}`) чи лишити як
+задокументований компроміс.
+Доказ: client/messages/en/eval.json:88,108 (`evalsTab.emptyCases`,
+`evalsTab.noHistory`); викликається з
+client/src/components/eval-owner-tab/EvalOwnerTab.tsx:218,286 (той самий
+`t()` без параметра власника)

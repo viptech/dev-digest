@@ -15,11 +15,34 @@ export interface EvalCaseWithLastRun extends EvalCase {
   last_run: { pass: boolean; recall: number; ran_at: string; actual_count: number } | null;
 }
 
-export function useEvalCases(agentId: string) {
+/** Every eval hook below is `ownerKind`-parameterized (Development Plan
+ *  `skill-editor.md` Step 5, SPEC-06 T8/AC-17) — `'agent'` routes through
+ *  `/agents/:id/...`, `'skill'` through `/skills/:id/...` (the skill-owned
+ *  routes SPEC-06 Steps 1-4 already added server-side). Query keys carry the
+ *  `ownerKind` dimension so an agent's and a skill's caches never collide
+ *  even if they briefly shared a numeric-looking id. */
+export interface EvalOwner {
+  ownerKind: "agent" | "skill";
+  ownerId: string;
+}
+
+function ownerBasePath({ ownerKind, ownerId }: EvalOwner): string {
+  return ownerKind === "skill" ? `/skills/${ownerId}` : `/agents/${ownerId}`;
+}
+
+function evalsQueryKey({ ownerKind, ownerId }: EvalOwner) {
+  return ["evals", ownerKind, ownerId] as const;
+}
+
+function evalRunsQueryKey({ ownerKind, ownerId }: EvalOwner) {
+  return ["eval-runs", ownerKind, ownerId] as const;
+}
+
+export function useEvalCases(owner: EvalOwner) {
   return useQuery({
-    queryKey: ["evals", agentId],
-    queryFn: () => api.get<EvalCaseWithLastRun[]>(`/agents/${agentId}/evals`),
-    enabled: !!agentId,
+    queryKey: evalsQueryKey(owner),
+    queryFn: () => api.get<EvalCaseWithLastRun[]>(`${ownerBasePath(owner)}/evals`),
+    enabled: !!owner.ownerId,
   });
 }
 
@@ -31,37 +54,37 @@ export interface EvalCaseInput {
   notes?: string;
 }
 
-export function useCreateEvalCase(agentId: string) {
+export function useCreateEvalCase(owner: EvalOwner) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: EvalCaseInput) => api.post<EvalCase>(`/agents/${agentId}/evals`, input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["evals", agentId] }),
+    mutationFn: (input: EvalCaseInput) => api.post<EvalCase>(`${ownerBasePath(owner)}/evals`, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: evalsQueryKey(owner) }),
   });
 }
 
-export function useUpdateEvalCase(agentId: string) {
+export function useUpdateEvalCase(owner: EvalOwner) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Partial<EvalCaseInput> }) =>
-      api.put<EvalCase>(`/agents/${agentId}/evals/${id}`, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["evals", agentId] }),
+      api.put<EvalCase>(`${ownerBasePath(owner)}/evals/${id}`, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: evalsQueryKey(owner) }),
   });
 }
 
-export function useDeleteEvalCase(agentId: string) {
+export function useDeleteEvalCase(owner: EvalOwner) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/agents/${agentId}/evals/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["evals", agentId] }),
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`${ownerBasePath(owner)}/evals/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: evalsQueryKey(owner) }),
   });
 }
 
-export function useRunEvalCase(agentId: string) {
+export function useRunEvalCase(owner: EvalOwner) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (caseId: string) =>
-      api.post<{ case: EvalCase; run: EvalRun }>(`/agents/${agentId}/evals/${caseId}/run`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["evals", agentId] }),
+      api.post<{ case: EvalCase; run: EvalRun }>(`${ownerBasePath(owner)}/evals/${caseId}/run`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: evalsQueryKey(owner) }),
   });
 }
 
@@ -87,25 +110,25 @@ export function useCreateEvalCaseFromFinding() {
   });
 }
 
-/** SPEC-05 AC-17 — set-run history for an agent (each row = one case's run
+/** SPEC-05 AC-17 — set-run history for an owner (each row = one case's run
  *  within a bulk set-run; group client-side by `run_group_id`). */
-export function useEvalRunHistory(agentId: string) {
+export function useEvalRunHistory(owner: EvalOwner) {
   return useQuery({
-    queryKey: ["eval-runs", agentId],
-    queryFn: () => api.get<EvalRunRecord[]>(`/agents/${agentId}/eval-runs`),
-    enabled: !!agentId,
+    queryKey: evalRunsQueryKey(owner),
+    queryFn: () => api.get<EvalRunRecord[]>(`${ownerBasePath(owner)}/eval-runs`),
+    enabled: !!owner.ownerId,
   });
 }
 
-/** SPEC-05 AC-11/AC-12 — bulk "Run all": runs every case in the agent's set,
+/** SPEC-05 AC-11/AC-12 — bulk "Run all": runs every case in the owner's set,
  *  returns the aggregate + per-case results under one `run_group_id`. */
-export function useRunEvalSet(agentId: string) {
+export function useRunEvalSet(owner: EvalOwner) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post<EvalSetRunResult>(`/agents/${agentId}/eval-runs`),
+    mutationFn: () => api.post<EvalSetRunResult>(`${ownerBasePath(owner)}/eval-runs`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["evals", agentId] });
-      qc.invalidateQueries({ queryKey: ["eval-runs", agentId] });
+      qc.invalidateQueries({ queryKey: evalsQueryKey(owner) });
+      qc.invalidateQueries({ queryKey: evalRunsQueryKey(owner) });
     },
   });
 }

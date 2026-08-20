@@ -130,3 +130,35 @@ SPEC-05) — варто перевірити конфігурацію дозво
 вручну перед тим, як вважати роботу підтвердженою.
 Доказ: system prompt цієї сесії (`<functions>`-блок без `Bash`); той самий
 симптом задокументовано вище для іншого плану того ж SPEC-05 evals-треку.
+
+## 2026-08-20 · gotcha
+**Існує ТРЕТЯ, задокументована лише коментарем копія `FEATURE_MODELS` —
+`client/src/lib/feature-models.ts` — окремо від вже відомого dual-copy
+`vendor/shared` (запис 2026-07-31), і вона вже розійшлась зі значеннями**
+Крім `server/src/vendor/shared/contracts/platform.ts` і
+`client/src/vendor/shared/contracts/platform.ts` (типова dual-copy пара),
+`client/src/lib/feature-models.ts` тримає ЩЕ ОДНУ ручну копію самого масиву
+`FEATURE_MODELS` — власний коментар файлу пояснює чому: імпорт `vendor/shared`
+як RUNTIME-значення (не типу) тягне `vendor/shared/index.ts` у webpack-бандл,
+чиї `./contracts/*.js` реекспорти Next не резолвить, тож масив довелось
+продублювати вручну (`client/src/lib/feature-models.ts:1-11`). Ця третя копія
+вже розійшлась ДО цієї сесії: `review_intent` тут має `defaultProvider:
+'openai'`/`defaultModel: 'gpt-4.1'` (`client/src/lib/feature-models.ts:21-27`),
+тоді як обидві копії `vendor/shared` мають `'openrouter'`/
+`'deepseek/deepseek-v4-flash'`; `conventions` тут має `'openai'`/`'gpt-5.4'`
+(`client/src/lib/feature-models.ts:42-48`) проти `'openrouter'`/
+`'deepseek/deepseek-v4-flash'` в обох `vendor/shared`. Ця сесія (SPEC-06 T6,
+план skill-editor.md Step 1) додала новий `FeatureModelId` `'skill_eval'` +
+відповідний запис `FEATURE_MODELS` в ОБИДВІ копії `vendor/shared`
+(`server/src/vendor/shared/contracts/platform.ts`,
+`client/src/vendor/shared/contracts/platform.ts`), але НЕ торкнулась
+`client/src/lib/feature-models.ts` — поза обсягом server-only кроку. Тип
+`FeatureModelId` реекспортується з `vendor/shared` і лишається синхронним
+автоматично, а `FEATURE_MODELS`-МАСИВ — ні: наступний, хто торкнеться
+`client/src/app/settings/[section]/_components/SettingsView/_components/SettingsModels/SettingsModels.tsx`
+(яка читає саме цю третю копію,
+`SettingsModels.tsx:9-10`), мусить додати туди `'skill_eval'` вручну — інакше
+нова фіча мовчки не з'явиться в Settings UI, без жодного падіння typecheck чи
+тесту.
+Доказ: client/src/lib/feature-models.ts:1-11,21-27,42-48;
+client/src/app/settings/[section]/_components/SettingsView/_components/SettingsModels/SettingsModels.tsx:9-10

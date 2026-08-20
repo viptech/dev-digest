@@ -29,25 +29,21 @@ vi.mock("../../../../lib/hooks/skills", () => ({
     refetch: vi.fn(),
   }),
   useUpdateSkill: () => ({ mutate: vi.fn() }),
-  useSkill: () => ({ data: undefined }),
   useCreateSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useDeleteSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useImportPreview: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useImportSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useSkillContextDocs: () => ({ data: [] }),
-  useSetSkillContextDocs: () => ({ mutate: vi.fn(), isPending: false }),
 }));
-vi.mock("../../../../components/context-doc-picker", () => ({
-  ContextDocPicker: () => null,
-}));
+const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: routerPush }),
 }));
 
 import { SkillsListView } from "./SkillsListView";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  routerPush.mockClear();
+});
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
@@ -79,5 +75,13 @@ describe("SkillsListView", () => {
     fireEvent.click(screen.getByText("Create from scratch"));
     // Create mode renders the empty-name placeholder from the drawer's name field.
     expect(screen.getByPlaceholderText("pr-quality-rubric")).toBeInTheDocument();
+  });
+
+  it("clicking a skill card navigates to /skills/:id instead of opening a drawer (AC-2)", () => {
+    renderWithIntl(<SkillsListView />);
+    fireEvent.click(screen.getByText("PR Quality Rubric"));
+    expect(routerPush).toHaveBeenCalledWith("/skills/s1");
+    // No drawer field (e.g. the name text input) appears — only the card grid.
+    expect(screen.queryByPlaceholderText("pr-quality-rubric")).not.toBeInTheDocument();
   });
 });

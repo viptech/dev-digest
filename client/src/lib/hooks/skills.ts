@@ -4,7 +4,7 @@
 
 import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Skill, SkillContextDocLink, SkillType } from "@devdigest/shared";
+import type { Skill, SkillContextDocLink, SkillStats, SkillType, SkillVersion } from "@devdigest/shared";
 
 export function useSkills() {
   return useQuery({
@@ -50,6 +50,28 @@ export function useUpdateSkill() {
       qc.invalidateQueries({ queryKey: ["skills"] });
       qc.setQueryData(["skill", data.id], data);
     },
+  });
+}
+
+/** Per-skill Stats tab (SPEC-06 G6, Development Plan `skill-editor.md`
+ *  Step 8) — mirrors `useAgentStats`. Backed by the already-verified
+ *  `GET /skills/:id/stats` (Step 3). */
+export function useSkillStats(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-stats", skillId],
+    queryFn: () => api.get<SkillStats>(`/skills/${skillId}/stats`),
+    enabled: !!skillId,
+  });
+}
+
+/** Versions tab (SPEC-06 G7, Development Plan `skill-editor.md` Step 9) —
+ *  backed by the already-verified `GET /skills/:id/versions` (Step 4),
+ *  newest first (AC-28). */
+export function useSkillVersions(skillId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-versions", skillId],
+    queryFn: () => api.get<SkillVersion[]>(`/skills/${skillId}/versions`),
+    enabled: !!skillId,
   });
 }
 

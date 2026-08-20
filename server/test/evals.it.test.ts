@@ -615,6 +615,51 @@ d('evals — run a case with/without a skill (Testcontainers pg)', () => {
       await app.close();
     });
 
+    // ---- SPEC-06 T9: EvalsService.dashboard() stays hardcoded to
+    // ownerKind: 'agent' (service.ts) — a skill-owned case/set-run existing
+    // in the SAME eval_cases/eval_runs tables must never surface here.
+    it('a skill-owned eval case/set-run exists in the DB but never appears in GET /eval-dashboard (SPEC-06 AC-20)', async () => {
+      const { app } = await appWith(NO_FINDINGS_REVIEW);
+      const { db } = pg.handle;
+      const [ws] = await db.select().from(t.workspaces).where(eq(t.workspaces.name, DEFAULT_WORKSPACE_NAME));
+
+      const skill = (
+        await app.inject({
+          method: 'POST',
+          url: '/skills',
+          payload: { name: 'Dashboard Leak Check', description: 'd', body: '# rules' },
+        })
+      ).json();
+
+      const repo = new EvalsRepository(db);
+      const skillCase = await repo.insert({
+        workspaceId: ws!.id,
+        ownerKind: 'skill',
+        ownerId: skill.id,
+        name: 'skill-owned-case',
+        inputDiff: DIFF,
+        expectedOutput: [],
+      });
+      await repo.insertRun({
+        caseId: skillCase.id,
+        runGroupId: randomUUID(),
+        actualOutput: [],
+        pass: true,
+        recall: 1,
+        precision: 1,
+        citationAccuracy: 1,
+        durationMs: 10,
+        costUsd: 0,
+      });
+
+      const res = await app.inject({ method: 'GET', url: '/eval-dashboard' });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as Array<{ agent_id: string }>;
+      expect(body.some((r) => r.agent_id === skill.id)).toBe(false);
+
+      await app.close();
+    });
+
     it('an agent with multiple set-runs lists all of them in recent_runs, newest first, with an ascending per-agent version (T14)', async () => {
       const { app } = await appWith(NO_FINDINGS_REVIEW);
       const { db } = pg.handle;
