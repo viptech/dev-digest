@@ -10,6 +10,7 @@ import { Severity } from './findings.js';
  *   - AgentColumn          one agent's column in the multi-agent view
  *   - Conflict / ConflictTake  where agents disagree on the same file:line
  *   - AgentStats           per-agent quality aggregates (GET /agents/:id/stats)
+ *   - SkillStats           per-skill quality aggregates (GET /skills/:id/stats)
  *   - CuratorResult        the cross-session memory curator outcome
  *
  * The single-document run trace itself stays in `contracts/trace.ts` (RunTrace).
@@ -146,6 +147,46 @@ export const AgentStats = z.object({
   run_history: z.array(AgentStatsRunRow),
 });
 export type AgentStats = z.infer<typeof AgentStats>;
+
+// ---------------------------------------------------------------------------
+// Per-skill Stats (GET /skills/:id/stats)
+// ---------------------------------------------------------------------------
+
+export const SkillStatsAgentUsage = z.object({
+  agent_id: z.string(),
+  agent_name: z.string(),
+  /** Fraction (0..1) of THIS agent's 'done' runs (30d window) that actually
+   *  pulled this skill (skill_ids contains it) — null when the agent has no
+   *  'done' runs in the window. */
+  pull_rate: z.number().min(0).max(1).nullable(),
+});
+export type SkillStatsAgentUsage = z.infer<typeof SkillStatsAgentUsage>;
+
+export const SkillStatsCategoryCost = z.object({
+  category: z.string(),
+  /** Dollar cost attributed to this category — evenly split per finding
+   *  within its own run (AC-26), summed across the 30d window. Never a raw
+   *  finding count. */
+  cost_usd: z.number(),
+});
+export type SkillStatsCategoryCost = z.infer<typeof SkillStatsCategoryCost>;
+
+export const SkillStats = z.object({
+  skill_id: z.string(),
+  skill_name: z.string(),
+  /** Distinct agents CURRENTLY linking this skill via agent_skills — direct
+   *  attachment, not transitive (AC-23). */
+  used_by_agents: z.number().int(),
+  /** null when the denominator is 0 (unlinked, or linked agents with no
+   *  'done' run in the window) — never rendered as 0% (AC-24). */
+  pull_rate: z.number().min(0).max(1).nullable(),
+  /** null when no finding in the window has a decision yet — vacuous null,
+   *  not 0 (AC-25). */
+  accept_rate: z.number().min(0).max(1).nullable(),
+  agents: z.array(SkillStatsAgentUsage),
+  cost_by_category: z.array(SkillStatsCategoryCost),
+});
+export type SkillStats = z.infer<typeof SkillStats>;
 
 // ---------------------------------------------------------------------------
 // Cross-session memory curator

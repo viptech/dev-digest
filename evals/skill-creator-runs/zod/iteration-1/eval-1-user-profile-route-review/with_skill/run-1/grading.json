@@ -1,0 +1,31 @@
+{
+  "expectations": [
+    {
+      "text": "Flags z.any() on the `metadata` field as unsafe and recommends z.unknown() (or a concrete shape) instead",
+      "passed": true,
+      "evidence": "\"### 1. `metadata: z.any()` — повна відмова від типобезпеки (line 10)\" ... \"Skill: `schema-use-unknown-not-any` (CRITICAL)\" — recommends z.unknown() with a size-bounded z.record() alternative."
+    },
+    {
+      "text": "Flags calling .parse() directly on req.body (untrusted user input) and recommends .safeParse() so invalid input doesn't throw an unhandled error",
+      "passed": true,
+      "evidence": "\"### 2. `.parse()` на необробленому `req.body`, без обробки помилки (line 24)\" ... \"Skill: `parse-use-safeparse` (CRITICAL)\" with a safeParse() rewrite."
+    },
+    {
+      "text": "Flags the object schema missing .strict() before the parsed values are persisted, noting unknown/extra fields from the request body would silently pass through",
+      "passed": true,
+      "evidence": "\"### 11. Немає явного `.strict()`/`.strip()` — намір щодо зайвих полів не задокументовано\" ... \"Skill: `object-strict-vs-strip` (MEDIUM-HIGH)\"."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 0,
+    "total": 3,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tool_calls": 13
+  },
+  "eval_feedback": {
+    "overall": "This run explicitly cites 6+ skill rule ids by name (schema-use-unknown-not-any, parse-use-safeparse, object-strict-vs-strip, type-use-z-infer, object-partial-for-updates, schema-string-validations) — strong, legible evidence the skill was actually consulted, not just coincidentally similar output."
+  }
+}

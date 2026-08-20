@@ -6,36 +6,26 @@ import projectContextMessages from "../../../../../messages/en/projectContext.js
 import { SkillDrawer } from "./SkillDrawer";
 
 const createMutate = vi.fn().mockResolvedValue({ id: "new" });
-const deleteMutate = vi.fn();
+const importSaveMutate = vi.fn().mockResolvedValue({ id: "new-imported" });
 const importPreviewMutate = vi.fn();
-vi.mock("../../../../lib/hooks/skills", () => ({
-  useSkill: () => ({
-    data: {
-      id: "s1",
-      name: "Existing",
-      description: "d",
-      type: "custom",
-      body: "b",
-      source: "manual",
-      enabled: true,
-      version: 1,
-    },
-  }),
-  useCreateSkill: () => ({ mutateAsync: createMutate, isPending: false }),
-  useUpdateSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useDeleteSkill: () => ({ mutateAsync: deleteMutate, isPending: false }),
-  useImportPreview: () => ({ mutateAsync: importPreviewMutate, isPending: false }),
-  useImportSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  // SPEC-01 — Project context to use section. Not this test's focus; the
-  // picker itself is mocked away below (own coverage: ContextDocPicker.test.tsx).
-  useSkillContextDocs: () => ({ data: [] }),
-  useSetSkillContextDocs: () => ({ mutate: vi.fn(), isPending: false }),
-}));
-vi.mock("../../../../components/context-doc-picker", () => ({
-  ContextDocPicker: () => null,
+const routerPush = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: routerPush }),
 }));
 
-afterEach(cleanup);
+vi.mock("../../../../lib/hooks/skills", () => ({
+  useCreateSkill: () => ({ mutateAsync: createMutate, isPending: false }),
+  useImportPreview: () => ({ mutateAsync: importPreviewMutate, isPending: false }),
+  useImportSkill: () => ({ mutateAsync: importSaveMutate, isPending: false }),
+}));
+
+afterEach(() => {
+  cleanup();
+  createMutate.mockClear();
+  importSaveMutate.mockClear();
+  routerPush.mockClear();
+});
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
@@ -62,18 +52,20 @@ describe("SkillDrawer", () => {
     expect(save).not.toBeDisabled();
   });
 
-  it("create mode: submitting calls useCreateSkill and closes", async () => {
+  it("create mode: submitting calls useCreateSkill and navigates to the new skill's editor route instead of just closing (AC-4)", async () => {
     const onClose = vi.fn();
     renderWithIntl(<SkillDrawer mode="create" onClose={onClose} />);
     fireEvent.change(screen.getByPlaceholderText("pr-quality-rubric"), {
       target: { value: "My Skill" },
     });
-    // Fill body via the mono textarea (only one Textarea in create mode besides description input).
     const textareas = screen.getAllByRole("textbox");
     fireEvent.change(textareas[textareas.length - 1]!, { target: { value: "# My Skill\nBody." } });
     fireEvent.click(screen.getByText("Save"));
     await Promise.resolve();
+    await Promise.resolve();
     expect(createMutate).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+    expect(routerPush).toHaveBeenCalledWith("/skills/new?tab=config");
   });
 
   it("import mode: a failed preview shows an error instead of hanging silently", async () => {
@@ -101,24 +93,19 @@ describe("SkillDrawer", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("edit mode: a failed delete shows an error instead of failing silently", async () => {
-    deleteMutate.mockRejectedValueOnce(new Error("server error"));
+  it("import mode: submitting a previewed import calls useImportSkill and navigates to the new skill's editor route", async () => {
+    importPreviewMutate.mockResolvedValueOnce({ name: "Imported Skill", description: "d", body: "b" });
     const onClose = vi.fn();
-    renderWithIntl(<SkillDrawer mode="edit" skillId="s1" onClose={onClose} />);
-    fireEvent.click(screen.getByText("Delete"));
-    expect(await screen.findByText("Could not delete this skill. Please try again.")).toBeInTheDocument();
-    expect(onClose).not.toHaveBeenCalled();
-  });
-
-  it("edit mode: shows the Project context section with a SERIALIZES AS preview (AC-7)", () => {
-    renderWithIntl(<SkillDrawer mode="edit" skillId="s1" onClose={vi.fn()} />);
-    expect(screen.getByText("Project context")).toBeInTheDocument();
-    expect(screen.getByText("SERIALIZES AS")).toBeInTheDocument();
-    expect(screen.getByText(/## Project specifications/)).toBeInTheDocument();
-  });
-
-  it("create mode: no Project context section (skill doesn't exist yet)", () => {
-    renderWithIntl(<SkillDrawer mode="create" onClose={vi.fn()} />);
-    expect(screen.queryByText("SERIALIZES AS")).not.toBeInTheDocument();
+    renderWithIntl(<SkillDrawer mode="import" onClose={onClose} />);
+    const file = new File(["# Imported\nBody."], "imported.md", { type: "text/markdown" });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(await screen.findByDisplayValue("Imported Skill")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Save"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(importSaveMutate).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+    expect(routerPush).toHaveBeenCalledWith("/skills/new-imported?tab=config");
   });
 });

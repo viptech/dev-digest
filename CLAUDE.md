@@ -9,6 +9,29 @@ After a task that taught you something non-obvious (a fix, a gotcha, a
 measured number), invoke the `engineering-insights` skill to record it. If
 nothing cleared that bar, recording nothing is correct.
 
+## Evals — what to run after touching what
+
+Harness-level evals live in `evals/` (pnpm + Vitest + Claude Agent SDK; see
+`evals/README.md`). They defend the harness itself (skills, subagents,
+`CLAUDE.md`/routing) — not the product's own PR review pipeline, which has
+its own separate mechanical eval track (`docs/specs/SPEC-05-eval-pipeline.md`).
+Run the smallest check that could have caught your change, not the whole
+suite reflexively:
+
+| Change | Minimum check |
+|---|---|
+| `.claude/skills/<name>/**` | `pnpm eval:quality` + that skill's own eval (`pnpm eval:skills <name>`) if one exists |
+| `.claude/agents/<name>.md` | that agent's eval (`pnpm eval:agents <name>`) + any workflow case that dispatches it |
+| Root `CLAUDE.md` / a package `CLAUDE.md` / routing rules | `pnpm eval:workflow` |
+| An eval case or its grader/practices | recalibrate: rerun the baseline label before trusting a new delta (`pnpm eval:repeat ... --label baseline` again) |
+
+`pnpm eval:quality` (static, no LLM call) is the only one safe to treat as a
+hard gate — it is deterministic. Model-backed tiers (`eval:skills`,
+`eval:agents`, `eval:workflow`) are probabilistic by nature (see
+`evals/README.md`'s pass@k note) — read them as a report/trend against the
+last labeled baseline, not as a merge-blocking verdict, until the suite has
+enough history to know its own false-positive rate.
+
 ## Read when
 
 - **End-to-end architecture / flow diagram** → `README.md`

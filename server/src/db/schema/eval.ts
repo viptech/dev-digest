@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision, index } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
 
@@ -19,20 +19,36 @@ export const evalCases = pgTable('eval_cases', {
   notes: text('notes'),
 });
 
-export const evalRuns = pgTable('eval_runs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  caseId: uuid('case_id')
-    .notNull()
-    .references(() => evalCases.id, { onDelete: 'cascade' }),
-  ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
-  actualOutput: jsonb('actual_output'),
-  pass: boolean('pass'),
-  recall: doublePrecision('recall'),
-  precision: doublePrecision('precision'),
-  citationAccuracy: doublePrecision('citation_accuracy'),
-  durationMs: integer('duration_ms'),
-  costUsd: doublePrecision('cost_usd'),
-});
+export const evalRuns = pgTable(
+  'eval_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => evalCases.id, { onDelete: 'cascade' }),
+    /** Shared by every case's row within one bulk set-run (SPEC-05
+     *  `POST /agents/:id/eval-runs`); `null` for a single-case run. */
+    runGroupId: uuid('run_group_id'),
+    ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
+    actualOutput: jsonb('actual_output'),
+    pass: boolean('pass'),
+    recall: doublePrecision('recall'),
+    precision: doublePrecision('precision'),
+    citationAccuracy: doublePrecision('citation_accuracy'),
+    durationMs: integer('duration_ms'),
+    costUsd: doublePrecision('cost_usd'),
+    /** `agents.system_prompt` AT THE TIME OF THE RUN, copied verbatim onto
+     *  every row of a bulk set-run (SPEC-05 T15) — lets the Compare-runs
+     *  modal show a "SYSTEM PROMPT DIFF" between two historical runs and
+     *  "Promote vN" copy an old-but-good prompt back onto the live agent.
+     *  `null` for a single-case run (`run()`) and for any row persisted
+     *  before this column existed. */
+    systemPromptSnapshot: text('system_prompt_snapshot'),
+  },
+  (t) => ({
+    runGroupIdx: index('eval_runs_run_group_idx').on(t.runGroupId),
+  }),
+);
 
 export const conformanceChecks = pgTable('conformance_checks', {
   id: uuid('id').primaryKey().defaultRandom(),

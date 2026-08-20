@@ -1,0 +1,19 @@
+{
+  "eval_id": 2,
+  "eval_name": "checkout-form-schema-review",
+  "prompt": "I'm about to reuse this checkout form schema in a new flow — can you sanity-check it first?",
+  "assertions": [
+    {
+      "id": "flags_throw_in_refine",
+      "text": "Flags the .refine() callback calling throw new Error(...) instead of returning false, noting refine() should return a boolean, not throw"
+    },
+    {
+      "id": "flags_manual_interface_duplicate",
+      "text": "Flags the hand-written `interface CheckoutForm` duplicating the schema shape and recommends deriving the type via z.infer<typeof CheckoutFormSchema> instead"
+    },
+    {
+      "id": "flags_missing_email_validation",
+      "text": "Flags `email: z.string()` missing .email() validation, noting it currently accepts any non-empty string as a valid email"
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import { ReviewService } from './service.js';
  *   GET    /runs/:id/findings                                   → the review + findings produced by that run (by run_id alone)
  *   GET    /pulls/:id/reviews                                  → persisted reviews + findings for a PR
  *   POST   /findings/:id/(accept|dismiss)                      → finding actions
+ *   POST   /findings/:id/eval-case                              → build (unpersisted) an eval-case draft from a decided finding (SPEC-05 T13)
  */
 const FINDING_ACTIONS = ['accept', 'dismiss'] as const;
 export default async function reviewsRoutes(appBase: FastifyInstance) {
@@ -184,4 +185,19 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
       return result;
     });
   }
+
+  // ---- Build an eval-case DRAFT from a decided finding (SPEC-05 T13,
+  // corrected AC-1) --------------------------------------------------------
+  // Delegates to EvalsService via container.evalsService (it owns eval_cases;
+  // the composition root wires cross-module deps — see container.ts). The
+  // read side resolves the finding/review/pr via this module's own
+  // ReviewRepository — the same "read another module's data through your own
+  // repository call" pattern already established for reads in this codebase.
+  // 200, not 201: nothing is persisted here — the client opens the returned
+  // draft in the existing EvalCaseModal, which creates the row (201) only on
+  // Save/Run case.
+  app.post('/findings/:id/eval-case', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return container.evalsService.createFromFinding(workspaceId, req.params.id);
+  });
 }

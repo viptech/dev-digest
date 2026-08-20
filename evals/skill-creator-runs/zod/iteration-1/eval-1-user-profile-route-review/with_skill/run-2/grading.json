@@ -1,0 +1,31 @@
+{
+  "expectations": [
+    {
+      "text": "Flags z.any() on the `metadata` field as unsafe and recommends z.unknown() (or a concrete shape) instead",
+      "passed": true,
+      "evidence": "\"### 2. `metadata: z.any()` lets arbitrary, unvalidated JSON reach the database\" — minimal fix z.unknown(), better fix a bounded z.record()."
+    },
+    {
+      "text": "Flags calling .parse() directly on req.body (untrusted user input) and recommends .safeParse() so invalid input doesn't throw an unhandled error",
+      "passed": true,
+      "evidence": "\"### 1. `UserProfileSchema.parse(req.body)` will crash the handler on invalid input — line 24\" with a safeParse() fix."
+    },
+    {
+      "text": "Flags the object schema missing .strict() before the parsed values are persisted, noting unknown/extra fields from the request body would silently pass through",
+      "passed": true,
+      "evidence": "\"### 5. No `.strict()` — unrecognized keys are silently stripped, not rejected — line 6–12\"."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 0,
+    "total": 3,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tool_calls": 18
+  },
+  "eval_feedback": {
+    "overall": "Consistent with run 1 — all 3 target findings caught, plus the same bonus findings (broken .where(), snake_case contract violation)."
+  }
+}

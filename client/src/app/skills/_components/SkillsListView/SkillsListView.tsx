@@ -1,10 +1,10 @@
-/* /skills — Skills Lab list. SkillCards + import. Selecting a skill opens
-   the preview drawer via ?skillId= (mirrors the Agent Editor's ?tab=
-   URL-state convention). */
+/* /skills — Skills Lab list. SkillCards + import. Selecting a skill card
+   navigates to the /skills/:id Skill Editor route (SPEC-06) — the drawer
+   is now used ONLY for "create"/"import" (no `id` exists yet to route to). */
 "use client";
 
 import React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, EmptyState, ErrorState, Skeleton, Icon } from "@devdigest/ui";
 import { AppShell } from "../../../../components/app-shell";
@@ -17,26 +17,18 @@ import { s } from "./styles";
 export function SkillsListView() {
   const t = useTranslations("skills");
   const router = useRouter();
-  const search = useSearchParams();
   const { data: skills, isLoading, isError, refetch } = useSkills();
   const update = useUpdateSkill();
   const [query, setQuery] = React.useState("");
   const [mode, setMode] = React.useState<"none" | "create" | "import">("none");
 
-  const selectedId = search.get("skillId");
   const list = filterSkills(skills ?? [], query);
 
-  const closeDrawer = () => {
-    setMode("none");
-    router.push("/skills");
-  };
+  const closeDrawer = () => setMode("none");
 
   return (
     <AppShell crumb={[{ label: t("page.crumbLab") }, { label: t("page.crumbSkills") }]}>
       {mode !== "none" && <SkillDrawer mode={mode} onClose={closeDrawer} />}
-      {mode === "none" && selectedId && (
-        <SkillDrawer key={selectedId} mode="edit" skillId={selectedId} onClose={closeDrawer} />
-      )}
       <div style={s.page}>
         <div style={s.header}>
           <div style={s.headerText}>
@@ -91,8 +83,7 @@ export function SkillsListView() {
               <SkillCard
                 key={sk.id}
                 skill={sk}
-                active={sk.id === selectedId}
-                onClick={() => router.push(`/skills?skillId=${sk.id}`)}
+                onClick={() => router.push(`/skills/${sk.id}`)}
                 onToggle={(enabled) => update.mutate({ id: sk.id, patch: { enabled } })}
               />
             ))}

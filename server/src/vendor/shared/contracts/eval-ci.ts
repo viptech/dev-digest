@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Verdict, Finding } from './findings.js';
+import { Verdict, Finding, Severity, FindingCategory } from './findings.js';
 import { EvalRun, EvalOwnerKind, Conformance, Provider, CiFailOn } from './knowledge.js';
 
 /**
@@ -16,6 +16,26 @@ import { EvalRun, EvalOwnerKind, Conformance, Provider, CiFailOn } from './knowl
 // Eval — case input + persisted run record + dashboard
 // ===========================================================================
 
+/**
+ * A single typed expectation on an eval case (SPEC-05). `must_find` — the
+ * agent's returned findings must include ≥1 finding matching `file` (+ line
+ * range when given); `must_not_flag` — a returned finding intersecting this
+ * `file`/range is a false positive that penalizes precision. Replaces the
+ * old untyped `ExpectedFinding` shape (`helpers.ts`, pre-SPEC-05).
+ */
+export const EvalExpectationType = z.enum(['must_find', 'must_not_flag']);
+export type EvalExpectationType = z.infer<typeof EvalExpectationType>;
+
+export const EvalExpectation = z.object({
+  type: EvalExpectationType,
+  file: z.string(),
+  start_line: z.number().int().nullish(),
+  end_line: z.number().int().nullish(),
+  severity: Severity.nullish(),
+  category: FindingCategory.nullish(),
+});
+export type EvalExpectation = z.infer<typeof EvalExpectation>;
+
 /** Create/update payload for an eval case (id + owner resolved by the route). */
 export const EvalCaseInput = z.object({
   owner_kind: EvalOwnerKind,
@@ -24,16 +44,20 @@ export const EvalCaseInput = z.object({
   input_diff: z.string().default(''),
   input_files: z.unknown().nullish(),
   input_meta: z.unknown().nullish(),
-  expected_output: z.unknown(),
+  expected_output: z.array(EvalExpectation),
   notes: z.string().nullish(),
 });
 export type EvalCaseInput = z.infer<typeof EvalCaseInput>;
 
-/** A persisted eval run row (one execution of a case), returned by the API. */
+/** A persisted eval run row (one execution of a case), returned by the API.
+ *  `run_group_id` is `null` for a single-case run (`POST .../:caseId/run`)
+ *  and shared across every case's row within one bulk set-run (SPEC-05
+ *  `POST /agents/:id/eval-runs`) — used to group run history (AC-17). */
 export const EvalRunRecord = z.object({
   id: z.string(),
   case_id: z.string(),
   case_name: z.string().nullish(),
+  run_group_id: z.string().nullable(),
   ran_at: z.string(),
   actual_output: z.unknown(),
   pass: z.boolean().nullable(),
@@ -42,6 +66,11 @@ export const EvalRunRecord = z.object({
   citation_accuracy: z.number().nullable(),
   duration_ms: z.number().int().nullable(),
   cost_usd: z.number().nullable(),
+  /** `agents.system_prompt` at run time (SPEC-05 T15) — `null` for a
+   *  single-case run and for any row persisted before this column existed.
+   *  Feeds the per-agent Eval Dashboard drill-down's Compare-runs modal
+   *  (system-prompt diff + "Promote"). */
+  system_prompt_snapshot: z.string().nullish(),
 });
 export type EvalRunRecord = z.infer<typeof EvalRunRecord>;
 
@@ -52,6 +81,23 @@ export const EvalRunResult = z.object({
   result: EvalRun,
 });
 export type EvalRunResult = z.infer<typeof EvalRunResult>;
+
+/**
+ * Result of a bulk set-run (`POST /agents/:id/eval-runs`, SPEC-05 AC-11/AC-12):
+ * every case in the agent's set is run once, sharing `run_group_id`; the
+ * aggregate is a simple macro-average across cases that didn't error (a
+ * failed case is excluded from the average's denominator, not treated as 0).
+ */
+export const EvalSetRunResult = z.object({
+  run_group_id: z.string(),
+  aggregate: z.object({
+    recall: z.number(),
+    precision: z.number(),
+    citation_accuracy: z.number(),
+  }),
+  cases: z.array(EvalRunRecord),
+});
+export type EvalSetRunResult = z.infer<typeof EvalSetRunResult>;
 
 /** One point on the dashboard trend (per run, chronological). */
 export const EvalTrendPoint = z.object({

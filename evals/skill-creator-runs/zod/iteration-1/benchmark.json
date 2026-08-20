@@ -1,0 +1,348 @@
+{
+  "metadata": {
+    "skill_name": "zod",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-08-18T18:37:44Z",
+    "evals_run": [
+      1,
+      2
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 171.7,
+        "tokens": 57138,
+        "tool_calls": 13,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Flags z.any() on the `metadata` field as unsafe and recommends z.unknown() (or a concrete shape) instead",
+          "passed": true,
+          "evidence": "\"### 1. `metadata: z.any()` \u2014 \u043f\u043e\u0432\u043d\u0430 \u0432\u0456\u0434\u043c\u043e\u0432\u0430 \u0432\u0456\u0434 \u0442\u0438\u043f\u043e\u0431\u0435\u0437\u043f\u0435\u043a\u0438 (line 10)\" ... \"Skill: `schema-use-unknown-not-any` (CRITICAL)\" \u2014 recommends z.unknown() with a size-bounded z.record() alternative."
+        },
+        {
+          "text": "Flags calling .parse() directly on req.body (untrusted user input) and recommends .safeParse() so invalid input doesn't throw an unhandled error",
+          "passed": true,
+          "evidence": "\"### 2. `.parse()` \u043d\u0430 \u043d\u0435\u043e\u0431\u0440\u043e\u0431\u043b\u0435\u043d\u043e\u043c\u0443 `req.body`, \u0431\u0435\u0437 \u043e\u0431\u0440\u043e\u0431\u043a\u0438 \u043f\u043e\u043c\u0438\u043b\u043a\u0438 (line 24)\" ... \"Skill: `parse-use-safeparse` (CRITICAL)\" with a safeParse() rewrite."
+        },
+        {
+          "text": "Flags the object schema missing .strict() before the parsed values are persisted, noting unknown/extra fields from the request body would silently pass through",
+          "passed": true,
+          "evidence": "\"### 11. \u041d\u0435\u043c\u0430\u0454 \u044f\u0432\u043d\u043e\u0433\u043e `.strict()`/`.strip()` \u2014 \u043d\u0430\u043c\u0456\u0440 \u0449\u043e\u0434\u043e \u0437\u0430\u0439\u0432\u0438\u0445 \u043f\u043e\u043b\u0456\u0432 \u043d\u0435 \u0437\u0430\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u043e\u0432\u0430\u043d\u043e\" ... \"Skill: `object-strict-vs-strip` (MEDIUM-HIGH)\"."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 2,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 136.6,
+        "tokens": 60536,
+        "tool_calls": 18,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Flags z.any() on the `metadata` field as unsafe and recommends z.unknown() (or a concrete shape) instead",
+          "passed": true,
+          "evidence": "\"### 2. `metadata: z.any()` lets arbitrary, unvalidated JSON reach the database\" \u2014 minimal fix z.unknown(), better fix a bounded z.record()."
+        },
+        {
+          "text": "Flags calling .parse() directly on req.body (untrusted user input) and recommends .safeParse() so invalid input doesn't throw an unhandled error",
+          "passed": true,
+          "evidence": "\"### 1. `UserProfileSchema.parse(req.body)` will crash the handler on invalid input \u2014 line 24\" with a safeParse() fix."
+        },
+        {
+          "text": "Flags the object schema missing .strict() before the parsed values are persisted, noting unknown/extra fields from the request body would silently pass through",
+          "passed": true,
+          "evidence": "\"### 5. No `.strict()` \u2014 unrecognized keys are silently stripped, not rejected \u2014 line 6\u201312\"."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 167.2,
+        "tokens": 64714,
+        "tool_calls": 19,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Flags the .refine() callback calling throw new Error(...) instead of returning false, noting refine() should return a boolean, not throw",
+          "passed": true,
+          "evidence": "\"1. `throw` \u0443 `.refine()` \u043b\u0430\u043c\u0430\u0454 `safeParse()`\" \u2014 includes an empirical repro against the repo's own zod@3.24.1, skill rule `error-avoid-throwing-in-refine`."
+        },
+        {
+          "text": "Flags the hand-written `interface CheckoutForm` duplicating the schema shape and recommends deriving the type via z.infer<typeof CheckoutFormSchema> instead",
+          "passed": true,
+          "evidence": "\"5. \u0420\u0443\u0447\u043d\u0438\u0439 `interface CheckoutForm` \u0434\u0443\u0431\u043b\u044e\u0454 \u0441\u0445\u0435\u043c\u0443\" \u2014 skill rule `type-use-z-infer`, fix shown."
+        },
+        {
+          "text": "Flags `email: z.string()` missing .email() validation, noting it currently accepts any non-empty string as a valid email",
+          "passed": true,
+          "evidence": "\"3. `email: z.string()` \u0431\u0435\u0437 \u0444\u043e\u0440\u043c\u0430\u0442\u0443 (\u0440\u044f\u0434\u043e\u043a 12)\" \u2014 skill rule `schema-string-validations`."
+        },
+        {
+          "text": "[bonus, not predefined] Flags that .refine() turns the schema into ZodEffects, blocking .pick()/.omit()/.extend() \u2014 directly relevant since the task states the schema is about to be reused in a new flow",
+          "passed": true,
+          "evidence": "Table row #1 'throw ... \u2014 CRITICAL' plus the framing '`.refine()`/`.superRefine()` turn a `ZodObject` into a `ZodEffects` wrapper... blocks the stated reuse' \u2014 cites `object-pick-omit`, `object-extend-for-composition`, `compose-shared-schemas`."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 2,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 144.2,
+        "tokens": 68560,
+        "tool_calls": 20,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Flags the .refine() callback calling throw new Error(...) instead of returning false, noting refine() should return a boolean, not throw",
+          "passed": true,
+          "evidence": "\"### 1. `.refine()` throws instead of returning `false` \u2014 breaks `ZodError` handling\" \u2014 rule `error-avoid-throwing-in-refine`."
+        },
+        {
+          "text": "Flags the hand-written `interface CheckoutForm` duplicating the schema shape and recommends deriving the type via z.infer<typeof CheckoutFormSchema> instead",
+          "passed": true,
+          "evidence": "\"### 8. Manual `CheckoutForm` interface duplicates the schema instead of using `z.infer`\" \u2014 rule `type-use-z-infer`."
+        },
+        {
+          "text": "Flags `email: z.string()` missing .email() validation, noting it currently accepts any non-empty string as a valid email",
+          "passed": true,
+          "evidence": "\"### 3. `email` has no format validation \u2014 line 12\" \u2014 rule `schema-string-validations`."
+        },
+        {
+          "text": "[bonus, not predefined] Flags that .refine() turns the schema into ZodEffects, blocking .pick()/.omit()/.extend() \u2014 directly relevant since the task states the schema is about to be reused in a new flow",
+          "passed": true,
+          "evidence": "\"## Headline finding: the schema can't be composed for the new flow as written\" \u2014 explicit ZodEffects explanation with a superRefine() rewrite, cites `object-pick-omit`, `object-extend-for-composition`, `compose-shared-schemas`."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.67,
+        "passed": 2,
+        "failed": 1,
+        "total": 3,
+        "time_seconds": 141.2,
+        "tokens": 40108,
+        "tool_calls": 3,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Flags z.any() on the `metadata` field as unsafe and recommends z.unknown() (or a concrete shape) instead",
+          "passed": true,
+          "evidence": "\"### 3. `metadata: z.any()` \u2014 \u0444\u0430\u043a\u0442\u0438\u0447\u043d\u043e \u0432\u0456\u0434\u0441\u0443\u0442\u043d\u0456\u0441\u0442\u044c \u0432\u0430\u043b\u0456\u0434\u0430\u0446\u0456\u0457\"."
+        },
+        {
+          "text": "Flags calling .parse() directly on req.body (untrusted user input) and recommends .safeParse() so invalid input doesn't throw an unhandled error",
+          "passed": true,
+          "evidence": "\"### 2. `UserProfileSchema.parse()` \u043a\u0438\u0434\u0430\u0454 \u0432\u0438\u043d\u044f\u0442\u043e\u043a, \u044f\u043a\u0438\u0439 \u043d\u0456\u0434\u0435 \u043d\u0435 \u043e\u0431\u0440\u043e\u0431\u043b\u044f\u0454\u0442\u044c\u0441\u044f \u044f\u043a 400\"."
+        },
+        {
+          "text": "Flags the object schema missing .strict() before the parsed values are persisted, noting unknown/extra fields from the request body would silently pass through",
+          "passed": false,
+          "evidence": "No mention of .strict()/.strip() or unknown-key handling anywhere in the review (sections 1-4 Critical, 5-10 Important, plus 3 minor notes) \u2014 this specific gap is absent."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 2,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 147.1,
+        "tokens": 39626,
+        "tool_calls": 3,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Flags z.any() on the `metadata` field as unsafe and recommends z.unknown() (or a concrete shape) instead",
+          "passed": true,
+          "evidence": "\"### 3. `metadata: z.any()` \u2014 \u0431\u0435\u0437 \u0436\u043e\u0434\u043d\u043e\u0457 \u0432\u0430\u043b\u0456\u0434\u0430\u0446\u0456\u0457 \u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0438 \u0447\u0438 \u0440\u043e\u0437\u043c\u0456\u0440\u0443\"."
+        },
+        {
+          "text": "Flags calling .parse() directly on req.body (untrusted user input) and recommends .safeParse() so invalid input doesn't throw an unhandled error",
+          "passed": true,
+          "evidence": "\"### 4. `UserProfileSchema.parse(req.body)` \u0431\u0435\u0437 \u043e\u0431\u0440\u043e\u0431\u043a\u0438 \u043f\u043e\u043c\u0438\u043b\u043a\u0438 \u0432\u0430\u043b\u0456\u0434\u0430\u0446\u0456\u0457\"."
+        },
+        {
+          "text": "Flags the object schema missing .strict() before the parsed values are persisted, noting unknown/extra fields from the request body would silently pass through",
+          "passed": true,
+          "evidence": "\"### 11. `z.object` \u0431\u0435\u0437 `.strict()` \u2014 \u0437\u0430\u0439\u0432\u0456 \u043f\u043e\u043b\u044f \u0432 \u0442\u0456\u043b\u0456 \u0442\u0438\u0445\u043e \u0432\u0456\u0434\u043a\u0438\u0434\u0430\u044e\u0442\u044c\u0441\u044f\"."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.75,
+        "passed": 3,
+        "failed": 1,
+        "total": 4,
+        "time_seconds": 102.2,
+        "tokens": 38194,
+        "tool_calls": 3,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Flags the .refine() callback calling throw new Error(...) instead of returning false, noting refine() should return a boolean, not throw",
+          "passed": true,
+          "evidence": "\"### 1. `refine()` throws instead of returning `false` \u2014 breaks `safeParse()` and swallows the custom message\"."
+        },
+        {
+          "text": "Flags the hand-written `interface CheckoutForm` duplicating the schema shape and recommends deriving the type via z.infer<typeof CheckoutFormSchema> instead",
+          "passed": true,
+          "evidence": "\"### 5. Hand-duplicated `CheckoutForm` interface will drift from the schema\"."
+        },
+        {
+          "text": "Flags `email: z.string()` missing .email() validation, noting it currently accepts any non-empty string as a valid email",
+          "passed": true,
+          "evidence": "\"### 3. `email` has no email-format validation\"."
+        },
+        {
+          "text": "[bonus, not predefined] Flags that .refine() turns the schema into ZodEffects, blocking .pick()/.omit()/.extend() \u2014 directly relevant since the task states the schema is about to be reused in a new flow",
+          "passed": false,
+          "evidence": "No mention of ZodEffects, .pick()/.omit()/.extend(), or composability anywhere in the review \u2014 the .refine() finding is framed purely as an error-handling bug, not a reuse blocker."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 2,
+      "result": {
+        "pass_rate": 0.75,
+        "passed": 3,
+        "failed": 1,
+        "total": 4,
+        "time_seconds": 136.2,
+        "tokens": 39495,
+        "tool_calls": 3,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Flags the .refine() callback calling throw new Error(...) instead of returning false, noting refine() should return a boolean, not throw",
+          "passed": true,
+          "evidence": "\"### 1. `refine()` \u043a\u0438\u0434\u0430\u0454 `Error` \u0437\u0430\u043c\u0456\u0441\u0442\u044c `return false` \u2014 \u043b\u0430\u043c\u0430\u0454 \u043a\u043e\u043d\u0442\u0440\u0430\u043a\u0442 `ZodError`\"."
+        },
+        {
+          "text": "Flags the hand-written `interface CheckoutForm` duplicating the schema shape and recommends deriving the type via z.infer<typeof CheckoutFormSchema> instead",
+          "passed": true,
+          "evidence": "\"### 4. `CheckoutForm` \u2014 \u0440\u0443\u0447\u043d\u0438\u0439 \u0434\u0443\u0431\u043b\u0456\u043a\u0430\u0442 \u0442\u0438\u043f\u0443 \u0437\u0430\u043c\u0456\u0441\u0442\u044c `z.infer`\" \u2014 even notes the z.input vs z.output default(true) subtlety."
+        },
+        {
+          "text": "Flags `email: z.string()` missing .email() validation, noting it currently accepts any non-empty string as a valid email",
+          "passed": true,
+          "evidence": "\"### 2. `email` \u043d\u0435 \u0432\u0430\u043b\u0456\u0434\u0443\u0454\u0442\u044c\u0441\u044f \u044f\u043a email\"."
+        },
+        {
+          "text": "[bonus, not predefined] Flags that .refine() turns the schema into ZodEffects, blocking .pick()/.omit()/.extend() \u2014 directly relevant since the task states the schema is about to be reused in a new flow",
+          "passed": false,
+          "evidence": "No mention of ZodEffects or .pick()/.omit()/.extend() composability anywhere \u2014 closest is a generic note about extracting a payment sub-schema 'before it has a second point of use', which is not the same claim."
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 154.925,
+        "stddev": 17.1552,
+        "min": 136.6,
+        "max": 171.7
+      },
+      "tokens": {
+        "mean": 62737.0,
+        "stddev": 4966.8588,
+        "min": 57138,
+        "max": 68560
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.7925,
+        "stddev": 0.1434,
+        "min": 0.67,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 131.675,
+        "stddev": 20.1487,
+        "min": 102.2,
+        "max": 147.1
+      },
+      "tokens": {
+        "mean": 39355.75,
+        "stddev": 818.1216,
+        "min": 38194,
+        "max": 40108
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.21",
+      "time_seconds": "+23.2",
+      "tokens": "+23381"
+    }
+  },
+  "notes": []
+}

@@ -281,3 +281,279 @@ client/src/app/repos/[repoId]/onboarding/_components/OnboardingTourPage/Onboardi
 Доказ: client/package.json (немає рядка `@testing-library/user-event` у
 `devDependencies`); client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/DiffTab.test.tsx:56
 (`fireEvent.click(...)`)
+
+## 2026-08-19 · gotcha
+**`Badge` (`@devdigest/ui`) рендерить усі `children` в ОДНОМУ `<span>` — кілька
+JSX-інтерполяцій усередині одного `Badge` зливаються в один текстовий вузол, і
+`getByText("КОРОТКА-ЧАСТИНА")` (точний збіг) НЕ знаходить його**
+Розширення `EvalCaseModal.tsx` (SPEC-05 T13, "POSITIVE CASE"/"NEGATIVE CASE"
+бейдж + людський підсумок поруч) спочатку клав обидва шматки тексту в ОДИН
+`<Badge>{label} · {summary.text}</Badge>` — `Badge.tsx`'s `<span>{children}</span>`
+(без проміжних елементів між текстовими вузлами) робить повний `textContent`
+рівним `"POSITIVE CASE · MUST find ..."`, тож `screen.getByText("POSITIVE
+CASE")` (точний збіг за замовчуванням) не збігається НІ з чим — падає "Unable
+to find an element". Фікс: рендерити короткий лейбл усередині `Badge`, а
+довгий підсумок — окремим `<span>` поруч (поза `Badge`), не всередині нього;
+тоді `getByText("POSITIVE CASE")` (точний) і `getByText(/MUST find/)`
+(regex-підрядок) знаходять кожен свій елемент незалежно. Той самий клас
+пастки, що вже задокументований для дублікатів тексту (записи 2026-07-31/
+2026-08-13), але тут причина не дублікат, а конкатенація кількох
+JSX-інтерполяцій в один текстовий вузол одного елемента.
+Доказ: client/src/vendor/ui/primitives/Badge.tsx:24-48 (`<span>{children}</span>`,
+без розділових елементів); client/src/components/eval-case-modal/EvalCaseModal.tsx:203-210
+(підсумок винесено в окремий `<span>` поруч із `<Badge>`)
+
+## 2026-08-19 · decision
+**`EvalCaseModal` промотовано з `agents/[id]/.../EvalsTab/_components/` у
+`client/src/components/eval-case-modal/` — другий викликач (`FindingsPanel`)
+з іншого фіче-дерева це вимагав, за правилом react-ui-architecture "promote on
+the second user"**
+`FindingsPanel` (репо/pulls-фіча) отримав потребу відкривати той самий
+`EvalCaseModal`, що раніше обслуговував лише `EvalsTab` (agents-фіча) —
+крос-фіче imports (`../../other-feature/...`) — це і є сигнал промоції, не
+привід тягнути імпорт напряму. Нову підпапку названо kebab-case
+(`eval-case-modal`), за конвенцією вже наявних `client/src/components/*`
+(`app-shell`, `diff-viewer`, `run-cost-badge`), а не PascalCase, як у
+feature-local `_components/`. Усередині компонента імпорти хуків/утиліт
+переведено на `@/lib/hooks/evals` (alias), а не порахований `../`-ланцюжок —
+уникає класу пасток із записів 2026-08-02 про неправильний підрахунок
+глибини відносних імпортів у цьому ж дереві.
+Доказ: client/src/components/eval-case-modal/EvalCaseModal.tsx:6-7 (alias-
+імпорти), client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsPanel/FindingsPanel.tsx:13
+(другий викликач), .claude/skills/react-ui-architecture/SKILL.md ("promote on
+the second user" / "A relative import climbs out of one feature and into
+another")
+
+## 2026-08-19 · decision
+**recall/precision/citation_accuracy не мали жодної кольорової конвенції в
+кодовій базі — `METRIC_COLOR` (T14) вводить її вперше**
+До Eval Dashboard'а (T14) ці три метрики скрізь рендерились простим текстом
+без кольору (`EvalsTab.tsx`, старий `EvalCaseModal`) — жодного "вже наявного"
+кольору не було, хоча план це й припускав. Зафіксовано: recall=`var(--accent)`
+(синій), precision=`var(--ok)` (зелений), citation_accuracy=`var(--warn)`
+(жовтогарячий) — узгоджено з референс-макетом курсу. Якщо ці метрики
+з'являться в `EvalsTab`/`EvalCaseModal` пізніше — перевикористовувати цю саму
+палітру, а не вигадувати нову.
+Доказ: client/src/app/eval-dashboard/_components/EvalDashboardView/styles.ts:4-9
+(`METRIC_COLOR`)
+
+## 2026-08-19 · gotcha
+**`EvalsTab.tsx` тепер рендерить ДВА різних лічильники з ідентичним
+next-intl форматом `"{count} cases"` (заголовок кейсів і кожен рядок
+історії сет-ранів) — колізія `getByText`, коли обидва числа збігаються**
+`evalsTab.casesCount` (новий, для "N cases" лічильника над списком кейсів) і
+вже наявний `evalsTab.historyCasesCount` (для кожного рядка "Set-run
+history") — обидва мають рядок-формат `"{count} cases"`. Коли кількість
+поточних eval-кейсів агента дорівнює кількості кейсів, що реально
+виконались в конкретному історичному сет-рані (типовий фікстур-дефолт: 1
+кейс визначено, 1 кейс побіг), `screen.getByText("1 cases")` знаходить ДВА
+елементи одночасно і падає. Це той самий клас пастки, що вже
+задокументований (2026-07-31, 2026-08-13) — фікс тут: у фікстурі тесту
+свідомо тримати РІЗНУ кількість поточних кейсів і кейсів у конкретному
+історичному сет-рані (напр. 2 визначено, 1 виконано), а не однакове число,
+замість переходу на `getAllByText`.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.test.tsx
+(тест "a single set-run renders in history..." — коментар пояснює вибір
+`cases.length = 2` проти `historyRows`-групи з 1 кейсом); client/messages/en/eval.json
+(`evalsTab.casesCount`/`evalsTab.historyCasesCount` — обидва `"{count} cases"`)
+
+## 2026-08-19 · gotcha
+**`@devdigest/ui`'s `icon=` prop не має ключа `"Pencil"`, попри те що
+underlying lucide-імпорт називається саме `Pencil` — валідний ключ `"Edit"`**
+`icons.tsx:147` аліасить `Edit: Pencil` навмисно ("prototype used 'Edit';
+lucide exports Pencil/Edit — alias to keep API"), тож `Icon`/`Button icon=`
+приймає лише `"Edit"`. `icon="Pencil"` не падає одразу — валиться лише на
+`tsc --noEmit` величезною union-type помилкою, що не вказує прямо на фікс.
+Впіймано під час верифікації плану evals-tab-mockup-alignment: `implementer`-
+агент (без Bash у своїй сесії, див. корневий INSIGHTS.md) не міг прогнати
+typecheck сам і залишив `icon="Pencil"` в новій кнопці редагування рядка
+кейсу.
+Доказ: client/src/vendor/ui/icons.tsx:147; client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.tsx:263 (виправлено на `icon="Edit"`)
+
+## 2026-08-19 · gotcha
+**Блок карток метрик (rядок 156+) і секція Compare (рядок 303+) в
+`EvalsTab.tsx` рендерять ОДНАКОВУ дельту, коли `groups` має рівно 2 записи
+— колізія `getByText`, відмінна від уже задокументованої Badge-пастки**
+Обидва блоки рахують дельту з того самого `groups` (`groupRuns(historyRows)`,
+`EvalsTab.tsx:83`): картки зверху завжди показують "найновіший сет-ран
+проти попереднього" (`metricCards`), Compare-секція — дельту між ДВОМА
+ОБРАНИМИ користувачем сет-ранами. Коли в фікстурі/сценарії всього 2
+run_group'и, ці дві пари збігаються — і обидва блоки рендерять однаковий
+текст (напр. "▼ Δ 50%") в РІЗНИХ, легітимно окремих елементах (не один
+елемент зі склеєними текстовими вузлами, як Badge-пастка 2026-08-19 вище).
+Незкоуплений `screen.getByText(/Δ 50%/)` тоді знаходить 2 елементи й падає,
+хоча з компонентом усе гаразд. Фікс — інший, ніж у Badge-пастці: скоупити
+запит через `within()` на контейнер конкретної секції (напр.
+`within(screen.getByText("Comparing set-runs").closest("div")!)`), а не
+міняти розбиття тексту по елементах.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.tsx:83,156,303
+(спільне джерело `groups`, картки метрик, заголовок Compare-секції);
+client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/EvalsTab.test.tsx
+(тест "selecting two set-runs..." — виправлено скоупом `within(compareSection)`)
+
+## 2026-08-19 · gotcha
+**Інструмент `Glob` (не vitest/Next.js) трактує Next.js dynamic-route теку
+`[agentId]`/`[id]` як bracket-character-class у власному патерні — повертає
+"No files found" навіть коли тека реально існує**
+`Glob({ pattern: "client/src/app/eval-dashboard/[agentId]/**" })` і аналогічний
+виклик з `[id]` дали порожній результат попри те, що обидві теки існують і
+успішно резолвляться Next.js/vitest (їхній глоб-скан матчить РЕАЛЬНІ шляхи
+файлів, де `[`/`]` — звичайні символи; проблема лише в РУЧНОМУ написанні
+глоб-патерна з літеральними дужками). Для пошуку файлів під dynamic-route
+текою треба `Grep` (`output_mode: files_with_matches`) по шляху-предку або по
+відомій підрядці замість `Glob` із буквальним `[...]` у патерні.
+Доказ: client/src/app/eval-dashboard/[agentId]/page.tsx (тека існує, `Glob`
+на `client/src/app/eval-dashboard/**` під час цієї сесії повернув 0
+результатів для неї, `Grep` на `"eval-dashboard"` — знайшов миттєво)
+
+## 2026-08-20 · gotcha
+**Твердження плану "`EvalCaseModal` не потребує змін" (SPEC-06 AC-21) не
+витримало інспекції — компонент брав голий `agentId: string`, а не
+`ownerKind`/`ownerId`**
+Development Plan `skill-editor.md` Step 5.3 стверджував, що
+`EvalCaseModal` "вже приймає ownerKind/ownerId структурно сумісні пропси".
+Інспекція коду ДО зміни показала протилежне: пропс називався `agentId:
+string`, і компонент викликав `useCreateEvalCase(agentId)`/
+`useUpdateEvalCase(agentId)`/`useRunEvalCase(agentId)` голим рядком. Після
+генералізації цих трьох хуків (Step 5.1) до сигнатури `{ ownerKind:
+'agent'|'skill'; ownerId: string }` виклики всередині `EvalCaseModal`
+зламались би для skill-owned кейсу без знання `ownerKind`. Мінімальний
+адитивний фікс: доданий optional `ownerKind?: "agent"|"skill" = "agent"`
+пропс (назва `agentId` лишена без змін, тепер це просто generic ownerId) —
+обидва існуючі агент-only викликачі (`FindingsPanel.tsx`,
+`EvalCaseModal.test.tsx`) не потребували жодної зміни. Висновок: план, що
+каже "X не потребує змін" з посиланням на AC, все одно варто перевіряти
+інспекцією коду буквально, а не довіряти формулюванню.
+Доказ: client/src/components/eval-case-modal/EvalCaseModal.tsx:58 (`const
+owner = { ownerKind, ownerId: agentId };`, годує всі три хуки)
+
+## 2026-08-20 · gotcha
+**`EvalAgentDashboardView.tsx` — третій, недокументований у плані викликач
+`useEvalCases`/`useEvalRunHistory`, не згаданий у жодному Step/"Modules
+involved" `skill-editor.md`**
+Плани, що генералізують сигнатуру спільного хука (тут: `useEvalCases`/
+`useEvalRunHistory` з голого `agentId: string` на `{ownerKind, ownerId}`,
+Development Plan `skill-editor.md` Step 5.1), перелічують лише "відомі"
+викликачі (тут план називав `AgentEditor`'s Evals tab і `EvalCaseModal`) —
+але per-agent Eval Dashboard drill-down (`app/eval-dashboard/[agentId]`)
+викликає ті самі два хуки і жодного разу не згадується в плані. Без
+project-wide grep по імені хука (не по назві фічі з плану) зміна сигнатури
+ламає typecheck у файлі, який ніхто не очікував чіпати. Правило: перед
+зміною сигнатури спільного хука — `Grep` на саме ім'я хука по всьому
+`client/src`, а не покладатись на список викликачів із плану.
+Доказ: client/src/app/eval-dashboard/[agentId]/_components/EvalAgentDashboardView/EvalAgentDashboardView.tsx:35
+(`useEvalCases({ ownerKind: "agent", ownerId: agentId })`, до фіксу —
+`useEvalCases(agentId)`)
+
+## 2026-08-20 · decision
+**`/skills/:id` (SPEC-06 Step 6) НЕ копіює `AgentEditorPage.tsx`/`AgentEditor.tsx`'s
+файловий розподіл 1:1 — уся `?tab=`/`ErrorState`/header-логіка живе в
+`SkillEditorView`, `page.tsx` — лише `useParams`-обгортка**
+Для агентів `page.tsx` тримає `?tab=`-стан, `ErrorState`-гілку і хедер, а
+`AgentEditor` — лише таб-бар+тіло (бо `page.tsx` ще й рендерить лівий
+сайдбар сусідніх агентів, якого спека для скілів прямо НЕ вимагає). Для
+скілів увесь цей стан перенесено В `SkillEditorView` саму — `page.tsx`
+звівся до `const {id} = useParams(); return <SkillEditorView id={id} />;`.
+Причина: без сайдбару в `page.tsx` не лишається власної відповідальності,
+яку варто тримати окремо від делегованого view; побічний виграш —
+`SkillEditorView` тестується напряму (`<SkillEditorView id="s1" />`) без
+мокання `next/navigation`'s `useParams`, на відміну від `AgentEditorPage`
+(яка взагалі не має власного `.test.tsx` — надто важка для змоку
+цілком). Якщо наступна фіча копіює "AgentEditorPage-патерн" для роуту без
+сайдбару-сусідів, обирай цей (тонший `page.tsx`) варіант, а не буквальну
+копію agent-розподілу.
+Доказ: client/src/app/skills/[id]/page.tsx (7 рядків, лише useParams+delegate);
+client/src/app/skills/[id]/_components/SkillEditorView/SkillEditorView.tsx
+(useSearchParams/useRouter/useSkill/ErrorState усі тут, не в page.tsx)
+
+## 2026-08-20 · decision
+**Промоція `diffPromptLines`/`PromptDiffLine` у `@/lib/text-diff` (SPEC-06
+AC-29, Development Plan `skill-editor.md` Step 9) не потребувала ЖОДНОЇ
+зміни в `CompareRunsModal.test.tsx`**
+План прямо казав "Update `CompareRunsModal.test.tsx` accordingly" при
+промоції, але інспекція показала, що тест ніколи не імпортував
+`diffPromptLines`/`PromptDiffLine` напряму з `./helpers` — він лише рендерить
+`<CompareRunsModal>` і перевіряє видимий текст діффу. Єдина зміна лишилась
+локальною до `CompareRunsModal.tsx` (новий import з `@/lib/text-diff` замість
+`./helpers`) і до самого `helpers.ts` (видалення промотованого коду). Урок:
+"update the test accordingly" у плані промоції варто верифікувати grep'ом на
+ім'я симовлу в тестовому файлі, а не виконувати наосліп — інколи "accordingly"
+означає "нічого".
+Доказ: client/src/app/eval-dashboard/[agentId]/_components/CompareRunsModal/CompareRunsModal.test.tsx
+(жодного `import ... from "./helpers"` у файлі); client/src/lib/text-diff.ts
+(нове місце); client/src/app/eval-dashboard/[agentId]/_components/CompareRunsModal/CompareRunsModal.tsx:10
+(`import { diffPromptLines } from "@/lib/text-diff"`)
+
+## 2026-08-20 · decision
+**`VersionsTab`'s Restore-кнопка — незалежна дія на КОЖНОМУ рядку версії, НЕ
+прив'язана до 2-чекбоксового вибору для diff (AC-29 vs AC-30, різні
+механізми на тому самому списку)**
+Формулювання плану ("a Restore button on a selected version") було
+неоднозначним — могло означати "лише на версії, вибраній чекбоксом". Обрано
+інше трактування: `VersionsTab.tsx` рендерить Restore-кнопку на КОЖНОМУ
+рядку `skill_versions`, незалежно від чекбокс-стану, що використовується
+виключно для diff-вибору (рівно 2). Це дозволяє відновити будь-яку версію
+одним кліком, без попереднього вибору для порівняння — узгоджується з AC-30
+("КОЛИ користувач тисне Restore на версії V", без згадки про попередній
+вибір). Якщо Step 10/рев'ювер очікує іншу поведінку (Restore лише при
+активному виборі), це свідома, а не випадкова розбіжність.
+Доказ: client/src/app/skills/[id]/_components/SkillEditorView/_components/VersionsTab/VersionsTab.tsx:61-74
+(Restore-кнопка в `versions.map(...)`, чекбокс-стан `selected` впливає лише
+на `older`/`newer`/diff-блок нижче)
+
+## 2026-08-20 · gotcha
+**Підключення всіх 6 табів у `SkillEditorView`'s тіло (Step 10) ламає
+`SkillEditorView.test.tsx`'s мінімальний мок `@/lib/hooks/skills` — до цього
+файл мокав лише `useSkill`, бо тіло було порожньою заглушкою**
+Поки `<div style={s.body} />` була заглушкою (Step 6-9), тест-файл виду
+"вигляду шапки/таб-бару" мокав лише `useSkill`. Щойно дефолтний таб
+("config") реально рендерить `ConfigTab`, той викликає `useUpdateSkill` з
+того самого модуля `@/lib/hooks/skills` — а мок цього модуля НЕ мав такого
+експорту, тож виклик падав із "useUpdateSkill is not a function" у КОЖНОМУ
+з уже наявних тестів (не лише в новому), бо всі вони рендерять
+`SkillEditorView` без явного `?tab=` → дефолтний "config". Довелось
+розширити мок `@/lib/hooks/skills` до всіх хуків, які реально викликають
+6 підключених табів (`useUpdateSkill`, `useSkillContextDocs`,
+`useSetSkillContextDocs`, `useSkillStats`, `useSkillVersions`), додати мок
+`@/lib/hooks/evals` (Evals-таб читає дані звідти напряму через
+`useQuery`/`useMutation`, без QueryClientProvider в тесті) і замокати
+`@/components/context-doc-picker` як passthrough (той самий патерн, що вже
+є в `AgentEditor.test.tsx`). Той самий крок також зламав тест "shows the
+skill's name and version badge in the header" — `ConfigTab` рендерить
+власний `"v{version}"`-бейдж, ідентичний хедерному, тож нескоупний
+`getByText("v3")` тепер знаходить 2 елементи; фікс — `within()` на
+найближчому `<div>`-предку `<h1>` (сам `s.header`-контейнер), а не зміна
+`ConfigTab`/хедера. Правило: будь-яке підключення "порожньої заглушки" до
+реального дочірнього дерева в уже наявному тест-файлі вимагає перегляду
+ВСІХ моків цього файлу на повноту, не лише додавання нових тестів для
+нової поведінки.
+Доказ: client/src/app/skills/[id]/_components/SkillEditorView/SkillEditorView.test.tsx
+(мок `@/lib/hooks/skills` розширено з 1 до 6 експортів, доданий мок
+`@/lib/hooks/evals` і `@/components/context-doc-picker`, тест "shows the
+skill's name..." скоупить `within(header)`)
+
+## 2026-08-20 · gotcha
+**SPEC-06's твердження "`eval`-неймспейс уже ownerKind-агностичний" — вірне
+для *ключів*, але НЕ для *копірайтингу* двох конкретних рядків**
+Аудит i18n для Skill Editor (Development Plan Step 11, T16) перевірив кожен
+`t("evalsTab.*")`-виклик у промотованому `EvalOwnerTab`
+(`client/src/components/eval-owner-tab/EvalOwnerTab.tsx`) проти
+`client/messages/en/eval.json`. Усі використані ключі існують і саме
+`evalsTab`-неймспейс (не плутати з agent-only `dashboardPage`/
+`agentDashboardPage`) дійсно не має НОВИХ ключів, специфічних під owner —
+але два вже наявні рядки в цьому самому неймспейсі жорстко кодують слово
+"agent" у копірайтингу: `evalsTab.emptyCases` ("...assert this agent's
+expected findings...") і `evalsTab.noHistory` ("...run this agent's whole
+eval set."). Коли `EvalOwnerTab` рендериться з `ownerKind: "skill"` (нова
+Evals-вкладка `/skills/:id`), користувач бачить "this agent's" на сторінці
+скіла — косметична, але фактична неточність копірайтингу. НЕ виправлено в
+рамках Step 11 (T16 явно скоупив задачу лише на нові ключі під
+`skills.json` + перевірку перевикористання `detail.*`-блоку, і launching-
+інструкція для цього кроку explicit заборонила чіпати `eval`-неймспейс) —
+задокументовано тут для наступної сесії/рев'ю, яка вирішить, чи
+параметризувати ці два рядки (`{ownerLabel}`) чи лишити як
+задокументований компроміс.
+Доказ: client/messages/en/eval.json:88,108 (`evalsTab.emptyCases`,
+`evalsTab.noHistory`); викликається з
+client/src/components/eval-owner-tab/EvalOwnerTab.tsx:218,286 (той самий
+`t()` без параметра власника)

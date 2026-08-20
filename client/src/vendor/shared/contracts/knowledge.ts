@@ -171,6 +171,15 @@ export const Skill = z.object({
 });
 export type Skill = z.infer<typeof Skill>;
 
+// A snapshot row from `skill_versions` — one per `body` change (Versions tab, G7).
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
 export const CommunitySkill = z.object({
   name: z.string(),
   repo: z.string(),

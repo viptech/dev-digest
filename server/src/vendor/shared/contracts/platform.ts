@@ -19,6 +19,7 @@ export const FeatureModelId = z.enum([
   'risk_brief',
   'conformance',
   'conventions',
+  'skill_eval',
 ]);
 export type FeatureModelId = z.infer<typeof FeatureModelId>;
 
@@ -81,6 +82,15 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     // Cheap flash-class OpenRouter default so extraction works out of the box
     // without an OpenAI key — same tier as `onboarding`/`review_intent`.
     // Users who want a stronger model can override this in Settings.
+    defaultProvider: 'openrouter',
+    defaultModel: 'deepseek/deepseek-v4-flash',
+  },
+  {
+    id: 'skill_eval',
+    label: 'Skill Eval',
+    description: "Runs a skill's isolated eval set to test it before enabling.",
+    // Same cheap flash-class tier as onboarding/review_intent/conventions —
+    // this is a dev-loop check, not a production review.
     defaultProvider: 'openrouter',
     defaultModel: 'deepseek/deepseek-v4-flash',
   },

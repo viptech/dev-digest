@@ -470,20 +470,65 @@ semver-discipline violation).`,
     });
   }
 
-  if (testQualityAgent) {
+  // SPEC-05 (L06): consolidated onto ONE demo agent (Security Reviewer — it
+  // already anchors the seed's headline PR narrative, the Stripe-secret
+  // finding at PR #482) with ≥8 cases in the typed `EvalExpectation` shape.
+  // The 2 pre-existing entries (`happy-path-only-test`, `route-signature-
+  // change`) are migrated into that shape here rather than left in the old
+  // flat `{severity,file,category}` form `scoreEvalCase()` doesn't understand.
+  // NOTE: `upsertEvalCase` is idempotent BY NAME ONLY — on a database that
+  // already ran the pre-SPEC-05 seed, the pre-existing `happy-path-only-test`
+  // row (originally owned by Test Quality Reviewer) is found by name and left
+  // as-is; it does NOT get re-parented onto Security Reviewer on a re-seed.
+  // A fresh database seeds all 8 cases onto Security Reviewer correctly.
+  if (securityAgent) {
     await upsertEvalCase({
-      ownerId: testQualityAgent.id,
+      ownerId: securityAgent.id,
       name: 'happy-path-only-test',
       inputDiff: `diff --git a/test/add.test.ts b/test/add.test.ts\n--- a/test/add.test.ts\n+++ b/test/add.test.ts\n@@ -1,2 +1,5 @@\n test('happy path', () => {\n+  expect(add(1, 2)).toBe(3);\n });`,
-      expectedOutput: [{ severity: 'WARNING', file: 'test/add.test.ts', category: 'test' }],
+      expectedOutput: [{ type: 'must_find', severity: 'WARNING', file: 'test/add.test.ts', category: 'test' }],
     });
-  }
-  if (securityAgent) {
     await upsertEvalCase({
       ownerId: securityAgent.id,
       name: 'route-signature-change',
       inputDiff: `diff --git a/src/routes/users.ts b/src/routes/users.ts\n--- a/src/routes/users.ts\n+++ b/src/routes/users.ts\n@@ -1,3 +1,3 @@\n-export async function getUser(id: string): Promise<User> {\n+export async function getUser(id: string, opts: { includeDeleted: boolean }): Promise<User> {`,
-      expectedOutput: [{ severity: 'WARNING', file: 'src/routes/users.ts', category: 'bug' }],
+      expectedOutput: [{ type: 'must_find', severity: 'WARNING', file: 'src/routes/users.ts', category: 'bug' }],
+    });
+    await upsertEvalCase({
+      ownerId: securityAgent.id,
+      name: 'stripe-key-leak',
+      inputDiff: `diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n@@ -10,3 +10,4 @@\n   port: 3000,\n+  stripeKey: "sk_live_51H8xg2example",\n   redisUrl: process.env.REDIS_URL,`,
+      expectedOutput: [{ type: 'must_find', severity: 'CRITICAL', file: 'src/config.ts', category: 'security' }],
+    });
+    await upsertEvalCase({
+      ownerId: securityAgent.id,
+      name: 'sql-injection-string-concat',
+      inputDiff: `diff --git a/src/db/queries.ts b/src/db/queries.ts\n--- a/src/db/queries.ts\n+++ b/src/db/queries.ts\n@@ -4,3 +4,4 @@\n export async function findUser(name: string) {\n-  return db.query('SELECT * FROM users');\n+  return db.query('SELECT * FROM users WHERE name = \\'' + name + '\\'');\n }`,
+      expectedOutput: [{ type: 'must_find', severity: 'CRITICAL', file: 'src/db/queries.ts', category: 'security' }],
+    });
+    await upsertEvalCase({
+      ownerId: securityAgent.id,
+      name: 'missing-auth-check-new-route',
+      inputDiff: `diff --git a/src/routes/admin.ts b/src/routes/admin.ts\n--- a/src/routes/admin.ts\n+++ b/src/routes/admin.ts\n@@ -1,2 +1,5 @@\n export default async function adminRoutes(app) {\n+  app.post('/admin/delete-all-users', async (req) => {\n+    return db.deleteAllUsers();\n+  });\n }`,
+      expectedOutput: [{ type: 'must_find', severity: 'CRITICAL', file: 'src/routes/admin.ts', category: 'security' }],
+    });
+    await upsertEvalCase({
+      ownerId: securityAgent.id,
+      name: 'pii-in-log-line',
+      inputDiff: `diff --git a/src/api/checkout.ts b/src/api/checkout.ts\n--- a/src/api/checkout.ts\n+++ b/src/api/checkout.ts\n@@ -8,2 +8,3 @@\n export async function checkout(order) {\n+  logger.info('checkout for ' + order.customerEmail + ' card ' + order.cardNumber);\n   return process(order);`,
+      expectedOutput: [{ type: 'must_find', severity: 'CRITICAL', file: 'src/api/checkout.ts', category: 'security' }],
+    });
+    await upsertEvalCase({
+      ownerId: securityAgent.id,
+      name: 'safe-variable-rename-no-noise',
+      inputDiff: `diff --git a/src/utils/format.ts b/src/utils/format.ts\n--- a/src/utils/format.ts\n+++ b/src/utils/format.ts\n@@ -1,3 +1,3 @@\n-export function fmt(value: number): string {\n-  return value.toFixed(2);\n+export function formatCurrency(value: number): string {\n+  return value.toFixed(2);\n }`,
+      expectedOutput: [{ type: 'must_not_flag', severity: 'CRITICAL', file: 'src/utils/format.ts', category: 'security' }],
+    });
+    await upsertEvalCase({
+      ownerId: securityAgent.id,
+      name: 'comment-only-change-no-noise',
+      inputDiff: `diff --git a/src/api/webhook.ts b/src/api/webhook.ts\n--- a/src/api/webhook.ts\n+++ b/src/api/webhook.ts\n@@ -1,2 +1,3 @@\n export async function handleWebhook(req) {\n+  // TODO: add signature verification once the provider ships it\n   return process(req.body);`,
+      expectedOutput: [{ type: 'must_not_flag', severity: 'CRITICAL', file: 'src/api/webhook.ts', category: 'security' }],
     });
   }
 

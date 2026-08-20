@@ -398,3 +398,131 @@ join'ів/лукапів — і це нормальна, прийнята пра
 Доказ: server/src/modules/repos/repository.ts:7; прецеденти —
 server/src/modules/repo-intel/repository.ts:136-148 (`getRepoBasics`),
 server/src/modules/project-context/repository.ts (`getRepoForContext`)
+
+## 2026-08-19 · gotcha
+**GitHub's `pr_files.patch` уже містить свій `@@ ... @@`-заголовок хунка — бракує
+лише file-level `diff --git`/`---`/`+++` рядків, не чотирьох заголовків**
+При реконструкції unified diff з `pr_files.patch`+`.path` (SPEC-05 T6,
+`POST /findings/:id/eval-case`) легко припустити, що `.patch` — це "голе тіло
+хунка" без ЖОДНОГО заголовка, і завжди синтезувати `@@ -0,0 +1,<n> @@` собі. Але
+реальний GitHub API (і мок `MockGitHubClient.getPullRequest`'s
+`files[0].patch`) повертає рядок, що вже ПОЧИНАЄТЬСЯ з власного
+`@@ -oldStart,oldLines +newStart,newLines @@` — те саме підтверджує наявний
+`evals.it.test.ts`'s `DIFF`-фікстура, де `@@ -1,2 +1,5 @@` йде відразу після
+синтетичних `---`/`+++` рядків. Правильна реконструкція: перевірити, чи
+`.patch` вже починається з `@@ ... @@` (regex `/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/`)
+— і синтезувати заголовок лише як fallback, коли його немає, а не завжди.
+Доказ: server/src/adapters/mocks.ts:177 (`patch: '@@ -10,3 +10,4 @@\n...'`),
+server/src/modules/evals/service.ts:409-415 (`reconstructSingleFileDiff`)
+
+## 2026-08-19 · gotcha
+**Заміна `matchFindings()`'s точного збігу множин на `scoreEvalCase()`'s
+"нейтральна зона" (AC-7) тихо перевертає pass/fail існуючого інтеграційного
+тесту, написаного під СТАРУ семантику**
+`evals.it.test.ts`'s тест "with a corner-case skill linked+enabled..." навмисно
+демонстрував, що ввімкнення скіла змінює результат прогону: зі старим
+`matchFindings` (`expected=[]`, `actual=[1 finding]` → `pass=false`, бо
+`actual.length !== expected.length`). Нова формула (SPEC-05 AC-7) трактує
+знахідку поза ВСІМА розміченими зонами як нейтральну — не карає precision — тож
+той самий сценарій (`expected_output: []`, тобто взагалі без зон) тепер дає
+`pass=true`. Це не регресія, а навмисний наслідок формули з Goals спеки — але
+дослівний старий assert (`traces_passed).toBe(0)`) ламається мовчки після
+переходу на `scoreEvalCase()`, якщо його не оновити разом з T3/T4.
+Доказ: server/src/modules/evals/helpers.ts:18-56 (`scoreEvalCase` doc-comment
+з формулою), server/test/evals.it.test.ts (тест перейменовано й assert
+змінено на `toBe(1)` з коментарем-поясненням)
+
+## 2026-08-19 · gotcha
+**Той самий `argv[1]`-guard баг, що вже задокументований для `migrate.ts`
+(2026-08-11), ламає й `seed.ts` — `pnpm db:seed` теж мовчки нічого не робить**
+`pnpm db:seed` (і прямий `tsx src/db/seed.ts`) завершується з exit 0, без
+жодного виводу — ні `✓ seeded {...}`, ні помилки — і без жодного нового
+рядка в БД. Причина та сама: CLI-guard `if (import.meta.url === file://
+${process.argv[1]}) {...}` (`seed.ts:539`) ніколи не збігається в цьому клоні,
+бо шлях репозиторію містить пробіл (`.../ai agent/dev-digest`). Через це весь
+блок виклику `seed(handle.db)` просто не виконується — не лише сам
+`console.log`, а взагалі жодна вставка. Перевірено фактично: `SELECT count(*)
+FROM eval_cases` лишався `0` після "успішного" `pnpm db:seed`, і зʼявились 8
+очікуваних рядків лише після прямого виклику `seed(handle.db)` з тимчасового
+скрипта поза `argv[1]`-перевіркою (той самий workaround, що вже
+задокументований для `runMigrations`). Висновок: у цьому репо жоден
+скрипт з таким CLI-guard-паттерном (`db/migrate.ts`, `db/seed.ts`, і
+ймовірно інші) не можна вважати таким, що справді щось зробив, лише за
+exit code чи відсутністю помилки — завжди перевіряй по факту (`SELECT
+count(*)` / `\d <table>`), як і для міграцій.
+Доказ: server/src/db/seed.ts:538-539 (guard), server/src/db/seed.ts:548
+(`console.log('✓ seeded', r)` — цей рядок не зʼявився в жодному прогоні
+цієї сесії)
+
+## 2026-08-19 · decision
+**Жоден роут `evals/routes.ts` не декларує `response`-схему (zod чи іншу) — нове поле в спільному контракті `EvalRunRecord` не потребує жодних змін у `routes.ts`**
+Fastify зі `ZodTypeProvider` серіалізує/обрізає відповідь по `response`-схемі,
+ЯКЩО вона задекларована в `{ schema: { response: {...} } }`; тут жоден з
+`GET/POST /agents/:id/eval-runs`, `GET /eval-dashboard` тощо цього не робить —
+відповіді просто повертають DTO-об'єкт як є. Тому додавання
+`system_prompt_snapshot` (T15) до `EvalRunRecord`
+(`server/src/vendor/shared/contracts/eval-ci.ts`) знадобилось провести лише
+через `toEvalRunRecordDto()` (`helpers.ts`) — жодних правок у `routes.ts` не
+було потрібно. Якби хоч один роут мав `response`-схему, нове поле мовчки
+обрізалось би серіалізацією, і це не виявилось би без ручної перевірки тіла
+відповіді.
+Доказ: server/src/modules/evals/routes.ts:39-114 (жодного `response` у
+`{ schema: {...} }` жодного роута), server/src/modules/evals/helpers.ts:118-133
+(`toEvalRunRecordDto`, єдине місце, де довелось додати поле)
+
+## 2026-08-20 · gotcha
+**`MockLLMProvider`'s конструктор типізований вужче (`'openai' | 'anthropic'`),
+ніж `LLMProvider.id` (`'openai' | 'anthropic' | 'openrouter'`), і це НІКОЛИ не
+спливає — бо `server/tsconfig.json`'s `include` взагалі не покриває `test/`**
+`new MockLLMProvider('openrouter', {...})` (вже усталений патерн у
+`agent-stats.it.test.ts:76`, `reviews-skills.it.test.ts:97`,
+`conventions.it.test.ts:80`, і тепер у новому
+`evals-skill-owner.it.test.ts`) мав би бути помилкою компіляції — рядковий
+літерал `'openrouter'` не належить параметру, явно анотованому як
+`'openai' | 'anthropic'`. Компілюється лише тому, що `server/tsconfig.json`
+має `"include": ["src/**/*.ts"]` — каталог `test/` не типчекається НІ
+`pnpm typecheck`, НІ Vitest (він лише стрипає типи, не перевіряє їх). Це не
+регресія і не потребує фіксу заради нового коду, але якщо колись
+`server/tsconfig.json`'s `include` розшириться на `test/**` (чи зʼявиться
+окремий `tsconfig.test.json`), усі ці виклики одночасно почервоніють —
+правильний фікс тоді: розширити `MockLLMProvider`'s конструктор до
+`id: 'openai' | 'anthropic' | 'openrouter'`, а не переписувати кожен
+виклик.
+Доказ: server/src/adapters/mocks.ts:59,63 (звужений тип конструктора) vs
+server/src/vendor/shared/adapters.ts:83 (`LLMProvider.id` — усі три);
+server/tsconfig.json:28 (`"include": ["src/**/*.ts"]`, без `test/`)
+
+## 2026-08-20 · gotcha
+**`agent_skills`'s єдиний індекс — композитний PK `(agent_id, skill_id)`, тож
+запит "усі агенти, що лінкують СКІЛ X" (`WHERE skill_id = ?`) не може
+використати лідируючий edge цього індексу**
+Нова `SkillStatsRepository.getWindowData` (дзеркалить
+`agents/stats-repository.ts` на один hop далі — `agent_skills → agent_runs →
+reviews → findings`) читає `agent_skills` у "неприродному" для існуючого PK
+напрямку: PK впорядкований `(agent_id, skill_id)`, а Stats-таб скіла фільтрує
+за самим `skill_id`. Це прийнято свідомо (SPEC-06 Development Plan constraints:
+"existing FKs/PKs only — no new index needed"), бо `agent_skills` — маленька
+link-таблиця, а не через те, що це справді index-friendly в generic
+PostgreSQL-сенсі. Якщо ця таблиця колись виросте (масштаб проекту зміниться),
+`CREATE INDEX ON agent_skills (skill_id)` — перший кандидат, а не
+переписування query-шейпу.
+Доказ: server/src/db/schema/agents.ts:51-63 (`primaryKey({ columns: [t.agentId,
+t.skillId] })`, без окремого `index(...)`); server/src/modules/skills/stats-repository.ts:29-32
+(`WHERE skill_id = ?` — фільтр по НЕ-лідируючому стовпцю композитного PK)
+
+## 2026-08-20 · gotcha
+**`reviews.run_id` — це просто `uuid`-колонка без `.references()`, попри те що
+весь код де-факто трактує її як 1:1 FK до `agent_runs.id`**
+При написанні join'а `findings → reviews (by run_id) → agent_runs` для
+`SkillStatsRepository` виявилось, що `reviews.runId` не оголошений через
+`.references(() => agentRuns.id)` — це "гола" `uuid('run_id')` колонка, на
+відміну від `reviews.prId`/`reviews.workspaceId`, які реальні FK. Цілісність
+(один review на run) ніде на рівні БД не забезпечена — вона тримається лише на
+дисципліні коду (`review.repo.ts:92` явно робить `.limit(1)`, покладаючись на
+це як на факт, а не перевіряючи). Будь-який новий прямий insert у `reviews`
+(як у нових `*.it.test.ts` фікстурах) мусить сам стежити, щоб не завести
+другий review з тим самим `run_id` — БД цього не заборонить.
+Доказ: server/src/db/schema/reviews.ts:9-26 (`runId: uuid('run_id'),` — без
+`.references()`, на контрасті з `prId`/`workspaceId` в тому ж об'єкті);
+server/src/modules/reviews/repository/review.repo.ts:92 (`.limit(1)` на
+запиті "review по run_id")

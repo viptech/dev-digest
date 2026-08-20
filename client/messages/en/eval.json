@@ -45,7 +45,8 @@
     "inputLabel": "Input",
     "tabs": {
       "diff": "Diff",
-      "prMeta": "PR meta"
+      "prMeta": "PR meta",
+      "files": "Files"
     },
     "diffPlaceholder": "--- a/src/config.ts\n+++ b/src/config.ts\n@@ -10,6 +10,7 @@\n+  stripeKey: \"sk_live_...\"",
     "titleLabel": "Title",
@@ -58,12 +59,30 @@
     "invalidJson": "invalid JSON",
     "lastRunPassed": "Last run passed",
     "lastRunFailed": "Last run failed",
-    "resultSummary": "recall {recall}% · precision {precision}% · citation {citation}% · {duration}s"
+    "resultSummary": "recall {recall}% · precision {precision}% · citation {citation}% · {duration}s",
+    "seededSubtitle": "Seeded from a finding you {decision} — assert the expected output",
+    "positiveCase": "POSITIVE CASE",
+    "negativeCase": "NEGATIVE CASE",
+    "tracesSummary": "{passed}/{total} passed",
+    "actualOutput": "Actual output",
+    "actualOutputEmpty": "Run this case to see its actual findings here.",
+    "findingSkeleton": "Finding skeleton",
+    "runOnSave": "Run on save",
+    "filesEmpty": "No files parsed from this diff yet."
   },
   "evalsTab": {
-    "metricsTitle": "Eval metrics",
-    "metricsSubtitle": "Recall / Precision / Citation for this agent's eval cases",
+    "metricsHeading": "Eval metrics",
+    "metricsCaption": "Scoring is mechanical — recall/precision/citation accuracy are computed from expected vs. actual findings, never self-reported by the model.",
+    "viewFullDashboard": "View full dashboard →",
+    "metricLabels": {
+      "recall": "RECALL",
+      "precision": "PRECISION",
+      "citation_accuracy": "CITATION ACCURACY"
+    },
+    "tracesPassedLabel": "TRACES PASSED",
     "casesHeading": "Eval cases",
+    "passingBadge": "{passing} / {total} passing",
+    "casesCount": "{count} cases",
     "newCase": "New case",
     "loadingCases": "Loading cases…",
     "emptyCases": "No eval cases yet. Create one to assert this agent's expected findings on a sample diff.",
@@ -71,12 +90,33 @@
     "passed": "passed",
     "failed": "failed",
     "recallSuffix": " · recall {recall}%",
+    "mustFindBadge": "MUST FIND",
+    "mustNotFlagBadge": "MUST NOT FLAG",
+    "expectedGot": "expected {expected} finding(s), got {got}",
+    "expectedOnly": "expected {expected} finding(s)",
+    "assertEmpty": "assert empty",
     "run": "Run",
     "running": "Running…",
     "edit": "Edit",
     "delete": "Delete",
     "runFailed": "Run failed. Please try again.",
-    "deleteFailed": "Delete failed. Please try again."
+    "deleteFailed": "Delete failed. Please try again.",
+    "runAll": "Run all",
+    "runningAll": "Running all…",
+    "runAllFailed": "Couldn't run the eval set. Please try again.",
+    "historyHeading": "Set-run history",
+    "noHistory": "No set-runs yet. Click \"Run all\" to run this agent's whole eval set.",
+    "historyCasesCount": "{count} cases",
+    "selectToCompare": "Select to compare",
+    "comparePrompt": "Select exactly two set-runs above to compare them.",
+    "compareHeading": "Comparing set-runs",
+    "compareOlder": "Older",
+    "compareNewer": "Newer",
+    "delta": "Δ {value}",
+    "caseTransitions": "Per-case changes",
+    "noData": "no data",
+    "casePassed": "pass",
+    "caseFailed": "fail"
   },
   "page": {
     "crumbSkillsLab": "Skills Lab",
@@ -85,5 +125,53 @@
     "crumbEvals": "Evals",
     "crumbNewCase": "New case",
     "crumbEvalCase": "Eval case"
+  },
+  "dashboardPage": {
+    "title": "Eval Dashboard",
+    "subtitle": "Regression harness across all reviewer agents · pick an agent to see its runs",
+    "loadError": "Couldn't load the eval dashboard.",
+    "emptyTitle": "No agents yet",
+    "emptyBody": "Create an agent and give it an eval set to see it here.",
+    "casesCount": "{count} cases",
+    "neverRun": "Never run",
+    "ranAt": "Ran {when}",
+    "agentsHeading": "Agents",
+    "runAllAgents": "Run all agents",
+    "runningAllAgents": "Running...",
+    "runAllPartialFailure": "{failed} of {total} agents failed to run — check their eval sets.",
+    "lastRunVersion": "Last run v{version} · {when} · {passed}/{total} pass",
+    "recentRunsHeading": "Recent eval runs · all agents",
+    "recentRunsEmpty": "No eval runs yet — run an agent's eval set to see history here."
+  },
+  "agentDashboardPage": {
+    "loadError": "Couldn't load this agent's eval dashboard.",
+    "subtitle": "Regression harness · {count} eval cases",
+    "metricLabels": {
+      "recall": "RECALL",
+      "precision": "PRECISION",
+      "citation_accuracy": "CITATION ACCURACY"
+    },
+    "trendHeading": "Metric trend",
+    "historyHeading": "Run history",
+    "noHistory": "No set-runs yet. Run this agent's whole eval set from its Evals tab to see history here.",
+    "selectToCompare": "Select to compare",
+    "compare": "Compare",
+    "comparePrompt": "Select exactly two runs above to compare them.",
+    "casesCount": "{count} cases",
+    "passCount": "{passed}/{total} pass",
+    "versionColumn": "Version",
+    "ranAtColumn": "Ran at"
+  },
+  "compareModal": {
+    "heading": "Compare set-runs",
+    "metricsHeading": "Metric deltas",
+    "cost": "Cost",
+    "promptDiffHeading": "System prompt diff",
+    "promptNotCaptured": "Not captured for this run",
+    "promote": "Promote v{version}",
+    "promoting": "Promoting…",
+    "promoteSuccess": "Promoted this prompt to the live agent.",
+    "promoteFailed": "Couldn't promote this prompt. Please try again.",
+    "close": "Close"
   }
 }

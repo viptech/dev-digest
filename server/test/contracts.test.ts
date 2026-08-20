@@ -21,6 +21,10 @@ import {
   SetContextDocsBody,
   Brief,
   PrBriefSnapshot,
+  EvalExpectation,
+  EvalCaseInput,
+  EvalSetRunResult,
+  FeatureModelId,
 } from '@devdigest/shared';
 
 /**
@@ -214,6 +218,53 @@ describe('AI contracts parse fixtures', () => {
     ).not.toThrow();
   });
 
+  it('EvalExpectation / EvalCaseInput / EvalSetRunResult (SPEC-05 typed expectations + bulk-run result)', () => {
+    const mustFind = EvalExpectation.parse({
+      type: 'must_find',
+      file: 'src/a.ts',
+      start_line: 10,
+      end_line: 12,
+      severity: 'CRITICAL',
+      category: 'security',
+    });
+    expect(mustFind.type).toBe('must_find');
+
+    const mustNotFlag = EvalExpectation.parse({ type: 'must_not_flag', file: 'src/b.ts' });
+    expect(mustNotFlag.type).toBe('must_not_flag');
+
+    const caseInput = EvalCaseInput.parse({
+      owner_kind: 'agent',
+      owner_id: 'agent-1',
+      name: 'stripe-key-leak',
+      input_diff: 'diff --git a/src/a.ts b/src/a.ts',
+      expected_output: [mustFind, mustNotFlag],
+    });
+    expect(caseInput.expected_output).toHaveLength(2);
+
+    expect(() =>
+      EvalSetRunResult.parse({
+        run_group_id: 'g1',
+        aggregate: { recall: 0.8, precision: 0.9, citation_accuracy: 1 },
+        cases: [
+          {
+            id: 'r1',
+            case_id: 'c1',
+            case_name: 'stripe-key-leak',
+            run_group_id: 'g1',
+            ran_at: '2026-08-19T00:00:00.000Z',
+            actual_output: [],
+            pass: true,
+            recall: 0.8,
+            precision: 0.9,
+            citation_accuracy: 1,
+            duration_ms: 1200,
+            cost_usd: 0.01,
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
   it('RunTrace (data2.jsx TRACE single-document)', () => {
     // stats.cost_usd is deliberately OMITTED here: this fixture stands in for a
     // trace persisted before cost_usd existed. RunStats.cost_usd is nullish
@@ -363,5 +414,9 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+
+  it("FeatureModelId accepts 'skill_eval' (SPEC-06 T6)", () => {
+    expect(FeatureModelId.parse('skill_eval')).toBe('skill_eval');
   });
 });

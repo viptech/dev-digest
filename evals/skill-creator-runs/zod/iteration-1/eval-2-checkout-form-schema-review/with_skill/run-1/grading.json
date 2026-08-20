@@ -1,0 +1,36 @@
+{
+  "expectations": [
+    {
+      "text": "Flags the .refine() callback calling throw new Error(...) instead of returning false, noting refine() should return a boolean, not throw",
+      "passed": true,
+      "evidence": "\"1. `throw` у `.refine()` ламає `safeParse()`\" — includes an empirical repro against the repo's own zod@3.24.1, skill rule `error-avoid-throwing-in-refine`."
+    },
+    {
+      "text": "Flags the hand-written `interface CheckoutForm` duplicating the schema shape and recommends deriving the type via z.infer<typeof CheckoutFormSchema> instead",
+      "passed": true,
+      "evidence": "\"5. Ручний `interface CheckoutForm` дублює схему\" — skill rule `type-use-z-infer`, fix shown."
+    },
+    {
+      "text": "Flags `email: z.string()` missing .email() validation, noting it currently accepts any non-empty string as a valid email",
+      "passed": true,
+      "evidence": "\"3. `email: z.string()` без формату (рядок 12)\" — skill rule `schema-string-validations`."
+    },
+    {
+      "text": "[bonus, not predefined] Flags that .refine() turns the schema into ZodEffects, blocking .pick()/.omit()/.extend() — directly relevant since the task states the schema is about to be reused in a new flow",
+      "passed": true,
+      "evidence": "Table row #1 'throw ... — CRITICAL' plus the framing '`.refine()`/`.superRefine()` turn a `ZodObject` into a `ZodEffects` wrapper... blocks the stated reuse' — cites `object-pick-omit`, `object-extend-for-composition`, `compose-shared-schemas`."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tool_calls": 19
+  },
+  "eval_feedback": {
+    "overall": "The bonus finding (ZodEffects blocking .pick/.omit/.extend) is the strongest with/without differentiator observed across both evals — it requires knowing a specific Zod API detail the skill documents (object-pick-omit, object-extend-for-composition), not something a general review is likely to independently reconstruct."
+  }
+}

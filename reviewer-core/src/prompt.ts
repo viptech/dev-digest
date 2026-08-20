@@ -55,7 +55,9 @@ const MAX_PR_DESCRIPTION_CHARS = 4000;
 export interface PromptParts {
   /** Agent's system prompt (trusted). */
   system: string;
-  /** Linked skill bodies (trusted-ish; community skills should be sanitized upstream). */
+  /** Linked skill bodies (untrusted content — `source` can be `imported_url`
+   *  or `community`, i.e. not necessarily authored by us; wrapped via
+   *  `wrapUntrusted()` same as specs/diff/etc., not sanitized upstream). */
   skills?: string[];
   /** Relevant memory items (trusted, curated). */
   memory?: string[];
@@ -142,7 +144,9 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
   const system = `${parts.system}\n\n${INJECTION_GUARD}`;
 
   const skillsBlock =
-    parts.skills && parts.skills.length > 0 ? parts.skills.join('\n\n') : undefined;
+    parts.skills && parts.skills.length > 0
+      ? parts.skills.map((s, i) => wrapUntrusted(`skill-${i}`, s)).join('\n\n')
+      : undefined;
   const memoryBlock =
     parts.memory && parts.memory.length > 0
       ? parts.memory.map((m) => `- ${m}`).join('\n')

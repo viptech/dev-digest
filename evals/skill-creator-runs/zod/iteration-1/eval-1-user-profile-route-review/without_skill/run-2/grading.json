@@ -1,0 +1,31 @@
+{
+  "expectations": [
+    {
+      "text": "Flags z.any() on the `metadata` field as unsafe and recommends z.unknown() (or a concrete shape) instead",
+      "passed": true,
+      "evidence": "\"### 3. `metadata: z.any()` — без жодної валідації структури чи розміру\"."
+    },
+    {
+      "text": "Flags calling .parse() directly on req.body (untrusted user input) and recommends .safeParse() so invalid input doesn't throw an unhandled error",
+      "passed": true,
+      "evidence": "\"### 4. `UserProfileSchema.parse(req.body)` без обробки помилки валідації\"."
+    },
+    {
+      "text": "Flags the object schema missing .strict() before the parsed values are persisted, noting unknown/extra fields from the request body would silently pass through",
+      "passed": true,
+      "evidence": "\"### 11. `z.object` без `.strict()` — зайві поля в тілі тихо відкидаються\"."
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 0,
+    "total": 3,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tool_calls": 3
+  },
+  "eval_feedback": {
+    "overall": "Baseline caught all 3 target findings this run, unlike without_skill run 1 which missed the .strict() one — shows within-config variance on this particular assertion, worth noting rather than treating a single baseline run as representative."
+  }
+}

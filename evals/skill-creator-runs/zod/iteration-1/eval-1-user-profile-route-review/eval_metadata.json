@@ -1,0 +1,19 @@
+{
+  "eval_id": 1,
+  "eval_name": "user-profile-route-review",
+  "prompt": "Can you review this profile-update route before I open the PR? It's a Fastify handler that upserts a user's profile row.",
+  "assertions": [
+    {
+      "id": "flags_any_metadata",
+      "text": "Flags z.any() on the `metadata` field as unsafe and recommends z.unknown() (or a concrete shape) instead"
+    },
+    {
+      "id": "flags_parse_on_untrusted_input",
+      "text": "Flags calling .parse() directly on req.body (untrusted user input) and recommends .safeParse() so invalid input doesn't throw an unhandled error"
+    },
+    {
+      "id": "flags_missing_strict",
+      "text": "Flags the object schema missing .strict() before the parsed values are persisted, noting unknown/extra fields from the request body would silently pass through"
+    }
+  ]
+}

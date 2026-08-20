@@ -108,10 +108,24 @@ a retro that invents problems is worse than no retro.
 | Expensive `model` on an agent whose `tools` are mostly mechanical | Drop that agent to a cheaper tier |
 | `agents_omitted.count` large | Many small agents — check whether the fan-out was worth its per-agent overhead |
 
-For the qualitative half (what was hard, what was easy, what got missed), use
-the agent reports in context if you have them: retries, self-corrections, and
-"could not determine" sections are the evidence. If you do not have them, say
-so — do not infer difficulty from token counts alone.
+For the qualitative half, look for these in the agent reports and transcripts
+(not in the collector's JSON, which is quantitative-only):
+
+- **What was hard / easy** — retries, self-corrections, and "could not
+  determine" sections in an agent's own report are the evidence.
+- **Clarifying round-trips** — how often an agent needed re-prompting or
+  correction mid-task. High on one agent points at an underspecified dispatch
+  brief, not a slow agent.
+- **Rework** — fix-loop iterations, retries, or re-spawns of the same agent
+  for the same task.
+- **Delegation correctness / scope drift** — did the right agent type take
+  each task, and did each agent stay inside the paths/scope it was given.
+- **Failure taxonomy** — terminal API errors, tool denials, blocked-on-human
+  moments; categorize them so recurring friction is visible across runs, not
+  just this one.
+
+If you do not have the reports for a dimension, say so plainly — do not infer
+difficulty, rework, or scope drift from token counts alone.
 
 ## Step 3 — report to chat
 

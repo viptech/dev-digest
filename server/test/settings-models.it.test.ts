@@ -91,6 +91,18 @@ d('Settings: feature models + secrets status (Testcontainers pg)', () => {
     await app.close();
   });
 
+  it("skill_eval: registry default (openrouter/deepseek-v4-flash) until Settings overrides it (SPEC-06 T6)", async () => {
+    const app = await buildApp({ config: config(), db: pg.handle.db, overrides: {} });
+
+    expect(await getFeatureModelOverride(app.container, workspaceId, 'skill_eval')).toBeUndefined();
+    expect(await resolveFeatureModel(app.container, workspaceId, 'skill_eval')).toEqual({
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-v4-flash',
+    });
+
+    await app.close();
+  });
+
   it('GET /settings/secrets-status returns booleans only — never the key values', async () => {
     const secrets: SecretsProvider = {
       get: async (k) => (k === 'OPENROUTER_API_KEY' ? 'sk-or-secret-value' : undefined),
