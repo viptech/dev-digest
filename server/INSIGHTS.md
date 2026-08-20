@@ -526,3 +526,25 @@ t.skillId] })`, без окремого `index(...)`); server/src/modules/skills
 `.references()`, на контрасті з `prId`/`workspaceId` в тому ж об'єкті);
 server/src/modules/reviews/repository/review.repo.ts:92 (`.limit(1)` на
 запиті "review по run_id")
+
+## 2026-08-20 · fix
+**`pnpm db:seed`/`pnpm db:migrate` мовчки нічого не роблять (exit 0, нуль
+виводу) у робочій копії, шлях якої містить пробіл (`.../ai agent/...`)**
+Симптом: користувач питав «чому в агентів нема версії 1» — виявилось, що 4
+з 5 seed-агентів справді ніколи не отримували снапшот `agent_versions` v1
+(`upsertSkill` вставляє `skillVersions` v1 поруч зі скілом, аналогічного
+кроку для агентів не було — окремий баг, пофіксений тим самим комітом). Але
+спроба виправити це через повторний `pnpm db:seed` теж нічого не змінювала
+в БД — CLI-entrypoint guard `import.meta.url === \`file://${process.argv[1]}\``
+ніколи не спрацьовує, коли шлях містить символ, що потребує
+percent-encoding (пробіл у цій сесії): `import.meta.url` завжди
+percent-encoded (`...ai%20agent...`), а шаблонний рядок `file://${argv[1]}`
+— сирий (`...ai agent...`), тож рівність ніколи не true, і `seed()`/
+`runMigrations()` НІКОЛИ не викликається — скрипт просто виходить з кодом 0
+без жодного виводу. Той самий баг був і в `migrate.ts`. Виправлення:
+`process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href`
+(`pathToFileURL` кодує так само, як `import.meta.url`). Якщо CLI-скрипт
+«нічого не робить» без помилки — перевір саме цей patterns, а не одразу
+підозрюй DATABASE_URL/підключення до БД.
+Доказ: server/src/db/seed.ts:583-587 (фікс); server/src/db/migrate.ts:37-43
+(той самий фікс, той самий клас багу)
