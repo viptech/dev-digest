@@ -1,3 +1,7 @@
 node_modules/
-dist/
+# dist/ is intentionally NOT ignored here — root .gitignore ignores dist/
+# everywhere EXCEPT agent-runner/dist/ (ships as a JS GitHub Action, no
+# build step, must stay committed). A local `dist/` rule in this file would
+# re-ignore it despite that negation, since a nested .gitignore's own
+# pattern isn't overridden by an ancestor's negation for paths under it.
 *.log

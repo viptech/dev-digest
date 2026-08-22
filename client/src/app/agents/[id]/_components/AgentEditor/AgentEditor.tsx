@@ -1,7 +1,8 @@
 /* AgentEditor — agent config editor (model + system prompt) + Skills tab
    (link/unlink/reorder the skills fed into this agent's prompt) + Evals tab
-   (eval cases + Run case) + Stats tab (per-agent quality/cost aggregates).
-   Later lessons add a CI tab. Tab state lives in ?tab=. */
+   (eval cases + Run case) + Stats tab (per-agent quality/cost aggregates) +
+   CI tab (export to GitHub Actions + this agent's CI run history). Tab
+   state lives in ?tab=. */
 "use client";
 
 import React from "react";
@@ -13,6 +14,7 @@ import { SkillsTab } from "./_components/SkillsTab";
 import { ContextTab } from "./_components/ContextTab";
 import { EvalOwnerTab } from "@/components/eval-owner-tab";
 import { StatsTab } from "./_components/StatsTab";
+import { CiTab } from "./_components/CiTab";
 import { VersionsTab } from "./_components/VersionsTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
@@ -34,6 +36,8 @@ export function AgentEditor({ agent, tab, onTab }: { agent: Agent; tab: string; 
           <EvalOwnerTab ownerKind="agent" ownerId={agent.id} />
         ) : tab === "stats" ? (
           <StatsTab agentId={agent.id} />
+        ) : tab === "ci" ? (
+          <CiTab agent={agent} onTab={onTab} />
         ) : tab === "versions" ? (
           <VersionsTab agentId={agent.id} />
         ) : (

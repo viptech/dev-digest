@@ -614,3 +614,152 @@ If this test fails again in CI, don't assume T5 is the cause without
 re-checking in isolation first.
 Доказ: server/src/modules/reviews/run-executor.ts:374-409 (unchanged trace
 object construction); 4 reproduction runs this session (1 fail / 3 pass)
+
+## 2026-08-22 · gotcha
+**`server/package.json` не має `yaml` серед залежностей, хоча пакет фізично
+лежить у `server/node_modules/.pnpm/yaml@2.9.0/` — імпортувати його з
+`server/src/**` не можна, не додавши прямий dependency + lockfile-запис**
+Під час SPEC-08 (Export to CI, T3 `ci/manifest.ts` — серіалізація
+`AgentManifest` у YAML, яку `agent-runner/src/manifest.ts:3` читає назад
+через npm-пакет `yaml`) виявилось: `agent-runner/package.json:13` декларує
+`"yaml": "^2.6.1"`, і сама версія (`yaml@2.9.0`) реально встановлена в
+pnpm-сторі — але лише як транзитивна залежність ЧОГОСЬ у `server/`, без
+symlink'а на топрівні (`server/node_modules/yaml` не існує — підтверджено
+`Glob`, 0 файлів). Оскільки репо не воркспейс (root `CLAUDE.md`), pnpm не
+хоїстить транзитивні пакети одного пакета в топрівень іншого — `import
+'yaml'` з `server/src/modules/ci/manifest.ts` впаде на резолві модуля.
+Додати `yaml` як пряму залежність вимагає `pnpm add yaml` (мережевий install
++ правка `server/pnpm-lock.yaml`) — недоступно в сесії без `Bash`. Обхідний
+шлях, застосований цією сесією: ручний, мінімальний YAML-серіалізатор,
+обмежений РІВНО полями `AgentManifest` (кілька рядкових полів + один enum +
+один масив рядків), замість генерального YAML-writer'а — коректний без
+залежності, але вимагає ручного розширення, якщо `AgentManifest` отримає
+поле складнішої форми (вкладений об'єкт тощо).
+Доказ: server/src/modules/ci/manifest.ts:1-28 (doc-comment із цим же
+поясненням); agent-runner/package.json:13; Glob на
+`server/node_modules/yaml/package.json` — 0 результатів,
+`server/node_modules/.pnpm/yaml@2.9.0/**` — 233 файли (транзитивний, не
+топрівневий)
+
+## 2026-08-22 · dependency
+**`agent-runner/dist/index.js` (ncc-бандл раннера, 6-й файл Export-Wizard
+Preview) відсутній у цьому worktree — `server/src/modules/ci/service.ts`
+кидатиме `ConfigError` на КОЖЕН виклик `POST /agents/:id/export-ci`, доки
+хтось із доступом до `Bash` не прогонить `pnpm build` у `agent-runner/`**
+`agent-runner/README.md:77` документує `dist/` як git-ignored, білдиться
+`pnpm build` (`ncc build src/index.ts -o dist`). `Glob` на
+`agent-runner/dist/**` у цій сесії — 0 файлів. `ci/service.ts` читає цей
+шлях синхронно (`readFileSync`) і кидає `ConfigError` з явним повідомленням
+замість мовчазного ENOENT — але сам факт, що ендпоінт СТРУКТУРНО готовий, не
+означає, що він функціонально пройде навіть ручний smoke-тест до цього
+кроку. Перевіряй `agent-runner/dist/index.js` існує (і не порожній) перед
+тим, як вважати `POST /agents/:id/export-ci` готовим до ручної перевірки.
+Доказ: server/src/modules/ci/service.ts:25-53 (`RUNNER_BUNDLE_PATH` +
+`readRunnerBundle()`); agent-runner/README.md:77-81
+
+## 2026-08-22 · gotcha (coordinator follow-up, supersedes the two entries above)
+**Both prior entries' root cause ("no Bash this session") is resolved by the
+coordinator running with `Bash` — but doing so surfaced a THIRD, more
+serious bug the hand-rolled YAML workaround and the missing-`dist/` report
+never could have caught: `agent-runner`'s `pnpm build` (ncc) does not emit a
+single self-contained `dist/index.js` as `agent-runner/README.md` claims — it
+emits THREE files** (`index.js`, a lazily-`import()`-ed secondary chunk
+`300.index.js` traced to `openai`'s `_shims/node-runtime.mjs` Node-runtime
+shim pulled in transitively via `reviewer-core`, and `package.json` with
+`{"type":"module"}`). `ci/service.ts`'s original `readRunnerBundle()`
+hardcoded exactly one path (`dist/index.js`) as the 6th exported CI file.
+Two independent failure modes if shipped that way: (1) the target repo's CI
+run would throw a module-not-found error the first time the `openai` SDK's
+lazy-loaded code path executes, since `300.index.js` was never embedded; (2)
+even without that, `node .devdigest/runner/index.js` would throw a
+CommonJS-vs-ESM `SyntaxError` in the overwhelming majority of target repos,
+because Node resolves a bare `.js` file's module system from the nearest
+ANCESTOR `package.json`'s `"type"` field — and almost no target repo
+declares `"type": "module"` at its root — unless `dist/package.json` ships
+alongside `index.js`. Fixed by reading and embedding every file actually
+present in `agent-runner/dist/` (`readRunnerBundleFiles()`, plural) instead
+of one hardcoded name. Also replaced the hand-rolled YAML serializer with
+the real `yaml` package (`pnpm add yaml` in `server/`, now a direct
+dependency) — the hand-rolled version's `|` (clip) block-scalar chomping
+silently dropped trailing blank lines from `system_prompt` on round-trip,
+which the real library's chomping-indicator selection gets right by
+construction (verified: `|+` when the source ends in blank lines).
+**Consequence for AC-7's "exactly 6 `CiFile` records"**: the true file count
+is `3 fixed (manifest + memory.jsonl + workflow.yml) + 1 per enabled skill +
+however many files agent-runner's build actually produced` — currently 3,
+making it 6 for the spec's 0-skill... no, for its 2-skill worked example
+(3 + 2 + 1 files... — arithmetic aside, the point is: do NOT treat "6" as a
+literal invariant to assert against in a future test; assert `4 fixed
+categories are present` and `runner files == whatever's actually in dist/`
+instead, exactly as this file's own Edge case ("0 skills → 4 files") already
+implies the count was never meant to be a hardcoded constant.
+Doказ: server/src/modules/ci/service.ts (`readRunnerBundleFiles`);
+`agent-runner/dist/*` after a real `pnpm build` this session — 3 files;
+`openai/_shims/node-runtime.mjs`'s `await import(...)` (traced via grep);
+Node's ESM/CJS resolution is by nearest-ancestor `package.json` `"type"`
+field, not by file extension alone.
+
+## 2026-08-22 · gotcha
+**Немає npm-пакета для читання ZIP у `server/` — довелось написати мінімальний
+ZIP-рідер вручну для `downloadRunArtifact` (SPEC-08 T5), той самий клас
+обмеження, що вже задокументований для `yaml` (запис вище того самого дня)**
+GitHub's `GET .../actions/artifacts/{id}/{archive_format}` віддає артефакт
+ЛИШЕ як zip-архів (302-редірект на сирі байти) — нема жодного шляху отримати
+`devdigest-result.json` напряму через REST без розпакування zip. `yauzl`/
+`adm-zip`/`jszip` не встановлені в `server/` (перевірено `Glob` на
+`server/node_modules/{yauzl,adm-zip,jszip,...}` — 0 результатів), і додати
+будь-який з них вимагає мережевого `pnpm add` + правку lockfile, недоступного
+в сесії без `Bash`. Рішення: рукописний ZIP-рідер (End Of Central Directory →
+central-directory entry → local file header → `zlib.inflateRawSync` для
+method 8/deflate, сирі байти для method 0/store), що читає РІВНО перший файл
+в архіві — коректно, бо `actions/upload-artifact` у згенерованому workflow
+завжди пакує рівно один файл (`devdigest-result.json`) на артефакт. Кидає
+`Error` (не повертає `null`) на будь-яку структурну аномалію zip/JSON — `null`
+з `downloadRunArtifact` зарезервований ЛИШЕ за "артефакту з такою назвою в
+цьому прогоні нема взагалі" (AC-23), не за "артефакт є, але зіпсований".
+Доказ: server/src/adapters/github/octokit.ts (`extractFirstZipEntryAsJson`,
+`downloadRunArtifact`)
+
+## 2026-08-22 · gotcha
+**`CiInstallation`/`CiRun` (обидві копії `vendor/shared/contracts/eval-ci.ts`)
+не мали полів, необхідних власним AC тієї ж спеки (SPEC-08) — `workflow_version`
+на `CiInstallation` (AC-33) і `critical`/`warning`/`suggestion` на `CiRun`
+(AC-28), хоча відповідні колонки БД (`ci_installations.workflow_version`,
+`ci_runs.{critical,warning,suggestion}`) уже існували з T2 (Group 1)**
+Development Plan явно доручив розширення контрактів лише `AgentManifest`/
+`CiResultArtifact` (T1, Group 1) — жодного слова про `CiInstallation`/`CiRun`.
+Але без цих полів `GET /agents/:id/ci` (T8, AC-33 "показати ... версію
+workflow") і `GET /ci/runs` (T7, AC-28 "кольорові лічильники
+critical/warning/suggestion") фізично не можуть повернути дані, які вже
+персистовані в БД. Розширено ОБИДВІ копії (`workflow_version:
+z.string().nullable()`, `critical/warning/suggestion:
+z.number().int().nullish()`) — і довелось синхронно виправити
+`previewInstallation()` (`service.ts`, Group 2's код), яка будує
+`CiInstallation`-об'єкт літералом і без нового поля перестала б типчекатись.
+Правило на майбутнє: коли Development Plan ділить розширення контракту по
+групах за конкретним AC, перевіряй, чи ІНШІ AC тієї ж спеки, призначені
+пізнішій групі, не потребують ЩЕ одного поля на тому ж контракті — план може
+не передбачити все відразу.
+Доказ: server/src/vendor/shared/contracts/eval-ci.ts (`CiInstallation`,
+`CiRun`); server/src/modules/ci/service.ts (`previewInstallation`,
+`workflow_version: null`)
+
+## 2026-08-22 · decision
+**`ci_runs` не має унікального ключа, що зв'язує GitHub-прогін із рядком —
+дедуп ingest (T6) тримається ЛИШЕ на порівнянні `ran_at` з максимумом уже
+персистованого для тієї ж інсталяції, і на `ci_runs.ci_installation_id: null`
+(агента/інсталяцію видалено) workspace-scoping у `GET /ci/runs` неможливий
+жодним ІНШИМ способом окрім навмисного "лишати видимим завжди"**
+`server/src/db/schema/ci.ts`'s `ciRuns` не має ні `githubRunId`, ні composite
+unique на `(ci_installation_id, github_run_id)` — Development Plan (Group 3
+секція) явно визнає це відкритим питанням спеки і не вимагає нового стовпця.
+`CiRepository.listRuns()` тому сканує `ci_runs` через `LEFT JOIN
+ci_installations → agents` і додає `OR isNull(ci_installations_id)` до умови
+workspace-скоупу — це єдиний спосіб задовольнити AC-28's "рядок з видаленою
+інсталяцією лишається видимим", бо після каскадного `set null` жодна колонка
+на `ci_runs` більше не веде до workspace. Це прийнятно ЛИШЕ тому, що застосунок
+однотенантний MVP (`LocalNoAuthProvider` — один засіяний workspace); у
+справжньому мультитенантному сценарії цей `OR` був би реальним leak'ом між
+workspace'ами.
+Доказ: server/src/modules/ci/repository.ts (`listRuns`, коментар над методом);
+server/src/db/schema/ci.ts:36-57 (`ciRuns` — немає `githubRunId`/unique-ключа)

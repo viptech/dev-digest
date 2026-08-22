@@ -11,6 +11,14 @@ export interface BuildResultArtifactInput {
   durationMs: number;
   agent: string;
   prNumber: number;
+  /** PR head commit SHA (`PrContext.headSha`) — required, mirrors
+   *  `CiResultArtifact.commit_sha`'s non-nullish schema. */
+  commitSha: string;
+  /** `AgentManifest.model` — the model actually used for this run. */
+  model: string;
+  /** Agent config version at export time, when known; `null`/absent when
+   *  the manifest doesn't carry one. */
+  agentVersion?: number | null;
 }
 
 function severityCounts(findings: Finding[]): { critical: number; warning: number; suggestion: number } {
@@ -41,6 +49,9 @@ export function buildResultArtifact(input: BuildResultArtifactInput): CiResultAr
     agent: input.agent,
     version: RUNNER_VERSION,
     pr_number: input.prNumber,
+    commit_sha: input.commitSha,
+    model: input.model,
+    agent_version: input.agentVersion ?? null,
   };
   const result = CiResultArtifact.safeParse(candidate);
   if (!result.success) {

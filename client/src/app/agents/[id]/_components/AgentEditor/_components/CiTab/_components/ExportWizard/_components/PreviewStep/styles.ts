@@ -1,0 +1,41 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  loading: { padding: "40px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 } satisfies CSSProperties,
+  layout: { display: "flex", gap: 16, minHeight: 340 } satisfies CSSProperties,
+  fileList: { width: 260, display: "flex", flexDirection: "column", gap: 4 } satisfies CSSProperties,
+  fileListLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    marginBottom: 4,
+  } satisfies CSSProperties,
+  fileItem: (selected: boolean): CSSProperties => ({
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    padding: "8px 10px",
+    borderRadius: 7,
+    cursor: "pointer",
+    background: selected ? "var(--bg-hover)" : "transparent",
+    border: "1px solid " + (selected ? "var(--border-strong)" : "transparent"),
+  }),
+  filePath: { fontSize: 12.5, fontFamily: "var(--font-mono)", color: "var(--text-primary)" } satisfies CSSProperties,
+  fileBadge: { fontSize: 11, color: "var(--text-muted)" } satisfies CSSProperties,
+  editorCol: { flex: 1, display: "flex", flexDirection: "column", gap: 8, minWidth: 0 } satisfies CSSProperties,
+  editorHeader: { display: "flex", alignItems: "center", justifyContent: "space-between" } satisfies CSSProperties,
+  editorPath: { fontSize: 13, fontFamily: "var(--font-mono)", fontWeight: 600 } satisfies CSSProperties,
+  placeholder: {
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "var(--text-muted)",
+    fontSize: 13,
+    border: "1px dashed var(--border-strong)",
+    borderRadius: 8,
+    padding: 20,
+    textAlign: "center",
+  } satisfies CSSProperties,
+} as const;

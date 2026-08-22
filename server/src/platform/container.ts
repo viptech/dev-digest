@@ -6,7 +6,10 @@ import type {
   CodeIndex,
   Embedder,
   LLMProvider,
+  RunnerBundleReader,
 } from '@devdigest/shared';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
 import { JobRunner } from './jobs.js';
@@ -16,6 +19,7 @@ import { LocalNoAuthProvider } from '../adapters/auth/local.js';
 import { OctokitGitHubClient } from '../adapters/github/octokit.js';
 import { SimpleGitClient } from '../adapters/git/simple-git.js';
 import { RipgrepCodeIndex } from '../adapters/codeindex/ripgrep.js';
+import { FsRunnerBundleReader } from '../adapters/runner-bundle/fs.js';
 import { OpenAIProvider } from '../adapters/llm/openai.js';
 import { AnthropicProvider } from '../adapters/llm/anthropic.js';
 import { OpenAIEmbedder } from '../adapters/embedder/openai.js';
@@ -54,7 +58,14 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /** `ci/`'s Export Wizard reads `agent-runner/dist/**` through this port
+   *  (SPEC-08) — tests inject a fixture/empty bundle instead of touching
+   *  real disk. */
+  runnerBundleReader?: RunnerBundleReader;
 }
+
+// server/src/platform -> server/src -> server -> repo root.
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 export class Container {
   readonly config: AppConfig;
@@ -68,6 +79,7 @@ export class Container {
   private _github?: GitHubClient;
   private _codeIndex?: CodeIndex;
   private _embedder?: Embedder;
+  private _runnerBundleReader?: RunnerBundleReader;
   private llmCache = new Map<string, LLMProvider>();
 
   // Shared repositories for cross-cutting entities (agents, reviews/pulls,
@@ -96,6 +108,12 @@ export class Container {
     if (this.overrides.git) return this.overrides.git;
     this._git ??= new SimpleGitClient(this.config.cloneDir);
     return this._git;
+  }
+
+  get runnerBundleReader(): RunnerBundleReader {
+    if (this.overrides.runnerBundleReader) return this.overrides.runnerBundleReader;
+    this._runnerBundleReader ??= new FsRunnerBundleReader(join(REPO_ROOT, 'agent-runner', 'dist'));
+    return this._runnerBundleReader;
   }
 
   get agentsRepo(): AgentsRepository {

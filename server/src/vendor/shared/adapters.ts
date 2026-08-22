@@ -140,6 +140,21 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+/** One run of a workflow file, from `listWorkflowRunsFor` (SPEC-08 AC-22). */
+export interface WorkflowRunSummary {
+  runId: number;
+  /** The commit this run actually executed against — verified server-side
+   *  against the ingested artifact's OWN `commit_sha` claim (AC-26), never
+   *  trusted from the artifact alone. */
+  headSha: string;
+  /** Raw GitHub Actions run status (e.g. "completed", "in_progress"). */
+  status: string;
+  htmlUrl: string;
+  /** ISO timestamp this run started — the ordering key ingest (T6) uses to
+   *  find "runs newer than the last one already persisted". */
+  ranAt: string;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -164,6 +179,18 @@ export interface GitHubClient {
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
+  /**
+   * Runs of `workflowFile` (e.g. "devdigest-review.yml"), most recent first
+   * (SPEC-08 T5/AC-22) — the CI ingest loop's polling primitive.
+   */
+  listWorkflowRunsFor(repo: RepoRef, workflowFile: string): Promise<WorkflowRunSummary[]>;
+  /**
+   * Download + parse the `devdigest-result.json` artifact named
+   * `artifactName` from one workflow run. `null` when the run has no
+   * artifact by that name — best-effort (SPEC-08 T5/AC-23): the run may have
+   * failed before its upload step ever ran.
+   */
+  downloadRunArtifact(repo: RepoRef, runId: number, artifactName: string): Promise<unknown | null>;
 }
 
 // ---------- Git (simple-git, heavy) ----------
@@ -285,4 +312,28 @@ export interface SecretsProvider {
    * providers (e.g. the env-only MVP backend) may omit it.
    */
   set?(key: SecretKey, value: string): Promise<void>;
+}
+
+// ---------- Runner bundle (SPEC-08 T3/G4 — the `agent-runner/dist/` files
+// embedded verbatim as the CI export's non-editable `.devdigest/runner/**`
+// entries) ----------
+export interface RunnerBundleFile {
+  /** File name relative to `agent-runner/dist/` (e.g. `index.js`), NOT yet
+   *  prefixed with `.devdigest/runner/` — the caller owns that path shape. */
+  name: string;
+  contents: string;
+}
+
+/**
+ * Reads whatever files `agent-runner`'s own build step produced. A port, not
+ * a direct `node:fs` call inside `ci/service.ts` — onion-architecture: a
+ * build-time filesystem dependency is exactly the kind of thing a future
+ * test needs to be able to swap out (a fixture bundle, or an empty one to
+ * exercise the "not built yet" error path) without touching real disk.
+ */
+export interface RunnerBundleReader {
+  /** Throws when the bundle directory doesn't exist or is empty — the
+   *  caller (`ci/service.ts`) turns that into a `ConfigError` pointing at
+   *  `pnpm build`, per `agent-runner/README.md`. */
+  readFiles(): RunnerBundleFile[];
 }

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Verdict, Finding, Severity, FindingCategory } from './findings.js';
-import { EvalRun, EvalOwnerKind, Conformance } from './knowledge.js';
+import { EvalRun, EvalOwnerKind, Conformance, Provider, CiFailOn } from './knowledge.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -187,6 +187,35 @@ export const CiFile = z.object({
 });
 export type CiFile = z.infer<typeof CiFile>;
 
+/**
+ * AgentManifest — the agent contract shared by the studio and the CI runner.
+ *
+ * The studio (`CiService.agentYaml`) WRITES this shape to
+ * `.devdigest/agents/<slug>.yaml`; the agent-runner READS it. Keeping one Zod
+ * schema for both ends guarantees the formats never drift. `skills` are slugs
+ * resolved to `.devdigest/skills/<slug>.md`.
+ */
+export const AgentManifest = z.object({
+  name: z.string().min(1),
+  provider: Provider.default('openrouter'),
+  model: z.string().min(1),
+  system_prompt: z.string(),
+  // Tolerate both a missing key and an explicit `null` (YAML `skills:` with no
+  // value parses to null, which `.default([])` does NOT catch) — normalize both
+  // to an empty array so manifests without skills validate cleanly.
+  skills: z
+    .array(z.string())
+    .nullish()
+    .transform((v) => v ?? []),
+  strategy: z.enum(['auto', 'single-pass', 'map-reduce']).default('auto'),
+  // CI gate policy (see CiFailOn) — when the posted review should BLOCK
+  // (REQUEST_CHANGES + fail the check) vs just comment. Default: block on critical.
+  ci_fail_on: CiFailOn.default('critical'),
+});
+export type AgentManifest = z.infer<typeof AgentManifest>;
+/** Caller-facing input type — `.default()` fields stay optional. */
+export type AgentManifestInput = z.input<typeof AgentManifest>;
+
 /** Request body for `POST /agents/:id/export-ci`. */
 export const CiExportInput = z.object({
   repo: z.string().min(1), // "owner/name"
@@ -196,6 +225,18 @@ export const CiExportInput = z.object({
   post_as: z.enum(['github_review', 'pr_comment', 'none']).default('github_review'),
   triggers: z.array(z.string()).default(['opened', 'synchronize', 'reopened']),
   base: z.string().default('main'),
+  /**
+   * Wizard-side edits made to one or more Preview-step files (AC-12: "правки
+   * (shall) бути тим самим вмістом, що піде в Install-крок"). Each entry
+   * REPLACES that path's server-generated content verbatim before Install
+   * writes/returns the file bundle — never merged/diffed, the caller's edit
+   * wins outright. Only applies to files the server itself marked
+   * `editable: true` (checked server-side, not trusted from the client) — an
+   * override for `.devdigest/runner/**` (the non-editable bundled runner) is
+   * ignored, not an error, so a stale/mistaken client-side entry can never
+   * corrupt the shipped runner bytes.
+   */
+  file_overrides: z.array(z.object({ path: z.string().min(1), contents: z.string() })).optional(),
 });
 export type CiExportInput = z.infer<typeof CiExportInput>;
 /** Caller-facing input type — `.default()` fields stay optional (web hooks). */
@@ -208,6 +249,10 @@ export const CiInstallation = z.object({
   repo: z.string(),
   target_type: CiTarget,
   installed_at: z.string(),
+  /** Semantic version of the generator that produced this installation's
+   *  workflow (AC-33's CI tab installations list) — `null` for a row
+   *  persisted before this column existed. */
+  workflow_version: z.string().nullable(),
 });
 export type CiInstallation = z.infer<typeof CiInstallation>;
 
@@ -235,6 +280,11 @@ export const CiRun = z.object({
   source: z.string().nullable(),
   agent: z.string().nullish(),
   duration_s: z.number().nullish(),
+  /** Severity breakdown for the CI Runs table's colored FINDINGS column
+   *  (SPEC-08 AC-28) — populated by ingest from `CiResultArtifact`. */
+  critical: z.number().int().nullish(),
+  warning: z.number().int().nullish(),
+  suggestion: z.number().int().nullish(),
 });
 export type CiRun = z.infer<typeof CiRun>;
 
@@ -252,6 +302,9 @@ export const CiResultArtifact = z.object({
   agent: z.string(),
   version: z.string().nullish(),
   pr_number: z.number().int().nullish(),
+  commit_sha: z.string().min(1),
+  model: z.string(),
+  agent_version: z.number().int().nullish(),
 });
 export type CiResultArtifact = z.infer<typeof CiResultArtifact>;
 

@@ -16,6 +16,7 @@ export interface CiEnv {
   GITHUB_REPOSITORY?: string;
   PR_NUMBER?: string;
   GITHUB_EVENT_PATH?: string;
+  GITHUB_SHA?: string;
   [key: string]: string | undefined;
 }
 
@@ -30,6 +31,12 @@ export interface PrContext {
   /** True when the PR head is a fork — informational only; the workflow
    *  itself is responsible for never scheduling this job for fork PRs. */
   isFork: boolean;
+  /** The PR head commit SHA (`CiResultArtifact.commit_sha`) — resolved from
+   *  the event payload's `pull_request.head.sha` first, falling back to the
+   *  `GITHUB_SHA` env var (mirrors the PR_NUMBER env-then-payload fallback
+   *  below). Verified server-side against the run's own `head_sha` from the
+   *  GitHub API at ingest time (AC-26), never trusted from the artifact alone. */
+  headSha: string;
 }
 
 interface PullRequestEventPayload {
@@ -37,7 +44,7 @@ interface PullRequestEventPayload {
     number?: number;
     title?: string;
     body?: string | null;
-    head?: { repo?: { fork?: boolean } | null };
+    head?: { sha?: string; repo?: { fork?: boolean } | null };
   };
 }
 
@@ -83,6 +90,13 @@ export function resolvePrContext(
     );
   }
 
+  const headSha = pr?.head?.sha ?? env.GITHUB_SHA;
+  if (!headSha) {
+    throw new RunnerError(
+      `Could not resolve the PR head commit SHA (event pull_request.head.sha=${JSON.stringify(pr?.head?.sha)}, env GITHUB_SHA=${JSON.stringify(env.GITHUB_SHA)})`,
+    );
+  }
+
   return {
     owner,
     repo,
@@ -90,5 +104,6 @@ export function resolvePrContext(
     title: pr?.title ?? '',
     body: pr?.body ?? '',
     isFork: pr?.head?.repo?.fork ?? false,
+    headSha,
   };
 }

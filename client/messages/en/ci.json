@@ -11,16 +11,21 @@
       "last7Days": "Last 7 days",
       "allAgents": "All agents",
       "allRepos": "All repos",
-      "allStatuses": "All statuses"
+      "allStatuses": "All statuses",
+      "allSources": "All sources"
     },
     "table": {
       "timestamp": "Timestamp",
       "pullRequest": "Pull request",
+      "agent": "Agent",
       "source": "Source",
+      "duration": "Dur.",
       "findings": "Findings",
       "cost": "Cost",
-      "status": "Status"
+      "status": "Status",
+      "trace": "Trace"
     },
+    "agentFallback": "Agent",
     "view": "View",
     "status": {
       "succeeded": "Succeeded",
@@ -37,6 +42,8 @@
     "continue": "Continue",
     "install": "Install",
     "installing": "Installing…",
+    "done": "Done",
+    "genericError": "Something went wrong — try again.",
     "steps": {
       "target": "Target",
       "preview": "Preview",
@@ -60,7 +67,14 @@
     "filesToCreate": "FILES TO CREATE",
     "generating": "Generating…",
     "editable": "editable",
+    "notEditable": "generated, not human-editable",
+    "memoryEmpty": "(empty — no memory recorded yet)",
     "triggerLabel": "Trigger",
+    "triggers": {
+      "opened": "opened",
+      "synchronize": "synchronize",
+      "reopened": "reopened"
+    },
     "postResultsLabel": "Post results as",
     "postAs": {
       "githubReview": "GitHub review",
@@ -69,20 +83,48 @@
     },
     "blockMergeTitle": "Block merge on findings",
     "blockMergeDesc": "Requires a GitHub App — not available with PAT in local mode",
+    "secretsExpected": "Secrets expected",
+    "secrets": {
+      "openrouterName": "OPENROUTER_API_KEY",
+      "openrouterHint": "Your OpenRouter key",
+      "githubName": "GITHUB_TOKEN",
+      "githubHint": "Auto-provided by Actions",
+      "notSet": "not set",
+      "configured": "configured",
+      "ready": "ready"
+    },
     "installCardTitle": "Open a PR with these files",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
+    "zipCardTitle": "Copy files as a zip",
+    "zipCardBody": "Downloads the same {count} files to your device — no GitHub access needed.",
     "ownerRepo": "owner/repo",
-    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs."
+    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs.",
+    "installedTitle": "Installed",
+    "installedBody": "Opened/updated a pull request in {repo} with the workflow + agent config.",
+    "filesDownloadedTitle": "Files downloaded",
+    "filesDownloadedBody": "Downloaded {count} files to your device — install them manually to add DevDigest CI review.",
+    "viewPr": "View pull request"
   },
   "ciTab": {
     "heading": "Continuous Integration",
     "subtitle": "Run this agent automatically on pull requests in a target repo.",
+    "loading": "Loading…",
     "exportToCi": "Export to CI",
     "publish": "Publish to CI",
     "update": "Update CI",
+    "addToCi": "Add to CI",
+    "updateCiConfig": "Update CI config",
     "noRepo": "Connect a repository first",
     "empty": "Not deployed to CI yet. Use “Publish to CI” to open a PR that adds the workflow + agent config.",
-    "installed": "installed {date}"
+    "emptyTitle": "Not deployed to CI yet",
+    "emptyBody": "Export this agent to run it automatically on pull requests in a target repo.",
+    "installed": "installed {date}",
+    "failCiOn": "Fail CI on:",
+    "editInConfig": "Edit in Config",
+    "installationsHeading": "Installations",
+    "workflowVersion": "workflow v{version}",
+    "runsHeading": "Run history",
+    "noRuns": "No runs yet"
   },
   "publishDialog": {
     "title": "Publish to CI",
