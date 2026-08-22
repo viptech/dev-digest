@@ -9,6 +9,7 @@ const REVIEW_RUN_RESPONSE: ReviewRunResponse = {
   pr_id: 'pr-1',
   runs: [{ run_id: 'run-1', agent_id: 'agent-1', agent_name: 'Security Reviewer' }],
   reviews: [],
+  run_group_id: null,
 };
 
 describe('run_agent_on_pr tool', () => {

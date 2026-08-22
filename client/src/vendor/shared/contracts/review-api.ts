@@ -53,6 +53,8 @@ export const ReviewRunResponse = z.object({
   pr_id: z.string(),
   runs: z.array(ReviewRunTarget),
   reviews: z.array(ReviewRecord),
+  /** The multi_agent_runs id linking these runs together; null for a single-agent run. */
+  run_group_id: z.string().nullable(),
 });
 export type ReviewRunResponse = z.infer<typeof ReviewRunResponse>;
 

@@ -130,5 +130,8 @@ export const RunSummary = z.object({
   // findings that trip the agent's gate. Null on failed/cancelled runs.
   score: z.number().int().nullable(),
   blockers: z.number().int().nullable(),
+  // Links this run to its sibling runs in the same multi-agent group; null
+  // for a run started alone (single agentId, or `all:true` with 0/1 agents).
+  multi_agent_run_id: z.string().nullable(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;

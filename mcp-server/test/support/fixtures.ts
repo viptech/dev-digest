@@ -94,6 +94,7 @@ export function runSummaryFixture(overrides: Partial<RunSummary> = {}): RunSumma
     ran_at: null,
     score: null,
     blockers: null,
+    multi_agent_run_id: null,
     ...overrides,
   };
 }
