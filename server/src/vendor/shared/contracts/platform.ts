@@ -284,6 +284,8 @@ export type IndexStatus = z.infer<typeof IndexStatus>;
 export const RunRequest = z.object({
   agentId: z.string().optional(),
   all: z.boolean().optional(),
+  /** Explicit subset of agent ids to run together as one multi-agent group. */
+  agentIds: z.array(z.string()).min(1).max(20).optional(),
 });
 export type RunRequest = z.infer<typeof RunRequest>;
 

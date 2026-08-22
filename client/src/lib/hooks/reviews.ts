@@ -128,20 +128,26 @@ export function useCreatePrComment(prId: string | null | undefined) {
   });
 }
 
-// ---- Run a review (all enabled agents or a specific agent) ----
+// ---- Run a review (all enabled agents, a specific agent, or an explicit
+// subset for a multi-agent group run — SPEC-07) ----
 export interface RunReviewInput {
   prId: string;
   agentId?: string;
   all?: boolean;
+  /** Explicit subset of agent ids to run together as one multi-agent group
+   *  (SPEC-07 AC-9). Mutually exclusive with `agentId`/`all` at the API
+   *  boundary — the server 400s if none of the three is present. */
+  agentIds?: string[];
 }
 
 export function useRunReview() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ prId, agentId, all }: RunReviewInput) =>
+    mutationFn: ({ prId, agentId, all, agentIds }: RunReviewInput) =>
       api.post<ReviewRunResponse>(`/pulls/${prId}/review`, {
         ...(agentId ? { agentId } : {}),
         ...(all ? { all } : {}),
+        ...(agentIds && agentIds.length > 0 ? { agentIds } : {}),
       }),
     onSuccess: (_d, { prId }) => {
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
@@ -160,6 +166,53 @@ export function useIntent(prId: string | null | undefined, initialIntent?: PrInt
     queryFn: () => api.get<{ intent: PrIntentRecord | null }>(`/pulls/${prId}/intent`).then((r) => r.intent),
     enabled: !!prId,
     initialData: initialIntent,
+  });
+}
+
+// ---- Findings clusters for a multi-agent group (SPEC-07 T13, backed by
+// T14's GET /pulls/:id/review-groups) ----
+/**
+ * Coordinator fix: an earlier revision of `GET /pulls/:id/review-groups`
+ * (server-side) serialized the raw Drizzle `FindingRow` (camelCase) inside
+ * each cluster instead of running it through `findingRowToDto` like every
+ * other findings shape on the wire — a genuine root `CLAUDE.md`
+ * "wire contracts are snake_case" violation. The server now maps through
+ * `findingRowToDto` before responding (`FindingClusterDto` in
+ * `server/src/modules/reviews/service.ts`), so the nested finding here is
+ * the same snake_case shape every other findings list already uses on this
+ * client — reusing `ReviewRecord`'s own finding type rather than a second,
+ * parallel definition of the same fields.
+ */
+export type ClusteredFinding = {
+  finding: ReviewRecord["findings"][number];
+  agent_id: string | null;
+  agent_name: string | null;
+};
+
+export interface FindingClusterDto {
+  file: string;
+  start_line: number;
+  end_line: number;
+  findings: ClusteredFinding[];
+}
+
+export interface ReviewGroupsResponse {
+  reviews: ReviewRecord[];
+  clusters: FindingClusterDto[];
+}
+
+/** Reviews + findings-clusters scoped to one multi-agent group's `run_ids`
+ *  (SPEC-07 T13/T14) — powers `AgentsDisagreeSection`. Disabled until at
+ *  least one run id is known (e.g. the active group hasn't resolved yet). */
+export function useReviewGroups(prId: string | null | undefined, runIds: string[]) {
+  const key = runIds.slice().sort().join(",");
+  return useQuery({
+    queryKey: ["review-groups", prId, key],
+    queryFn: () =>
+      api.get<ReviewGroupsResponse>(
+        `/pulls/${prId}/review-groups?run_ids=${encodeURIComponent(runIds.join(","))}`,
+      ),
+    enabled: !!prId && runIds.length > 0,
   });
 }
 

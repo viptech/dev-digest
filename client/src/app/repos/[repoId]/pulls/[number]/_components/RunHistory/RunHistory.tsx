@@ -2,10 +2,11 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Icon, CircularScore, SEV, type IconName } from "@devdigest/ui";
+import { Badge, Icon, CircularScore, SEV } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/run-cost-badge";
 import { FindingsTooltip, SEVERITY_DISPLAY_ORDER } from "@/components/findings-tooltip";
 import { severityCounts } from "@/lib/findings";
+import { outcomeOf } from "@/lib/run-outcome";
 import type { RunSummary, PrCommit, ReviewRecord } from "@devdigest/shared";
 
 /**
@@ -19,24 +20,6 @@ import type { RunSummary, PrCommit, ReviewRecord } from "@devdigest/shared";
  * is derived from the denormalized blocker/finding counts on the run row, so it
  * matches the CI gate (deterministic) rather than the model's verdict.
  */
-
-type Outcome = { key: string; color: string; bg: string; icon: IconName };
-
-function outcomeOf(run: RunSummary): Outcome {
-  const status = run.status ?? "";
-  if (status === "running")
-    return { key: "running", color: "var(--accent)", bg: "var(--accent-bg)", icon: "RefreshCw" };
-  if (status === "failed")
-    return { key: "error", color: "var(--crit)", bg: "var(--crit-bg)", icon: "XCircle" };
-  if (status === "cancelled")
-    return { key: "cancelled", color: "var(--text-muted)", bg: "var(--bg-hover)", icon: "X" };
-  // Settled ("done"): color by the deterministic outcome.
-  if ((run.blockers ?? 0) > 0)
-    return { key: "rejected", color: "var(--crit)", bg: "var(--crit-bg)", icon: "XCircle" };
-  if ((run.findings_count ?? 0) > 0)
-    return { key: "reviewed", color: "var(--warn)", bg: "var(--warn-bg)", icon: "MessageSquare" };
-  return { key: "approved", color: "var(--ok)", bg: "var(--ok-bg)", icon: "CheckCircle" };
-}
 
 const rowStyle: React.CSSProperties = {
   display: "flex",

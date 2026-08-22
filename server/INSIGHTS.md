@@ -548,3 +548,69 @@ percent-encoded (`...ai%20agent...`), а шаблонний рядок `file://$
 підозрюй DATABASE_URL/підключення до БД.
 Доказ: server/src/db/seed.ts:583-587 (фікс); server/src/db/migrate.ts:37-43
 (той самий фікс, той самий клас багу)
+
+## 2026-08-22 · decision
+**Валідація CSV-параметра querystring через `.transform().pipe(z.array(...))`
+у самій схемі — без прецеденту в кодовій базі, перший такий випадок**
+Для `GET /pulls/:id/review-groups?run_ids=<csv>` (SPEC-07 T14) `run_ids`
+приходить рядком; замість ручного split+validate у хендлері, схема сама
+нормалізує: `z.string().min(1).transform((v) => v.split(',').map((s) =>
+s.trim()).filter(Boolean)).pipe(z.array(z.string().uuid()).min(1))` — хендлер
+одразу отримує типізований `string[]` уже провалідованих UUID. `grep
+-rn '\.transform\(|\.pipe\(' server/src` до цієї сесії показував лише один
+`.transform()` у самому контракті (`eval-ci.ts:209`), жодного прикладу
+querystring-transform у `routes.ts` жодного модуля — це перший такий випадок,
+вартий копіювання, якщо знадобиться ще один csv-параметр десь в API.
+Доказ: server/src/modules/reviews/routes.ts:15-21
+
+## 2026-08-22 · decision
+**`clusterFindings` (T6, `findings-cluster.ts`) мержить перше влучення в
+порядку вхідного масиву, ростячи діапазон кластера — це НЕ повний
+pairwise/union-find по всіх парах**
+Кожна знахідка перевіряється проти ПОТОЧНОГО (уже розширеного) `[minStart,
+maxEnd]` наявних кластерів того ж файлу, не проти кожної окремої знахідки
+всередині кластера — тож ланцюжок "A(10-12), B(14-16), C(18-20)" зі стрибком
+±2 між сусідами злипається в ОДИН кластер (діапазон росте з кожним мержем),
+навіть якщо A і C напряму не перетинаються. Порядок вхідного масиву впливає
+на те, які findings звірятимуться з яким проміжним діапазоном — якщо колись
+знадобиться гарантована симетричність незалежно від порядку вхідних даних
+(напр. юніт-тест перевіряє кластеризацію при різних порядках вхідного
+масиву), треба переходити на pairwise-графову компоненту (union-find), не
+на цей streaming-merge.
+Доказ: server/src/modules/reviews/findings-cluster.ts:38-59
+
+## 2026-08-22 · decision (supersedes the entry immediately above)
+**The single-pass "merge into first fitting cluster" algorithm described
+above is no longer what `findings-cluster.ts` does — a coordinator review
+caught it producing a genuinely wrong split depending on input order (not
+just "order affects which intermediate range you check against," but an
+actually incorrect result: `[14, 10, 12]` left 10 stranded in its own
+cluster instead of joining 12/14's chain) and replaced it with a
+fixed-point pairwise-merge over clusters (repeatedly merge any two clusters
+that are adjacent, until no merge occurs) — a proper connected-components
+computation over AC-18's adjacency relation, verified order-independent by
+direct repro. The entry above still correctly describes the OLD code's
+mechanics for historical context, but its "if you ever need order-
+independence, switch to union-find" framing is resolved, not open.
+Доказ: server/src/modules/reviews/findings-cluster.ts:30-89 (current);
+git log --oneline -- server/src/modules/reviews/findings-cluster.ts
+
+## 2026-08-22 · gotcha
+**`test/reviews-project-context.it.test.ts`'s "no attached docs" case flaked
+once under load (full 19-file `.it.test.ts` suite) — reproduced 3 more times
+(2× full suite, 1× isolated) to confirm it's NOT a T5 concurrency regression**
+Full-suite run under this session's SPEC-07 diff failed once with
+`trace.specs_read` `undefined` instead of `[]`; the SAME test passed in
+isolation immediately after, and passed again on a second full-suite run.
+`homework-08` (pre-SPEC-07) ran the full suite twice clean. Traced
+`run-executor.ts`'s trace-building code (`specs_read: projectContext?.specsRead
+?? []`) line-by-line — unchanged by T5's sequential→concurrent rewrite (the
+diff is a pure `for`-loop→`Promise.allSettled(map(...))` mechanical
+transform, no shared mutable state introduced). Conclusion: this is
+environment/load-timing flakiness (same class as the already-documented
+`server/test/helpers/pg.ts` testcontainers-timing gotcha above), not a real
+bug in the T5 rewrite — the trace-building logic itself was never touched.
+If this test fails again in CI, don't assume T5 is the cause without
+re-checking in isolation first.
+Доказ: server/src/modules/reviews/run-executor.ts:374-409 (unchanged trace
+object construction); 4 reproduction runs this session (1 fail / 3 pass)

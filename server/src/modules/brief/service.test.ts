@@ -66,6 +66,7 @@ function runSummary(overrides: Partial<RunSummary> = {}): RunSummary {
     ran_at: '2026-08-01T00:00:00Z',
     score: 88,
     blockers: 0,
+    multi_agent_run_id: null,
     ...overrides,
   };
 }

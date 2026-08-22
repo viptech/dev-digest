@@ -33,6 +33,12 @@ export const agentRuns = pgTable('agent_runs', {
    *  prompt (order not preserved here — see run_traces.prompt_assembly.skills
    *  for the ordered rendered blocks). Null on failed/cancelled runs. */
   skillIds: jsonb('skill_ids').$type<string[]>(),
+  /** Links this run to its sibling runs when 2+ agents were queued together
+   *  (multi-agent review). Null for a run started alone. Nullable so a
+   *  group can be deleted without cascading to its runs. */
+  multiAgentRunId: uuid('multi_agent_run_id').references(() => multiAgentRuns.id, {
+    onDelete: 'set null',
+  }),
 });
 
 /** Whole trace of one run as a SINGLE jsonb document. */

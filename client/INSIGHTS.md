@@ -642,3 +642,100 @@ client/src/app/skills/[id]/_components/SkillEditorView/helpers.ts:1-11
 будь-якій зміні контракту, а не лише ту, що в пакеті, який редагуєш.
 Доказ: client/src/vendor/shared/contracts/knowledge.ts:249-274 (блок додано
 цією сесією, портований 1:1 із серверної копії)
+
+## 2026-08-22 · decision
+**SPEC-07's edge case ("1 агент → Multi-Agent tab все одно показує один
+результат") і Development Plan `multi-agent-review.md`'s T8-хелпер
+("dropping rows with a null multi_agent_run_id... out of scope for this
+tab") — прямо суперечать одне одному; реалізовано за планом (biding
+document), не за спекою**
+Спека (`docs/specs/SPEC-07-multi-agent-review.md`, розділ "Edge cases")
+каже: воркспейс з <2 enabled агентами все одно дозволяє запустити 1 агента
+з Configure run screen, і "'Multi-Agent Review' вкладка показує один
+результат" — тобто одноagентний прогін (`multi_agent_run_id: null`, AC-15)
+має бути ВИДИМИЙ на цій вкладці. Але план явно каже про T8's `groupRuns`-
+хелпер: "dropping rows with a null multi_agent_run_id from the 'grouped'
+result (they're single-agent runs, out of scope for this tab)" — реалізація
+за цим текстом означає, що після сабміту Configure run screen з РІВНО 1
+позначеним агентом (`res.run_group_id === null`,
+`ConfigureRunScreen.tsx:64`), `MultiAgentReviewTab` не покаже щойно
+створений run взагалі (він відсутній у жодній групі `groupRuns()`
+повертає) — таб просто лишиться на попередній найновішій групі або на
+порожньому стані, без жодного видимого фідбеку користувачу, що прогін
+стартував. Реалізовано буквально за планом (мій обсяг — T8/T9/T10,
+план — binding document), не за спекою; лишаю це тут явно для
+`architecture-reviewer`/`plan-verifier`, які й вирішать, чи це прийнятний
+компромісний обсяг, чи потрібен фікс (напр. показувати одноagентний run
+окремо, поза `groupRuns`, коли `run_group_id === null`).
+Доказ: client/src/lib/multi-agent-runs.ts:26 (`if (!row.multi_agent_run_id)
+continue;`); `.claude/plans/multi-agent-review.md` Constraints, рядок
+"dropping rows with a null multi_agent_run_id..."; `docs/specs/SPEC-07-
+multi-agent-review.md` розділ "Edge cases", перший пункт
+
+## 2026-08-22 · gotcha
+**`GET /pulls/:id/review-groups` (T14, вже закомічено Implementer 2) не має
+`schema.response` і повертає кластери з "наполовину" snake_case — вкладений
+`finding` серіалізується як сирий Drizzle `FindingRow` (camelCase), а не
+через `findingRowToDto`, як УСІ інші findings-шейпи на дроті**
+`server/src/modules/reviews/routes.ts`'s роут для `/pulls/:id/review-groups`
+реєструє лише `querystring: ReviewGroupsQuery` у `schema` — жодного
+`response`, тож `fastify-type-provider-zod` нічого не серіалізує/не звужує.
+`service.reviewGroupsForRunIds` повертає `clusters: FindingCluster[]`
+(`server/src/modules/reviews/findings-cluster.ts:21-26`), де `file`/
+`start_line`/`end_line` — snake_case (визначені так явно в інтерфейсі), але
+кожен `ClusteredFinding.finding` — це сирий `FindingRow` (`typeof
+t.findings.$inferSelect`, camelCase: `startLine`, `endLine`, `reviewId`,
+`trifectaComponents`, ...) і `agentId`/`agentName` — теж camelCase, не
+`agent_id`/`agent_name`. Це порушує "wire contracts are snake_case" (root
+`CLAUDE.md`), і на відміну від dual-copy-контрактної пастки (запис
+2026-07-31) тут проблема не в розсинхроні двох копій — контракту для цієї
+відповіді просто НЕ існує в жодній копії `vendor/shared`. Клієнтський хук
+(`useReviewGroups`, `client/src/lib/hooks/reviews.ts`) типізований під
+СПРАВЖНЮ форму відповіді (camelCase у `finding`), а не під гіпотетичну
+виправлену — задокументовано тут явно для `architecture-reviewer`, не
+виправлено в рамках Implementer 4 (T14 — це вже закомічена робота іншої
+групи, поза обсягом цього завдання).
+Доказ: server/src/modules/reviews/routes.ts (роут `/pulls/:id/review-groups`,
+`schema: { params: IdParams, querystring: ReviewGroupsQuery }` — без
+`response`); server/src/modules/reviews/findings-cluster.ts:15-26
+(`ClusteredFinding`/`FindingCluster`); server/src/db/schema/reviews.ts:28-46
+(`findings` pgTable, camelCase JS-ключі: `startLine`, `endLine`, `reviewId`);
+client/src/lib/hooks/reviews.ts (`ClusteredFindingRow`/`FindingClusterDto`
+типізовані під фактичну camelCase-форму)
+
+## 2026-08-22 · decision (supersedes the spec-vs-plan entry above)
+**Resolved for the actual user flow the spec's Edge case describes** — a
+coordinator fix added `pendingRunIds`/`pendingSingleRunGroup` to
+`MultiAgentReviewTab.tsx`: when `ConfigureRunScreen`'s submission comes back
+with `run_group_id: null` (exactly 1 agent checked), the tab now builds a
+synthetic one-run "group" from the mutation response's own `runs[].run_id`
+list and shows it immediately, instead of falling back to the previous
+group or the empty state. This satisfies the spec's literal wording
+("Configure run screen... дозволяє позначити 1 агента і запустити...
+вкладка показує один результат") for the flow it actually describes —
+right after that specific submission. It does NOT persist across a page
+reload (component-local state resets), and does not retroactively surface
+some OLDER, unrelated single-agent run made via the legacy
+`RunReviewDropdown` — `groupRuns()` itself still correctly drops
+`multi_agent_run_id: null` rows for the general case, since those two
+situations are indistinguishable at the data level (no way to tell "was
+submitted via the new picker with 1 agent" from "an ordinary single-agent
+run from elsewhere"). Flagging that narrower remaining gap as an accepted
+scope limit, not reopening this as unresolved.
+Доказ: client/src/app/repos/[repoId]/pulls/[number]/_components/
+MultiAgentReviewTab/MultiAgentReviewTab.tsx (pendingRunIds/
+pendingSingleRunGroup); git log -- .../MultiAgentReviewTab/MultiAgentReviewTab.tsx
+
+## 2026-08-22 · decision (supersedes the wire-contract gotcha above)
+**Fixed** — `service.ts`'s `reviewGroupsForRunIds` now maps every cluster's
+findings through `findingRowToDto` before returning (`FindingClusterDto`,
+`agent_id`/`agent_name` snake_case), and `useReviewGroups`'s client types
+(`ClusteredFinding`) were updated to match — reusing `ReviewRecord["findings"][number]`
+instead of a hand-typed camelCase shape. The `schema.response`-missing
+observation on that route still stands (a separate, pre-existing repo-wide
+pattern per `server/INSIGHTS.md`'s 2026-08-19 decision, not something this
+spec introduced) but the actual camelCase-leak this entry flagged is
+resolved.
+Доказ: server/src/modules/reviews/service.ts (FindingClusterDto,
+findingRowToDto(f.finding)); client/src/lib/hooks/reviews.ts
+(ClusteredFinding: agent_id/agent_name)

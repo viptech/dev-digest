@@ -1,7 +1,7 @@
 /* hooks/agents.ts — React Query hooks for the A2 Agents tab + Agent Editor. */
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import type {
   Agent,
@@ -165,4 +165,30 @@ export function useAgentStats(agentId: string | null | undefined) {
     queryFn: () => api.get<AgentStats>(`/agents/${agentId}/stats`),
     enabled: !!agentId,
   });
+}
+
+/** Stats for a SET of agents at once (SPEC-07 T10, Configure run screen's
+ *  cost/time estimate — needs every workspace agent's `avg_cost_usd`/
+ *  `avg_latency_ms` at once, not just the checked ones, since each row shows
+ *  its own "no run history" state regardless of check state). One query per
+ *  id via `useQueries` — calling `useAgentStats` inside a `.map()` would
+ *  violate the rules of hooks here (the number of workspace agents can
+ *  change across renders); same pattern as `useSkillsContextDocs`
+ *  (`hooks/skills.ts`). Uses the SAME query key shape as `useAgentStats` so
+ *  the cache is shared with the Agent Editor's Stats tab. */
+export function useAgentsStats(agentIds: string[]): Map<string, AgentStats> {
+  const results = useQueries({
+    queries: agentIds.map((agentId) => ({
+      queryKey: ["agent-stats", agentId],
+      queryFn: () => api.get<AgentStats>(`/agents/${agentId}/stats`),
+    })),
+  });
+  const map = new Map<string, AgentStats>();
+  for (let i = 0; i < agentIds.length; i++) {
+    const agentId = agentIds[i];
+    const stats = results[i]?.data;
+    if (!agentId || !stats) continue;
+    map.set(agentId, stats);
+  }
+  return map;
 }

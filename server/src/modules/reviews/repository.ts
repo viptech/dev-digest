@@ -160,8 +160,16 @@ export class ReviewRepository {
     prId: string;
     provider: string | null;
     model: string | null;
+    /** Links this run to its sibling runs (T4); null for a run started alone. */
+    multiAgentRunId?: string | null;
   }): Promise<string> {
     return runRepo.createAgentRun(this.db, values);
+  }
+
+  /** Create a multi_agent_runs row — the group linking 2+ sibling agent_runs
+   *  started together (T4). Returns its id. */
+  createMultiAgentRun(values: { workspaceId: string; prId: string }): Promise<string> {
+    return runRepo.createMultiAgentRun(this.db, values);
   }
 
   completeAgentRun(

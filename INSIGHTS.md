@@ -162,3 +162,73 @@ SPEC-05) — варто перевірити конфігурацію дозво
 тесту.
 Доказ: client/src/lib/feature-models.ts:1-11,21-27,42-48;
 client/src/app/settings/[section]/_components/SettingsView/_components/SettingsModels/SettingsModels.tsx:9-10
+
+## 2026-08-22 · gotcha
+**Відсутність `Bash` у сесії `implementer` — підтверджено ще і для ТРЕТЬОГО,
+незалежного плану (`multi-agent-review.md`, SPEC-07), поза "сімейством"
+evals/SPEC-05, яке вже фіксували два записи від 2026-08-19**
+Ті записи припускали, що проблема прив'язана саме до "цієї гілки роботи
+(evals/SPEC-05)". Ця сесія (Implementer 1 — Contracts + DB, план
+`.claude/plans/multi-agent-review.md`) — зовсім інший план, інший таск-бриф,
+інший координатор-виклик — і знову список `functions` містив лише
+`Read/Edit/Write/Skill/Grep/Glob`, без `Bash`. Висновок сильніший, ніж
+попередній: це не особливість конкретного ланцюжка агентів (evals), а
+систематична поведінка ЦЬОГО типу дочірньої сесії (`implementer`, викликаний
+з написаного плану) незалежно від теми плану. Наслідок для цього конкретного
+плану: T2 (`node node_modules/drizzle-kit/bin.cjs generate` + `pnpm
+db:migrate`) і крок 3 (`pnpm typecheck`) НЕ були виконані цією сесією — лише
+Read/Edit-частина (contracts + `db/schema/runs.ts`) готова; координатор
+мусить сам згенерувати міграцію і прогнати typecheck, а не вважати ці кроки
+підтвердженими.
+Доказ: system prompt цієї сесії (`<functions>`-блок без `Bash`); попередні
+підтвердження — root INSIGHTS.md, записи 2026-08-19 (двічі, для evals/SPEC-05)
+
+## 2026-08-22 · gotcha
+**Додавання нового `.nullable()` (НЕ `.optional()`) поля до спільного
+zod-контракту в `vendor/shared` ламає typecheck у КОЖНОМУ пакеті, що імпортує
+той самий тип для типізованого fixture-builder'а — не лише в пакеті, що
+"власник" зміни**
+`RunSummary.multi_agent_run_id: z.string().nullable()` (нове поле, SPEC-07 T1)
+є REQUIRED у виведеному TS-типі (просто `string | null`, не
+`string | null | undefined`) — тож будь-який літерал, явно типізований як
+`RunSummary` (fixture-builder з дефолтами + `...overrides`), мусить явно
+включати поле, інакше `tsc` кричить "Property is missing", НЕЗАЛЕЖНО від
+того, парситься об'єкт через zod чи ні (це компіляційна, а не рантайм-помилка,
+на відміну від запису 2026-08-03 про required-поля в `.parse()`-фікстурах).
+Знайдено одразу в трьох місцях, з яких лише одне (server) було в "Modules
+involved" плану: `server/src/modules/brief/service.test.ts` (власний
+пакет), `client/.../RunHistory/RunHistory.test.tsx` (інший пакет, той самий
+тип через client-копію `vendor/shared`), і
+`mcp-server/test/support/fixtures.ts` +
+`mcp-server/test/tools/run-agent-on-pr.test.ts` (ТРЕТІЙ пакет, зовсім поза
+"Modules involved" плану й поза `TESTING.md` — `mcp-server/tsconfig.json:14`
+аліасить `@devdigest/shared` прямо на серверну копію, тож серверна правка
+дiстає його типчек безкоштовно). Перевіряй `grep -rn "<TypeName>" .` по
+ВСЬОМУ репо (не лише всередині "Modules involved" плану), коли додаєш
+non-optional поле (nullable чи ні) до спільного контракту — package-scoped
+grep пропустить сусідні пакети, що теж імпортують ту саму `vendor/shared`
+копію.
+Доказ: server/src/vendor/shared/contracts/trace.ts (`multi_agent_run_id:
+z.string().nullable()`); mcp-server/tsconfig.json:14 (`"@devdigest/shared":
+["../server/src/vendor/shared/index.ts"]`)
+
+## 2026-08-22 · gotcha
+**Відсутність `Bash` у сесії `implementer` — підтверджено ВЧЕТВЕРТЕ, тепер і для
+Implementer 4 (Client: results views) того самого плану `multi-agent-review.md`,
+що вже дав підтвердження №3 для Implementer 1 того ж плану того ж дня**
+Записи від 2026-08-19 (×2, evals/SPEC-05) і від 2026-08-22 вище (Implementer 1,
+цей самий план) уже показали, що це системна поведінка `implementer`-сесій, не
+особливість однієї теми плану. Ця сесія (Implementer 4 — ColumnsView/
+TabsDetailView/AgentsDisagreeSection/i18n, кроки 15-20 того самого плану)
+підтверджує це ЩЕ РАЗ — і додає новий факт: підтвердження №3 і №4 стались в
+ОДНОМУ Й ТОМУ Ж плані, у двох різних, послідовно запущених implementer-групах
+(Implementer 1 і Implementer 4), тобто це не "одна нетипова сесія" — кожна
+implementer-група в multi-agent workflow цього плану отримала сесію без Bash.
+Наслідок для координатора: `pnpm typecheck`/`pnpm test` в `client/` для T11-T16
+(нові `_components/ColumnsView`, `_components/TabsDetailView`,
+`_components/AgentsDisagreeSection`, промоція `outcomeOf` у `client/src/lib/
+run-outcome.ts`, новий хук `useReviewGroups` у `client/src/lib/hooks/reviews.ts`)
+НЕ були виконані цією сесією — лише Read/Edit/Write-частина готова, координатор
+мусить сам прогнати їх.
+Доказ: system prompt цієї сесії (`<functions>`-блок без `Bash`); попередні
+підтвердження — root INSIGHTS.md, записи 2026-08-19 (×2) і 2026-08-22 вище

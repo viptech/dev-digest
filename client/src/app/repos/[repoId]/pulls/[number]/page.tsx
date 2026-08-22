@@ -15,6 +15,7 @@ import { OverviewTab } from "./_components/OverviewTab";
 import { FindingsTab } from "./_components/FindingsTab";
 import { DiffTab } from "./_components/DiffTab";
 import { BlastTab } from "./_components/BlastTab";
+import { MultiAgentReviewTab } from "./_components/MultiAgentReviewTab";
 import RunTraceDrawer from "./_components/RunTraceDrawer";
 import { usePullDetail, usePulls } from "../../../../../lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
@@ -205,6 +206,21 @@ export default function PRDetailPage() {
 
         {tab === "blast" && (
           <BlastTab prId={prId} repoFullName={repoFullName} headSha={pr.head_sha} />
+        )}
+
+        {tab === "multi-agent" && (
+          <MultiAgentReviewTab
+            prId={prId}
+            prRuns={prRuns}
+            reviews={runs}
+            repoFullName={repoFullName}
+            headSha={pr.head_sha}
+            onOpenTrace={(id) => setParam("trace", id)}
+            onRunsStarted={() => {
+              invalidateActiveRuns();
+              invalidateRunHistory();
+            }}
+          />
         )}
       </div>
 

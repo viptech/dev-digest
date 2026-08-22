@@ -1,19 +1,36 @@
 import type { Container } from '../../platform/container.js';
 import type { FindingActionKind, PrIntentRecord, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
-import type { AgentRow } from '../../db/rows.js';
+import type { AgentRow, FindingRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
-import { type ReviewDto, type ReviewDtoFinding, toPrIntentRecord } from './helpers.js';
+import { type ReviewDto, type ReviewDtoFinding, findingRowToDto, toPrIntentRecord } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { IntentClassificationService } from './intent-service.js';
+import { clusterFindings } from './findings-cluster.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
 export { findingRowToDto, reviewToDto } from './helpers.js';
 export type { ReviewDto, ReviewDtoFinding } from './helpers.js';
+
+/**
+ * Wire shape for `GET /pulls/:id/review-groups` (T14) — snake_case per root
+ * `CLAUDE.md`'s wire-contract convention. `findings-cluster.ts`'s internal
+ * `FindingCluster`/`ClusteredFinding` types stay camelCase-Drizzle-row-typed
+ * (that module is a pure, DB-agnostic function; converting at its boundary
+ * would leak a wire concern into it) — the conversion happens once, here, at
+ * the actual API boundary, same place every other findings shape
+ * (`findingRowToDto`) already converts.
+ */
+export interface FindingClusterDto {
+  file: string;
+  start_line: number;
+  end_line: number;
+  findings: { finding: ReviewDtoFinding; agent_id: string | null; agent_name: string | null }[];
+}
 
 /**
  * Review service (the core). Orchestrates:
@@ -43,19 +60,31 @@ export class ReviewService {
   // ===========================================================================
 
   /**
-   * Resolve which agents to run. `all` → all enabled agents; else a single agent.
+   * Resolve which agents to run. `all` → all enabled agents; `agentIds` → an
+   * explicit subset run together as one multi-agent group (T3) — ANY unknown/
+   * foreign id 404s immediately, before any `agent_runs` row is created
+   * (AC-12); else a single agent via `agentId`.
    */
   async resolveTargets(
     workspaceId: string,
-    opts: { agentId?: string; all?: boolean },
+    opts: { agentId?: string; all?: boolean; agentIds?: string[] },
   ): Promise<AgentRow[]> {
     if (opts.all) return this.agents.listEnabled(workspaceId);
+    if (opts.agentIds && opts.agentIds.length > 0) {
+      const resolved: AgentRow[] = [];
+      for (const id of opts.agentIds) {
+        const agent = await this.agents.getById(workspaceId, id);
+        if (!agent) throw new NotFoundError('Agent not found');
+        resolved.push(agent);
+      }
+      return resolved;
+    }
     if (opts.agentId) {
       const agent = await this.agents.getById(workspaceId, opts.agentId);
       if (!agent) throw new NotFoundError('Agent not found');
       return [agent];
     }
-    throw new AppError('invalid_run_request', 'Provide agentId or all:true', 400);
+    throw new AppError('invalid_run_request', 'Provide agentId, all:true, or agentIds', 400);
   }
 
   /** Delete a whole review run (one agent's pass) + its findings (cascade). */
@@ -107,11 +136,22 @@ export class ReviewService {
     prId: string,
     targets: AgentRow[],
     logger?: Logger,
-  ): Promise<{ runs: { run_id: string; agent_id: string; agent_name: string }[]; reviews: ReviewDto[] }> {
+  ): Promise<{
+    runs: { run_id: string; agent_id: string; agent_name: string }[];
+    reviews: ReviewDto[];
+    run_group_id: string | null;
+  }> {
     const pull = await this.repo.getPull(workspaceId, prId);
     if (!pull) throw new NotFoundError('Pull request not found');
     const repo = await this.repo.getRepo(pull.repoId);
     if (!repo) throw new NotFoundError('Repo not found');
+
+    // T4 — 2+ resolved targets (whether from an explicit `agentIds` subset or
+    // `all:true` with 2+ enabled agents) are linked under one `multi_agent_runs`
+    // row, created BEFORE any `agent_runs` row so every row below can carry
+    // its id (AC-14). A single target stays ungrouped (AC-15).
+    const runGroupId =
+      targets.length > 1 ? await this.repo.createMultiAgentRun({ workspaceId, prId }) : null;
 
     // Create the agent_run rows up front so a runId is available IMMEDIATELY —
     // the client persists these in global state and subscribes to the SSE
@@ -125,6 +165,7 @@ export class ReviewService {
         prId,
         provider: agent.provider,
         model: agent.model,
+        multiAgentRunId: runGroupId,
       });
       runs.push({ run_id: runId, agent_id: agent.id, agent_name: agent.name });
       jobs.push({ agent, runId });
@@ -136,7 +177,7 @@ export class ReviewService {
       logger?.error({ prId, err: (err as Error).message }, 'review: background execution crashed');
     });
 
-    return { runs, reviews: [] };
+    return { runs, reviews: [], run_group_id: runGroupId };
   }
 
   private publish(runId: string, kind: RunEventKind, msg: string, data?: unknown) {
@@ -223,6 +264,60 @@ export class ReviewService {
 
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {
     return this.repo.getRunTrace(runId);
+  }
+
+  /**
+   * T14 — reviews + a findings-clustering view scoped to an explicit set of
+   * `run_ids` (a multi-agent group's sibling runs). Reuses `reviewsForPull`'s
+   * existing DB call (`this.repo.reviewsForPull`) and filters in memory by
+   * `run_id` — `reviews.run_id` has no DB-level uniqueness/FK to `agent_runs`
+   * (server INSIGHTS.md 2026-08-20), so this must not assume it at the query
+   * layer, same as `reviewsForPull` already doesn't.
+   */
+  async reviewGroupsForRunIds(
+    workspaceId: string,
+    prId: string,
+    runIds: string[],
+  ): Promise<{ reviews: ReviewDto[]; clusters: FindingClusterDto[] }> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+
+    const rows = await this.repo.reviewsForPull(prId);
+    const runIdSet = new Set(runIds);
+    const scoped = rows.filter(({ review }) => review.runId !== null && runIdSet.has(review.runId));
+
+    const names = new Map<string, string>();
+    for (const { review } of scoped) {
+      if (review.agentId && !names.has(review.agentId)) {
+        const a = await this.agents.getById(workspaceId, review.agentId);
+        if (a) names.set(review.agentId, a.name);
+      }
+    }
+
+    const reviews = scoped.map(({ review, findings }) =>
+      reviewToDto(review, findings, review.agentId ? names.get(review.agentId) : null),
+    );
+
+    const items: { finding: FindingRow; agentId: string | null; agentName: string | null }[] = [];
+    for (const { review, findings } of scoped) {
+      const agentName = review.agentId ? names.get(review.agentId) ?? null : null;
+      for (const finding of findings) {
+        items.push({ finding, agentId: review.agentId, agentName });
+      }
+    }
+
+    const clusters: FindingClusterDto[] = clusterFindings(items).map((c) => ({
+      file: c.file,
+      start_line: c.start_line,
+      end_line: c.end_line,
+      findings: c.findings.map((f) => ({
+        finding: findingRowToDto(f.finding),
+        agent_id: f.agentId,
+        agent_name: f.agentName,
+      })),
+    }));
+
+    return { reviews, clusters };
   }
 
   /**

@@ -65,6 +65,7 @@ export async function listRunsForPull(
     ran_at: run.ranAt ? run.ranAt.toISOString() : null,
     score: run.score,
     blockers: run.blockers,
+    multi_agent_run_id: run.multiAgentRunId,
   }));
 }
 
@@ -122,6 +123,8 @@ export async function createAgentRun(
     prId: string;
     provider: string | null;
     model: string | null;
+    /** Links this run to its sibling runs (T4); null for a run started alone. */
+    multiAgentRunId?: string | null;
   },
 ): Promise<string> {
   const [row] = await db
@@ -134,8 +137,22 @@ export async function createAgentRun(
       model: values.model,
       status: 'running',
       source: 'local',
+      multiAgentRunId: values.multiAgentRunId ?? null,
     })
     .returning({ id: t.agentRuns.id });
+  return row!.id;
+}
+
+/** Create a multi_agent_runs row — the group linking 2+ sibling agent_runs
+ *  started together (T4). Returns its id. */
+export async function createMultiAgentRun(
+  db: Db,
+  values: { workspaceId: string; prId: string },
+): Promise<string> {
+  const [row] = await db
+    .insert(t.multiAgentRuns)
+    .values({ workspaceId: values.workspaceId, prId: values.prId })
+    .returning({ id: t.multiAgentRuns.id });
   return row!.id;
 }
 
