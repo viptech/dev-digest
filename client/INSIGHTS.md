@@ -702,3 +702,40 @@ t.findings.$inferSelect`, camelCase: `startLine`, `endLine`, `reviewId`,
 (`findings` pgTable, camelCase JS-ключі: `startLine`, `endLine`, `reviewId`);
 client/src/lib/hooks/reviews.ts (`ClusteredFindingRow`/`FindingClusterDto`
 типізовані під фактичну camelCase-форму)
+
+## 2026-08-22 · decision (supersedes the spec-vs-plan entry above)
+**Resolved for the actual user flow the spec's Edge case describes** — a
+coordinator fix added `pendingRunIds`/`pendingSingleRunGroup` to
+`MultiAgentReviewTab.tsx`: when `ConfigureRunScreen`'s submission comes back
+with `run_group_id: null` (exactly 1 agent checked), the tab now builds a
+synthetic one-run "group" from the mutation response's own `runs[].run_id`
+list and shows it immediately, instead of falling back to the previous
+group or the empty state. This satisfies the spec's literal wording
+("Configure run screen... дозволяє позначити 1 агента і запустити...
+вкладка показує один результат") for the flow it actually describes —
+right after that specific submission. It does NOT persist across a page
+reload (component-local state resets), and does not retroactively surface
+some OLDER, unrelated single-agent run made via the legacy
+`RunReviewDropdown` — `groupRuns()` itself still correctly drops
+`multi_agent_run_id: null` rows for the general case, since those two
+situations are indistinguishable at the data level (no way to tell "was
+submitted via the new picker with 1 agent" from "an ordinary single-agent
+run from elsewhere"). Flagging that narrower remaining gap as an accepted
+scope limit, not reopening this as unresolved.
+Доказ: client/src/app/repos/[repoId]/pulls/[number]/_components/
+MultiAgentReviewTab/MultiAgentReviewTab.tsx (pendingRunIds/
+pendingSingleRunGroup); git log -- .../MultiAgentReviewTab/MultiAgentReviewTab.tsx
+
+## 2026-08-22 · decision (supersedes the wire-contract gotcha above)
+**Fixed** — `service.ts`'s `reviewGroupsForRunIds` now maps every cluster's
+findings through `findingRowToDto` before returning (`FindingClusterDto`,
+`agent_id`/`agent_name` snake_case), and `useReviewGroups`'s client types
+(`ClusteredFinding`) were updated to match — reusing `ReviewRecord["findings"][number]`
+instead of a hand-typed camelCase shape. The `schema.response`-missing
+observation on that route still stands (a separate, pre-existing repo-wide
+pattern per `server/INSIGHTS.md`'s 2026-08-19 decision, not something this
+spec introduced) but the actual camelCase-leak this entry flagged is
+resolved.
+Доказ: server/src/modules/reviews/service.ts (FindingClusterDto,
+findingRowToDto(f.finding)); client/src/lib/hooks/reviews.ts
+(ClusteredFinding: agent_id/agent_name)

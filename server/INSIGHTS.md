@@ -578,3 +578,19 @@ maxEnd]` наявних кластерів того ж файлу, не прот
 масиву), треба переходити на pairwise-графову компоненту (union-find), не
 на цей streaming-merge.
 Доказ: server/src/modules/reviews/findings-cluster.ts:38-59
+
+## 2026-08-22 · decision (supersedes the entry immediately above)
+**The single-pass "merge into first fitting cluster" algorithm described
+above is no longer what `findings-cluster.ts` does — a coordinator review
+caught it producing a genuinely wrong split depending on input order (not
+just "order affects which intermediate range you check against," but an
+actually incorrect result: `[14, 10, 12]` left 10 stranded in its own
+cluster instead of joining 12/14's chain) and replaced it with a
+fixed-point pairwise-merge over clusters (repeatedly merge any two clusters
+that are adjacent, until no merge occurs) — a proper connected-components
+computation over AC-18's adjacency relation, verified order-independent by
+direct repro. The entry above still correctly describes the OLD code's
+mechanics for historical context, but its "if you ever need order-
+independence, switch to union-find" framing is resolved, not open.
+Доказ: server/src/modules/reviews/findings-cluster.ts:30-89 (current);
+git log --oneline -- server/src/modules/reviews/findings-cluster.ts
