@@ -32,6 +32,8 @@ import type {
   AuthWorkspace,
   SecretsProvider,
   SecretKey,
+  RunnerBundleReader,
+  RunnerBundleFile,
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
 
@@ -340,5 +342,13 @@ export class MockSecretsProvider implements SecretsProvider {
   constructor(private secrets: Partial<Record<string, string>> = {}) {}
   async get(key: SecretKey): Promise<string | undefined> {
     return this.secrets[key as string];
+  }
+}
+
+export class MockRunnerBundleReader implements RunnerBundleReader {
+  constructor(private files: RunnerBundleFile[] = [{ name: 'index.js', contents: '// mock runner bundle' }]) {}
+  readFiles(): RunnerBundleFile[] {
+    if (this.files.length === 0) throw new Error('mock runner bundle is empty — run `pnpm build` in agent-runner/.');
+    return this.files;
   }
 }

@@ -1,6 +1,3 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { CiResultArtifact } from '@devdigest/shared';
 import type { CiExport, CiFailOn, CiFile, CiInstallation, CiRun, CiTarget } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
@@ -49,13 +46,14 @@ export interface ListCiRunsInput {
  * Onion-architecture boundary: this file never imports from
  * `agent-runner/src/*` — it only reads `agent-runner/dist/**` as an opaque
  * built ARTIFACT (bytes to embed), the exact same relationship the exported
- * PR itself has to that directory. `GitHubClient` is resolved through
- * `container.github()`, never constructed directly here.
+ * PR itself has to that directory. `GitHubClient` and `RunnerBundleReader`
+ * are both resolved through `container`, never constructed/read-from-disk
+ * directly here (coordinator fix, `architecture-reviewer` finding: this
+ * file used to call `node:fs` inline — moved to
+ * `adapters/runner-bundle/fs.ts`, resolved via `container.runnerBundleReader`,
+ * mirroring how `container.github()` is the only legal way to reach
+ * `GitHubClient`).
  */
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// server/src/modules/ci -> server/src/modules -> server/src -> server -> repo root.
-const RUNNER_DIST_DIR = join(__dirname, '..', '..', '..', '..', 'agent-runner', 'dist');
 
 export interface ExportCiInput {
   repo: string;
@@ -67,54 +65,6 @@ export interface ExportCiInput {
   /** Wizard-side Preview edits (AC-12) — see `CiExportInput.file_overrides`'s
    *  doc-comment for the exact override semantics. */
   fileOverrides?: { path: string; contents: string }[];
-}
-
-/**
- * Read every file `agent-runner`'s `pnpm build` (ncc) produced under
- * `agent-runner/dist/` and embed each as its own non-editable CI file under
- * `.devdigest/runner/<same relative path>`.
- *
- * Coordinator fix: an earlier revision hardcoded a single
- * `.devdigest/runner/index.js` entry, assuming ncc always emits one
- * self-contained file. A real `pnpm build` in this worktree produced TWO
- * files — `index.js` *and* a lazily-loaded secondary chunk
- * (`300.index.js`, traced to `openai`'s `_shims/node-runtime.mjs` dynamic
- * `import()` for its optional Node file-upload shim, pulled in transitively
- * via `reviewer-core`). Shipping only `index.js` would 500 with a module-
- * not-found error the first time that code path executes in the target
- * repo's CI. Just as critical: ncc's output is ESM
- * (`dist/package.json`: `{"type":"module"}`), but a target repo's own root
- * `package.json` almost never declares `"type": "module"` — Node resolves
- * a `.js` file's module system from the nearest ANCESTOR `package.json`, so
- * without shipping `dist/package.json` alongside `index.js` under
- * `.devdigest/runner/`, `node .devdigest/runner/index.js` would fail with a
- * CommonJS-vs-ESM `SyntaxError` in most target repos. Reading the whole
- * `dist/` directory (whatever ncc happens to emit) instead of a hardcoded
- * single path makes this correct regardless of how many chunks a future
- * dependency change produces, and regardless of the target repo's own
- * module system.
- */
-function readRunnerBundleFiles(): CiFile[] {
-  let names: string[];
-  try {
-    names = readdirSync(RUNNER_DIST_DIR).filter((name) => statSync(join(RUNNER_DIST_DIR, name)).isFile());
-  } catch (err) {
-    throw new ConfigError(
-      `agent-runner bundle not found at ${RUNNER_DIST_DIR} — run \`pnpm build\` in agent-runner/ ` +
-        `(see agent-runner/README.md) before exporting CI files.`,
-      { cause: (err as Error).message },
-    );
-  }
-  if (names.length === 0) {
-    throw new ConfigError(`agent-runner bundle directory ${RUNNER_DIST_DIR} is empty — run \`pnpm build\` in agent-runner/.`);
-  }
-  return names
-    .sort()
-    .map((name) => ({
-      path: `.devdigest/runner/${name}`,
-      contents: readFileSync(join(RUNNER_DIST_DIR, name), 'utf8'),
-      editable: false,
-    }));
 }
 
 /**
@@ -242,10 +192,34 @@ export class CiService {
         contents: generateWorkflowYaml({ triggers: input.triggers, postAs: input.postAs }),
         editable: true,
       },
-      ...readRunnerBundleFiles(),
+      ...this.readRunnerBundleFiles(),
     ];
 
     return applyFileOverrides(generated, input.fileOverrides);
+  }
+
+  /** Read every file `agent-runner`'s `pnpm build` (ncc) produced and embed
+   *  each as its own non-editable CI file under
+   *  `.devdigest/runner/<same relative path>`, via the
+   *  `container.runnerBundleReader` port (never `node:fs` directly here —
+   *  see the class doc-comment). ncc can emit MORE than one file (a main
+   *  bundle plus a lazily-`import()`-ed secondary chunk from a transitive
+   *  dependency, plus `package.json` declaring `"type":"module"` — required
+   *  for the target repo's Node to parse the ESM bundle correctly regardless
+   *  of that repo's own module system), so this embeds whatever the reader
+   *  actually returns, never a hardcoded single file name. */
+  private readRunnerBundleFiles(): CiFile[] {
+    let files: { name: string; contents: string }[];
+    try {
+      files = this.container.runnerBundleReader.readFiles();
+    } catch (err) {
+      throw new ConfigError(
+        `agent-runner bundle not available — run \`pnpm build\` in agent-runner/ ` +
+          `(see agent-runner/README.md) before exporting CI files.`,
+        { cause: (err as Error).message },
+      );
+    }
+    return files.map((f) => ({ path: `.devdigest/runner/${f.name}`, contents: f.contents, editable: false }));
   }
 
   // ---------------------------------------------------------------------

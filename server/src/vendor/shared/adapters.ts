@@ -313,3 +313,27 @@ export interface SecretsProvider {
    */
   set?(key: SecretKey, value: string): Promise<void>;
 }
+
+// ---------- Runner bundle (SPEC-08 T3/G4 — the `agent-runner/dist/` files
+// embedded verbatim as the CI export's non-editable `.devdigest/runner/**`
+// entries) ----------
+export interface RunnerBundleFile {
+  /** File name relative to `agent-runner/dist/` (e.g. `index.js`), NOT yet
+   *  prefixed with `.devdigest/runner/` — the caller owns that path shape. */
+  name: string;
+  contents: string;
+}
+
+/**
+ * Reads whatever files `agent-runner`'s own build step produced. A port, not
+ * a direct `node:fs` call inside `ci/service.ts` — onion-architecture: a
+ * build-time filesystem dependency is exactly the kind of thing a future
+ * test needs to be able to swap out (a fixture bundle, or an empty one to
+ * exercise the "not built yet" error path) without touching real disk.
+ */
+export interface RunnerBundleReader {
+  /** Throws when the bundle directory doesn't exist or is empty — the
+   *  caller (`ci/service.ts`) turns that into a `ConfigError` pointing at
+   *  `pnpm build`, per `agent-runner/README.md`. */
+  readFiles(): RunnerBundleFile[];
+}
