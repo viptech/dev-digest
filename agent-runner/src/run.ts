@@ -145,6 +145,13 @@ export async function runCi(deps: RunCiDeps): Promise<RunCiResult> {
       durationMs,
       agent: manifest.name,
       prNumber: ctx.prNumber,
+      commitSha: ctx.headSha,
+      model: manifest.model,
+      // `AgentManifest` carries no version field (T1 constraint) — the
+      // runner has no way to know its own agent's config version; the
+      // server-side ingest join (`ci_installations.agentId → agents`) is
+      // the source of truth for `agent_version` when one is needed.
+      agentVersion: null,
     });
     writeFile(deps.resultPath, `${JSON.stringify(artifact, null, 2)}\n`);
 
