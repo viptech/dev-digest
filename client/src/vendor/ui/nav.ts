@@ -36,6 +36,18 @@ export const NAV: NavGroup[] = [
       { key: "eval-dashboard", label: "Eval Dashboard", icon: "FlaskConical", href: "/eval-dashboard", gKey: "e" },
     ],
   },
+  // GLOBAL — workspace-wide screens that aren't scoped to one repo/agent.
+  // Currently just CI Runs (SPEC-08 T14); sibling entries the Development
+  // Plan for this feature assumed already existed here (Multi-Agent Review,
+  // Agent Performance, Memory) are later-lesson screens not yet built in
+  // this codebase (see root README's "starter surface" note) — this group
+  // is created fresh, not appended to.
+  {
+    section: "GLOBAL",
+    items: [
+      { key: "ci-runs", label: "CI Runs", icon: "Activity", href: "/ci-runs", gKey: "r" },
+    ],
+  },
 ];
 
 export const SETTINGS_ITEM: NavItemDef = {
@@ -68,6 +80,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: "g s", label: "Go to Skills", group: "Navigation" },
   { keys: "g c", label: "Go to Conventions", group: "Navigation" },
   { keys: "g e", label: "Go to Eval Dashboard", group: "Navigation" },
+  { keys: "g r", label: "Go to CI Runs", group: "Navigation" },
   { keys: "j / k", label: "Next / previous finding", group: "Findings" },
   { keys: "a", label: "Accept finding", group: "Findings" },
   { keys: "d", label: "Dismiss finding", group: "Findings" },

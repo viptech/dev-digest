@@ -11,17 +11,21 @@
       "last7Days": "Last 7 days",
       "allAgents": "All agents",
       "allRepos": "All repos",
-      "allStatuses": "All statuses"
+      "allStatuses": "All statuses",
+      "allSources": "All sources"
     },
     "table": {
       "timestamp": "Timestamp",
       "pullRequest": "Pull request",
+      "agent": "Agent",
       "source": "Source",
+      "duration": "Dur.",
       "findings": "Findings",
       "cost": "Cost",
       "status": "Status",
       "trace": "Trace"
     },
+    "agentFallback": "Agent",
     "view": "View",
     "status": {
       "succeeded": "Succeeded",

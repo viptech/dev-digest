@@ -781,3 +781,76 @@ full relative path. Verified round-trip (zip → unzip reproduces exact
 paths/contents) via a script this session.
 Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/CiTab/_components/ExportWizard/helpers.ts
 (`downloadFilesAsZip`); client/package.json (`fflate` direct dependency)
+
+## 2026-08-22 · gotcha
+**Development Plan `export-to-ci.md`'s Group 5 крок стверджував, що
+"Multi-Agent Review"/"Agent Performance"/"Memory" вже є сусідніми
+nav-лінками в `GLOBAL`-секції — насправді жодна з трьох ще не існує ані як
+NAV-запис, ані як реальна сторінка в цьому кодовому дереві**
+`client/src/vendor/ui/nav.ts`'s `NAV` мав рівно дві групи (`WORKSPACE`,
+`SKILLS LAB`) до цієї сесії — жодної `GLOBAL`-секції, жодного запису з
+цими трьома лейблами. `Grep` на `"Agent Performance"`/`"Multi-Agent
+Review"` по всьому `client/src` — 0 збігів у коді (лише в
+`messages/en/shell.json:25-27`'s `nav.memory`/`nav.multi-agent`/
+`nav.agent-performance` — переклади для майбутніх nav-ключів, підготовлені
+заздалегідь, без жодного реального NAV-запису чи сторінки, що їх
+використовує) і жодної теки `client/src/app/{memory,multi-agent,
+agent-performance}` (перевірено `Glob` на `client/src/app/**` — лише
+`agents`, `eval-dashboard`, `onboarding`, `repos`, root). Корінь: ці три —
+скрини майбутніх уроків курсу (root `README.md`: "course lessons add the
+Skills, Memory, Eval, Blast/Brief, multi-agent, ... dashboard screens"),
+ще не побудовані в цьому воркдереві на момент виконання SPEC-08. Фікс —
+`GLOBAL`-секція створена НАНОВО з єдиним записом (`ci-runs`), а не
+дописана до вже наявних сусідів, яких просто немає. `activeKeyFor`
+(`client/src/components/app-shell/helpers.ts:38-42`) і `shell.json`'s
+`nav.*`-переклади для цих трьох ключів були вже готові заздалегідь — це і
+ввело план в оману (виглядало так, ніби вся інфраструктура вже стоїть,
+бракує тільки CI-Runs-запису).
+Доказ: client/src/vendor/ui/nav.ts:21-51 (NAV до/після цієї сесії);
+client/messages/en/shell.json:25-28 (`nav.memory`/`nav.multi-agent`/
+`nav.agent-performance`/`nav.ci-runs` — усі 4 перекладені заздалегідь,
+лише останній тепер має реальний NAV-запис+сторінку)
+
+## 2026-08-22 · decision
+**CI Runs (SPEC-08 T14) "auto-refresh" толкує "refetchInterval on the same
+query" буквально — толкер лише перечитує `GET /ci/runs`, НЕ повторно
+викликає `POST /ci/refresh` (ingest-цикл) на таймері**
+Development Plan мав два формулювання, що частково суперечать: server-side
+Group 3's Constraints казали "auto-refresh toggle polls the same
+on-demand endpoint" (звучить як повторний виклик `POST /ci/refresh`), а
+Group 5's власний Ordered-steps текст казав буквально "implemented as a
+client-side `refetchInterval` on the same query" (реальна TanStack Query
+опція, яка існує лише на `useQuery`, не на `useMutation`). Обрано друге,
+буквальне трактування: `useCiRuns`'s `refetchInterval`-опція
+(`client/src/lib/hooks/ci.ts:88-94`) періодично перечитує вже наявні
+рядки з БД; кнопка "Refresh" — окрема дія, що реально викликає
+`POST /ci/refresh` (`useRefreshCi`). Причина: якби auto-refresh дійсно
+тригерив ingest на таймері з КОЖНОЇ відкритої вкладки/користувача,
+`POST /ci/refresh`'s AC-34 rate-limit (10/min) вичерпався б набагато
+швидше при кількох одночасно відкритих CI Runs сторінках — буквальне
+трактування безпечніше і відповідає NFR "cost/rate abuse".
+Доказ: client/src/lib/hooks/ci.ts:88-94 (`useCiRuns`'s `refetchInterval`
+параметр), client/src/lib/hooks/ci.ts:96-112 (`useRefreshCi`'s doc-коментар
+пояснює саме цей розворот), client/src/app/ci-runs/_components/CiRunsView/CiRunsView.tsx:42-45
+(виклик `useCiRuns` з `refetchInterval` замість повторного `refreshCi.mutate()`)
+
+## 2026-08-22 · decision (coordinator, accepted gaps — not fixed)
+**Two minor, cross-group gaps flagged by Group 5's own report, deliberately
+left as-is rather than chased through a multi-file chain**: (1) AC-28's
+"PULL REQUEST (`#num`+title)" can only render `#num` — `CiRun` (Group 3's
+contract) has no PR-title field, and no title is available anywhere upstream
+either: `agent-runner`'s `PrContext`/`CiResultArtifact` never carry PR title
+(only `pr_number`), so closing this gap properly means extending 4+ files
+across two packages (`agent-runner`'s artifact + `ci_runs` schema + ingest +
+this contract) for a cosmetic completeness gap, not a correctness bug — the
+PR number still renders and links to the right PR. (2) `statusI18nKey` is
+duplicated verbatim between `CiTab/helpers.ts` (Group 4) and
+`CiRunsView/helpers.ts` (Group 5) — a promote-on-second-use candidate per
+`react-ui-architecture`, left un-promoted since doing so means editing
+Group 4's already-committed file for a purely stylistic DRY win. Both are
+real, but low-severity and out of proportion to fix mid-implementation;
+noted here for a future pass, not silently dropped.
+Доказ: client/src/app/ci-runs/_components/CiRunsView/CiRunsView.tsx (PR
+number-only render); client/src/app/agents/[id]/_components/AgentEditor/
+_components/CiTab/helpers.ts vs client/src/app/ci-runs/_components/
+CiRunsView/helpers.ts (duplicated `statusI18nKey`)

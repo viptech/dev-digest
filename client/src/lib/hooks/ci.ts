@@ -48,3 +48,69 @@ export function useExportCi(agentId: string) {
     },
   });
 }
+
+/** `GET /ci/runs` response — the run list + the DISTINCT-repo list for the
+ *  "All repos" filter (AC-30), returned together so the client never needs
+ *  a second round-trip just to populate that dropdown. */
+export interface CiRunsView {
+  runs: CiRun[];
+  repos: string[];
+}
+
+/** Filters `GET /ci/runs` accepts (server: `ci/routes.ts`'s `ListCiRunsQuery`)
+ *  — camelCase here, mapped to snake_case query params at the fetch call
+ *  per the wire-contract convention. Every field is optional; an absent
+ *  field is simply omitted from the query string, not sent as `""`. */
+export interface CiRunsFilters {
+  since?: string;
+  agentId?: string;
+  repo?: string;
+  status?: string;
+  source?: string;
+}
+
+function ciRunsQueryString(filters: CiRunsFilters): string {
+  const params = new URLSearchParams();
+  if (filters.since) params.set("since", filters.since);
+  if (filters.agentId) params.set("agent_id", filters.agentId);
+  if (filters.repo) params.set("repo", filters.repo);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.source) params.set("source", filters.source);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** Workspace-wide CI run history for the global `/ci-runs` page (AC-27/
+ *  AC-28/AC-30). Filters are plain query params — no client-side
+ *  post-filtering, the server does the `WHERE`. `refetchInterval` backs the
+ *  page's client-side "auto-refresh" toggle (T14) — `false` (the default)
+ *  disables polling entirely, matching every other query hook in this file. */
+export function useCiRuns(filters: CiRunsFilters, options?: { refetchInterval?: number | false }) {
+  return useQuery({
+    queryKey: ["ci-runs", filters],
+    queryFn: () => api.get<CiRunsView>(`/ci/runs${ciRunsQueryString(filters)}`),
+    refetchInterval: options?.refetchInterval ?? false,
+  });
+}
+
+/**
+ * `POST /ci/refresh` — triggers the pull-model ingest cycle for every
+ * installation in the workspace (AC-24). Backs the CI Runs page's manual
+ * "Refresh" button (T14) — the page's separate "auto-refresh" toggle does
+ * NOT call this on a timer; it sets `refetchInterval` on `useCiRuns`
+ * itself instead, re-reading whatever's already been ingested rather than
+ * re-triggering a GitHub-calling ingest cycle from every open tab (keeps
+ * `POST /ci/refresh`'s AC-34 rate limit, 10/min, meaningful across
+ * multiple simultaneously-open CI Runs pages). Invalidates `ci-runs` on
+ * success so the table reflects whatever this manual trigger just
+ * inserted.
+ */
+export function useRefreshCi() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ inserted: number }>("/ci/refresh"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ci-runs"] });
+    },
+  });
+}
