@@ -28,8 +28,10 @@
 export const WORKFLOW_GENERATOR_VERSION = '1.0.0';
 
 // Pinned by full commit SHA, never a floating tag (NFR above). Re-verify
-// against the upstream release page before bumping either version — these
-// were resolved from memory at authoring time, not fetched live.
+// against the upstream release page before bumping either version. Both SHAs
+// below were confirmed live (coordinator, 2026-08-22) against GitHub's own
+// API — `GET /repos/actions/checkout/git/refs/tags/v4.2.2` and the
+// `upload-artifact` equivalent both return exactly these commit shas.
 const CHECKOUT_ACTION_SHA = '11bd71901bbe5b1630ceea73d27597364c9af683'; // actions/checkout v4.2.2
 const UPLOAD_ARTIFACT_ACTION_SHA = '50769540e7f4bd5e21e526ee35c689e35e0d6874'; // actions/upload-artifact v4.4.0
 

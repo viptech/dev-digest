@@ -41,6 +41,16 @@ function mapStatus(state: string, merged: boolean | undefined): PrStatus {
  * catch-and-skip (AC-25's "invalid → skip, log warning, zero writes"), not
  * this function's job to silently swallow into `null` (`null` here is
  * reserved for "no artifact by that name at all", AC-23).
+ *
+ * Does NOT handle ZIP64 (the extended central-directory/EOCD format for
+ * archives with 65535+ entries or any entry/archive over 4GB) — a
+ * deliberate scope limit, not an oversight (flagged by `plan-verifier`,
+ * evaluated here): the one artifact this ever reads is a single JSON file
+ * (`devdigest-result.json`, a findings summary — kilobytes, never
+ * megabytes) inside a single-entry zip `agent-runner`'s own
+ * `actions/upload-artifact` step produces. Both ZIP64 triggers are
+ * unreachable for this artifact by construction; adding ZIP64 support would
+ * be real effort spent on a size class this reader will never see.
  */
 function extractFirstZipEntryAsJson(zip: Buffer): unknown {
   const EOCD_SIGNATURE = 0x06054b50;
