@@ -1,0 +1,35 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  section: { marginBottom: 22 } satisfies CSSProperties,
+  sectionTitle: { fontSize: 13, fontWeight: 700, marginBottom: 10 } satisfies CSSProperties,
+  triggerList: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  blockMergeRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "10px 12px",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    background: "var(--bg-elevated)",
+  } satisfies CSSProperties,
+  blockMergeText: { display: "flex", flexDirection: "column", gap: 3 } satisfies CSSProperties,
+  blockMergeTitle: { fontSize: 13.5, fontWeight: 600 } satisfies CSSProperties,
+  blockMergeDesc: { fontSize: 12, color: "var(--text-secondary)", maxWidth: 420, lineHeight: 1.4 } satisfies CSSProperties,
+  disabledToggle: { opacity: 0.5, pointerEvents: "none" } satisfies CSSProperties,
+  secretsList: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  secretRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "8px 12px",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    background: "var(--bg-elevated)",
+  } satisfies CSSProperties,
+  secretName: { fontFamily: "var(--font-mono)", fontSize: 12.5, fontWeight: 600 } satisfies CSSProperties,
+  secretHint: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  secretBadgeSlot: { marginLeft: "auto" } satisfies CSSProperties,
+  secretsNote: { fontSize: 12, color: "var(--text-muted)", marginTop: 8, lineHeight: 1.4 } satisfies CSSProperties,
+} as const;

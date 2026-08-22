@@ -739,3 +739,45 @@ resolved.
 Доказ: server/src/modules/reviews/service.ts (FindingClusterDto,
 findingRowToDto(f.finding)); client/src/lib/hooks/reviews.ts
 (ClusteredFinding: agent_id/agent_name)
+
+## 2026-08-22 · gotcha
+**`@devdigest/ui` не має ні `Radio`/`RadioGroup`, ні `disabled`-пропа в
+`Toggle`, ні будь-якого zip-примітиву — усі три знадобились для
+ExportWizard (SPEC-08 Configure/Install кроків) і довелось писати вручну**
+`Grep` на `radio|Radio` по всьому `client/src` — 0 збігів (перевірено цієї
+сесії); `Toggle` (`client/src/vendor/ui/primitives/Toggle.tsx:3-11`) приймає
+лише `{on, onChange, size}`, без `disabled`. Для AC-15 "Post results as"
+(radio-вибір) і AC-18 "Open a PR vs Copy files" довелось написати локальний
+`RadioRow` (`div role="radio"` + власна стилізація), колокейтнутий у
+`ExportWizard/_components/RadioRow/` (не в `@devdigest/ui`, бо на момент
+написання рівно 2 викликача всередині ОДНІЄЇ фічі — react-ui-architecture
+"promote on the second user" ще не спрацював). Для AC-16 "Block merge on
+findings" (перемикач, що має бути назавжди недоступний) `Toggle` довелось
+обгорнути в `<span style={{opacity:.5, pointerEvents:"none"}}>` замість
+пропа `disabled`, якого просто немає. Для zip-бібліотеки: `client/package.json`
+не має `jszip`/`file-saver`/аналогів (перевірено `Grep`), а додавання нової
+залежності означає ручну правку lockfile (заборонено root `CLAUDE.md`) —
+`action:'files'`-шлях Install-кроку (AC-20, "Copy files as a zip") тому
+завантажує кожен файл ОКРЕМО через Blob+`<a download>`, а не як єдиний
+`.zip`-архів; сервер теж ніколи не пакує їх у zip (`ci/service.ts`'s
+`exportCi` повертає голий `CiFile[]` для обох `action`-шляхів) — тобто AC-20
+буквально "zip archive" наразі не виконано ні на сервері, ні на клієнті,
+лише позначено як відомий розрив.
+Доказ: client/src/vendor/ui/primitives/Toggle.tsx:3-11 (сигнатура без
+`disabled`); client/src/app/agents/[id]/_components/AgentEditor/_components/CiTab/_components/ExportWizard/_components/RadioRow/RadioRow.tsx
+(локальний примітив); client/src/app/agents/[id]/_components/AgentEditor/_components/CiTab/_components/ExportWizard/helpers.ts
+(`downloadFile` — Blob+anchor замість справжнього zip)
+
+## 2026-08-22 · decision (supersedes the zip half of the entry above)
+**Fixed — AC-20's "zip archive" is now a real zip.** `Radio`/`disabled`-Toggle
+gaps above still stand as-is (local `RadioRow`, `pointerEvents:"none"`
+wrapper — both fine, not revisited). But the zip half: added `fflate`
+(small, dependency-free, browser-native-compression-backed) as a direct
+`client` dependency via `pnpm add` (not a hand-edited lockfile — a real
+`pnpm add` run, which is the correct way to add a dependency, just requires
+`Bash`) and replaced per-file `downloadFile` with `downloadFilesAsZip`
+(`zipSync` + `strToU8`), producing one real `.zip` preserving every file's
+full relative path. Verified round-trip (zip → unzip reproduces exact
+paths/contents) via a script this session.
+Доказ: client/src/app/agents/[id]/_components/AgentEditor/_components/CiTab/_components/ExportWizard/helpers.ts
+(`downloadFilesAsZip`); client/package.json (`fflate` direct dependency)

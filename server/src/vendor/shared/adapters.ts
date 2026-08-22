@@ -140,6 +140,21 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+/** One run of a workflow file, from `listWorkflowRunsFor` (SPEC-08 AC-22). */
+export interface WorkflowRunSummary {
+  runId: number;
+  /** The commit this run actually executed against — verified server-side
+   *  against the ingested artifact's OWN `commit_sha` claim (AC-26), never
+   *  trusted from the artifact alone. */
+  headSha: string;
+  /** Raw GitHub Actions run status (e.g. "completed", "in_progress"). */
+  status: string;
+  htmlUrl: string;
+  /** ISO timestamp this run started — the ordering key ingest (T6) uses to
+   *  find "runs newer than the last one already persisted". */
+  ranAt: string;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -164,6 +179,18 @@ export interface GitHubClient {
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
+  /**
+   * Runs of `workflowFile` (e.g. "devdigest-review.yml"), most recent first
+   * (SPEC-08 T5/AC-22) — the CI ingest loop's polling primitive.
+   */
+  listWorkflowRunsFor(repo: RepoRef, workflowFile: string): Promise<WorkflowRunSummary[]>;
+  /**
+   * Download + parse the `devdigest-result.json` artifact named
+   * `artifactName` from one workflow run. `null` when the run has no
+   * artifact by that name — best-effort (SPEC-08 T5/AC-23): the run may have
+   * failed before its upload step ever ran.
+   */
+  downloadRunArtifact(repo: RepoRef, runId: number, artifactName: string): Promise<unknown | null>;
 }
 
 // ---------- Git (simple-git, heavy) ----------

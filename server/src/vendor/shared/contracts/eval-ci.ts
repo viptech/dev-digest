@@ -225,6 +225,18 @@ export const CiExportInput = z.object({
   post_as: z.enum(['github_review', 'pr_comment', 'none']).default('github_review'),
   triggers: z.array(z.string()).default(['opened', 'synchronize', 'reopened']),
   base: z.string().default('main'),
+  /**
+   * Wizard-side edits made to one or more Preview-step files (AC-12: "правки
+   * (shall) бути тим самим вмістом, що піде в Install-крок"). Each entry
+   * REPLACES that path's server-generated content verbatim before Install
+   * writes/returns the file bundle — never merged/diffed, the caller's edit
+   * wins outright. Only applies to files the server itself marked
+   * `editable: true` (checked server-side, not trusted from the client) — an
+   * override for `.devdigest/runner/**` (the non-editable bundled runner) is
+   * ignored, not an error, so a stale/mistaken client-side entry can never
+   * corrupt the shipped runner bytes.
+   */
+  file_overrides: z.array(z.object({ path: z.string().min(1), contents: z.string() })).optional(),
 });
 export type CiExportInput = z.infer<typeof CiExportInput>;
 /** Caller-facing input type — `.default()` fields stay optional (web hooks). */
@@ -237,6 +249,10 @@ export const CiInstallation = z.object({
   repo: z.string(),
   target_type: CiTarget,
   installed_at: z.string(),
+  /** Semantic version of the generator that produced this installation's
+   *  workflow (AC-33's CI tab installations list) — `null` for a row
+   *  persisted before this column existed. */
+  workflow_version: z.string().nullable(),
 });
 export type CiInstallation = z.infer<typeof CiInstallation>;
 
@@ -264,6 +280,11 @@ export const CiRun = z.object({
   source: z.string().nullable(),
   agent: z.string().nullish(),
   duration_s: z.number().nullish(),
+  /** Severity breakdown for the CI Runs table's colored FINDINGS column
+   *  (SPEC-08 AC-28) — populated by ingest from `CiResultArtifact`. */
+  critical: z.number().int().nullish(),
+  warning: z.number().int().nullish(),
+  suggestion: z.number().int().nullish(),
 });
 export type CiRun = z.infer<typeof CiRun>;
 

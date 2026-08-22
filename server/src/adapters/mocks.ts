@@ -17,6 +17,7 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  WorkflowRunSummary,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -125,6 +126,11 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** Fixture returned by `listWorkflowRunsFor` (SPEC-08 T5/T6 ingest tests). */
+  workflowRuns?: WorkflowRunSummary[];
+  /** Fixture returned by `downloadRunArtifact`, keyed by `runId` — a missing
+   *  key mirrors the real adapter's `null` ("no artifact by that name"). */
+  artifacts?: Record<number, unknown>;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -236,6 +242,14 @@ export class MockGitHubClient implements GitHubClient {
 
   async currentLogin(): Promise<string> {
     return this.opts.login ?? 'mock-user';
+  }
+
+  async listWorkflowRunsFor(_repo: RepoRef, _workflowFile: string): Promise<WorkflowRunSummary[]> {
+    return this.opts.workflowRuns ?? [];
+  }
+
+  async downloadRunArtifact(_repo: RepoRef, runId: number, _artifactName: string): Promise<unknown | null> {
+    return this.opts.artifacts?.[runId] ?? null;
   }
 }
 
