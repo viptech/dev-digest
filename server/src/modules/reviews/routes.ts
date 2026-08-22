@@ -1,11 +1,24 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { z } from 'zod';
 import { RunRequest } from '@devdigest/shared';
 import type { RunEvent } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { ReviewService } from './service.js';
+
+// T14 — `run_ids` arrives as a comma-separated query string; validated +
+// normalized into a non-empty array of UUIDs at the edge (same "validate at
+// the boundary" contract as `IdParams`), so the handler never sees a raw
+// string to re-split/re-validate itself.
+const ReviewGroupsQuery = z.object({
+  run_ids: z
+    .string()
+    .min(1)
+    .transform((v) => v.split(',').map((s) => s.trim()).filter(Boolean))
+    .pipe(z.array(z.string().uuid()).min(1)),
+});
 
 /**
  * reviews module.
@@ -16,6 +29,7 @@ import { ReviewService } from './service.js';
  *   GET    /runs/:id/trace                                     → the single-document RunTrace
  *   GET    /runs/:id/findings                                   → the review + findings produced by that run (by run_id alone)
  *   GET    /pulls/:id/reviews                                  → persisted reviews + findings for a PR
+ *   GET    /pulls/:id/review-groups?run_ids=<csv>              → reviews + findings-clusters scoped to a multi-agent group's run_ids (SPEC-07 T14)
  *   POST   /findings/:id/(accept|dismiss)                      → finding actions
  *   POST   /findings/:id/eval-case                              → build (unpersisted) an eval-case draft from a decided finding (SPEC-05 T13)
  */
@@ -37,14 +51,15 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     const targets = await service.resolveTargets(workspaceId, {
       ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
       ...(body.all !== undefined ? { all: body.all } : {}),
+      ...(body.agentIds !== undefined ? { agentIds: body.agentIds } : {}),
     });
-    const { runs, reviews } = await service.runReview(
+    const { runs, reviews, run_group_id } = await service.runReview(
       workspaceId,
       req.params.id,
       targets,
       req.log,
     );
-    return { pr_id: req.params.id, runs, reviews };
+    return { pr_id: req.params.id, runs, reviews, run_group_id };
   });
 
   // ---- Get PR intent (persisted classification, if any) ------------------
@@ -168,6 +183,19 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(container, req);
     return service.reviewsForPull(workspaceId, req.params.id);
   });
+
+  // ---- T14: reviews + findings-clusters scoped to an explicit multi-agent
+  // group's run_ids (a NEW, additive route — see plan's Constraints section
+  // for why the existing GET /pulls/:id/reviews' bare-array response type
+  // can't silently grow a second `{reviews, clusters}` shape). ----------------
+  app.get(
+    '/pulls/:id/review-groups',
+    { schema: { params: IdParams, querystring: ReviewGroupsQuery } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.reviewGroupsForRunIds(workspaceId, req.params.id, req.query.run_ids);
+    },
+  );
 
   // ---- Delete a whole review run (one agent's pass) + its findings --------
   app.delete('/reviews/:id', { schema: { params: IdParams } }, async (req) => {
