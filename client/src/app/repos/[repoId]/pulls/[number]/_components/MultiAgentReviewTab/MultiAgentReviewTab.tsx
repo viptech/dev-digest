@@ -1,35 +1,42 @@
-/* MultiAgentReviewTab — SPEC-07 T9 (G7). Shell for the new "Multi-Agent
-   Review" PR tab: empty state + "Start New Review" on a first visit (AC-2),
-   the newest past group run shown immediately with "Start New Review" still
-   visible on a return visit (AC-3, G7 — "last run instead of an auto-picker"),
-   and swapping the tab's own content (not a modal, not a navigation) to
-   `ConfigureRunScreen` when that button is clicked (AC-4).
+/* MultiAgentReviewTab — SPEC-07 T9 (G7), extended by T11/T12/T13/T15 (this
+   task's own group). Shell for the new "Multi-Agent Review" PR tab: empty
+   state + "Start New Review" on a first visit (AC-2), the newest past group
+   run shown immediately with "Start New Review" still visible on a return
+   visit (AC-3, G7 — "last run instead of an auto-picker"), and swapping the
+   tab's own content (not a modal, not a navigation) to `ConfigureRunScreen`
+   when that button is clicked (AC-4).
 
-   The "results" content here is intentionally the same `RunHistory` list
-   already used by the "Agent runs" tab (`FindingsTab.tsx`), filtered to just
-   this group's runs — the dedicated card-layout `ColumnsView`/tab-layout
-   `TabsDetailView` (T11/T12, same data, per AC-26's "same data RunHistory
-   already renders, just card- not row-layout") are a later group's work; this
-   shell is what they'll render inside (see the Development Plan's Implementer
-   4 "depends on" note). */
+   Results are a Columns/Tabs switch (AC-25) over the SAME `activeGroup.runs`
+   + `reviews` data (no per-mode fetch), plus a read-only "Where agents
+   disagree" section (T13) fed by `GET /pulls/:id/review-groups` (T14) for
+   its clusters. "View trace" from either mode reuses the page-level
+   `?trace=<runId>` wiring via `onOpenTrace` (T15) — no new drawer. */
 "use client";
 
 import React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, EmptyState, SectionLabel } from "@devdigest/ui";
 import { groupRuns } from "@/lib/multi-agent-runs";
-import { RunHistory } from "../RunHistory/RunHistory";
+import { useReviewGroups } from "@/lib/hooks/reviews";
+import { ColumnsView } from "../ColumnsView";
+import { TabsDetailView } from "../TabsDetailView";
+import { AgentsDisagreeSection } from "../AgentsDisagreeSection";
 import { ConfigureRunScreen } from "../ConfigureRunScreen";
 import { s } from "./styles";
 import type { ReviewRecord, RunSummary } from "@devdigest/shared";
+
+type ResultsView = "columns" | "tabs";
 
 interface MultiAgentReviewTabProps {
   prId: string | null;
   prRuns: RunSummary[] | undefined;
   /** Persisted reviews for this PR (already loaded at the page level via
-   *  `usePrReviews`) — passed straight through to `RunHistory` for its
-   *  per-run findings-by-severity breakdown, no extra fetch. */
+   *  `usePrReviews`) — passed straight through to `ColumnsView`/
+   *  `TabsDetailView` for their per-run findings, no extra fetch. */
   reviews: ReviewRecord[];
+  repoFullName?: string | null;
+  headSha?: string | null;
   onOpenTrace: (runId: string) => void;
   /** Fired once a new group run has actually been created (AC-9) — the
    *  caller re-invalidates `usePrRuns`'s cache so the new group's rows show
@@ -42,10 +49,15 @@ export function MultiAgentReviewTab({
   prId,
   prRuns,
   reviews,
+  repoFullName,
+  headSha,
   onOpenTrace,
   onRunsStarted,
 }: MultiAgentReviewTabProps) {
   const t = useTranslations("prReview");
+  const pathname = usePathname();
+  const search = useSearchParams();
+  const router = useRouter();
   const [configuring, setConfiguring] = React.useState(false);
   // Set right after AC-9's response, so the results view shows THAT group
   // even for the brief window before `usePrRuns` (invalidated via
@@ -63,6 +75,17 @@ export function MultiAgentReviewTab({
   // from the specific `run_id`s the mutation response named.
   const [pendingRunIds, setPendingRunIds] = React.useState<string[] | null>(null);
 
+  // AC-25 — Columns/Tabs is `?view=columns|tabs` on this same tab (default
+  // "columns"), not local-only state, so a reload/back-nav keeps it. Owned
+  // here (not threaded through `page.tsx`) — same "component owns its own
+  // extra query param" precedent as `SkillEditorView`'s `?tab=`.
+  const view: ResultsView = search.get("view") === "tabs" ? "tabs" : "columns";
+  const setView = (v: ResultsView) => {
+    const sp = new URLSearchParams(search.toString());
+    sp.set("view", v);
+    router.replace(`${pathname}?${sp.toString()}`);
+  };
+
   const groups = React.useMemo(() => groupRuns(prRuns ?? []), [prRuns]);
   const pendingSingleRunGroup = React.useMemo(() => {
     if (pendingGroupId || !pendingRunIds || pendingRunIds.length === 0) return null;
@@ -74,6 +97,9 @@ export function MultiAgentReviewTab({
   const activeGroup = pendingGroupId
     ? groups.find((g) => g.multi_agent_run_id === pendingGroupId) ?? null
     : pendingSingleRunGroup ?? groups[0] ?? null;
+
+  const groupRunIds = React.useMemo(() => activeGroup?.runs.map((r) => r.run_id) ?? [], [activeGroup]);
+  const { data: reviewGroups, isLoading: clustersLoading } = useReviewGroups(prId, groupRunIds);
 
   const handleSubmitted = (runGroupId: string | null, runIds: string[]) => {
     setPendingGroupId(runGroupId);
@@ -107,7 +133,37 @@ export function MultiAgentReviewTab({
         />
       ) : (
         <div style={s.results}>
-          <RunHistory runs={activeGroup.runs} reviews={reviews} onOpenTrace={onOpenTrace} />
+          <div style={s.viewSwitch}>
+            <Button kind="tertiary" size="sm" active={view === "columns"} onClick={() => setView("columns")}>
+              {t("multiAgentReview.viewColumns")}
+            </Button>
+            <Button kind="tertiary" size="sm" active={view === "tabs"} onClick={() => setView("tabs")}>
+              {t("multiAgentReview.viewTabs")}
+            </Button>
+          </div>
+
+          {view === "columns" ? (
+            <ColumnsView runs={activeGroup.runs} reviews={reviews} onOpenTrace={onOpenTrace} />
+          ) : (
+            prId && (
+              <TabsDetailView
+                runs={activeGroup.runs}
+                reviews={reviews}
+                prId={prId}
+                repoFullName={repoFullName}
+                headSha={headSha}
+                onOpenTrace={onOpenTrace}
+              />
+            )
+          )}
+
+          <div style={s.disagreeWrap}>
+            <AgentsDisagreeSection
+              runs={activeGroup.runs}
+              clusters={reviewGroups?.clusters ?? []}
+              isLoading={clustersLoading}
+            />
+          </div>
         </div>
       )}
     </section>

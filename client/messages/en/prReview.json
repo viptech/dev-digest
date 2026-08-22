@@ -114,7 +114,12 @@
     "title": "Multi-Agent Review",
     "startNewReview": "Start New Review",
     "emptyTitle": "No multi-agent runs yet",
-    "emptyBody": "Run 2 or more agents together to see their results side by side."
+    "emptyBody": "Run 2 or more agents together to see their results side by side.",
+    "viewColumns": "Columns",
+    "viewTabs": "Tabs",
+    "viewTrace": "View trace",
+    "unknownAgent": "Agent",
+    "noFindings": "No findings"
   },
   "configureRun": {
     "title": "Configure run",
@@ -126,5 +131,14 @@
     "estimatedCost": "Estimated cost",
     "estimatedTime": "Estimated time",
     "runButton": "Run multi-agent review ({count})"
+  },
+  "agentsDisagree": {
+    "title": "Where agents disagree",
+    "showOnlyConflicts": "Show only conflicts",
+    "didNotFlag": "did not flag",
+    "pending": "pending",
+    "failed": "failed",
+    "emptyTitle": "No findings to compare yet",
+    "noConflictsTitle": "No disagreements found"
   }
 }

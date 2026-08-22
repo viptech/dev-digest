@@ -169,6 +169,53 @@ export function useIntent(prId: string | null | undefined, initialIntent?: PrInt
   });
 }
 
+// ---- Findings clusters for a multi-agent group (SPEC-07 T13, backed by
+// T14's GET /pulls/:id/review-groups) ----
+/**
+ * Coordinator fix: an earlier revision of `GET /pulls/:id/review-groups`
+ * (server-side) serialized the raw Drizzle `FindingRow` (camelCase) inside
+ * each cluster instead of running it through `findingRowToDto` like every
+ * other findings shape on the wire — a genuine root `CLAUDE.md`
+ * "wire contracts are snake_case" violation. The server now maps through
+ * `findingRowToDto` before responding (`FindingClusterDto` in
+ * `server/src/modules/reviews/service.ts`), so the nested finding here is
+ * the same snake_case shape every other findings list already uses on this
+ * client — reusing `ReviewRecord`'s own finding type rather than a second,
+ * parallel definition of the same fields.
+ */
+export type ClusteredFinding = {
+  finding: ReviewRecord["findings"][number];
+  agent_id: string | null;
+  agent_name: string | null;
+};
+
+export interface FindingClusterDto {
+  file: string;
+  start_line: number;
+  end_line: number;
+  findings: ClusteredFinding[];
+}
+
+export interface ReviewGroupsResponse {
+  reviews: ReviewRecord[];
+  clusters: FindingClusterDto[];
+}
+
+/** Reviews + findings-clusters scoped to one multi-agent group's `run_ids`
+ *  (SPEC-07 T13/T14) — powers `AgentsDisagreeSection`. Disabled until at
+ *  least one run id is known (e.g. the active group hasn't resolved yet). */
+export function useReviewGroups(prId: string | null | undefined, runIds: string[]) {
+  const key = runIds.slice().sort().join(",");
+  return useQuery({
+    queryKey: ["review-groups", prId, key],
+    queryFn: () =>
+      api.get<ReviewGroupsResponse>(
+        `/pulls/${prId}/review-groups?run_ids=${encodeURIComponent(runIds.join(","))}`,
+      ),
+    enabled: !!prId && runIds.length > 0,
+  });
+}
+
 // ---- Force-reclassify PR intent (bypasses the head_sha cache) ----
 // For the case the automatic recompute-on-new-commit can't cover: the user
 // edited the PR description (or a linked issue/plan) without a new push.

@@ -3,18 +3,34 @@ import type { FindingActionKind, PrIntentRecord, RunEventKind, RunTrace } from '
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow, FindingRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
-import { type ReviewDto, type ReviewDtoFinding, toPrIntentRecord } from './helpers.js';
+import { type ReviewDto, type ReviewDtoFinding, findingRowToDto, toPrIntentRecord } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { IntentClassificationService } from './intent-service.js';
-import { clusterFindings, type FindingCluster } from './findings-cluster.js';
+import { clusterFindings } from './findings-cluster.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
 export { findingRowToDto, reviewToDto } from './helpers.js';
 export type { ReviewDto, ReviewDtoFinding } from './helpers.js';
+
+/**
+ * Wire shape for `GET /pulls/:id/review-groups` (T14) — snake_case per root
+ * `CLAUDE.md`'s wire-contract convention. `findings-cluster.ts`'s internal
+ * `FindingCluster`/`ClusteredFinding` types stay camelCase-Drizzle-row-typed
+ * (that module is a pure, DB-agnostic function; converting at its boundary
+ * would leak a wire concern into it) — the conversion happens once, here, at
+ * the actual API boundary, same place every other findings shape
+ * (`findingRowToDto`) already converts.
+ */
+export interface FindingClusterDto {
+  file: string;
+  start_line: number;
+  end_line: number;
+  findings: { finding: ReviewDtoFinding; agent_id: string | null; agent_name: string | null }[];
+}
 
 /**
  * Review service (the core). Orchestrates:
@@ -262,7 +278,7 @@ export class ReviewService {
     workspaceId: string,
     prId: string,
     runIds: string[],
-  ): Promise<{ reviews: ReviewDto[]; clusters: FindingCluster[] }> {
+  ): Promise<{ reviews: ReviewDto[]; clusters: FindingClusterDto[] }> {
     const pull = await this.repo.getPull(workspaceId, prId);
     if (!pull) throw new NotFoundError('Pull request not found');
 
@@ -290,7 +306,18 @@ export class ReviewService {
       }
     }
 
-    return { reviews, clusters: clusterFindings(items) };
+    const clusters: FindingClusterDto[] = clusterFindings(items).map((c) => ({
+      file: c.file,
+      start_line: c.start_line,
+      end_line: c.end_line,
+      findings: c.findings.map((f) => ({
+        finding: findingRowToDto(f.finding),
+        agent_id: f.agentId,
+        agent_name: f.agentName,
+      })),
+    }));
+
+    return { reviews, clusters };
   }
 
   /**

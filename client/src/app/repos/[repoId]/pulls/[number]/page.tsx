@@ -213,6 +213,8 @@ export default function PRDetailPage() {
             prId={prId}
             prRuns={prRuns}
             reviews={runs}
+            repoFullName={repoFullName}
+            headSha={pr.head_sha}
             onOpenTrace={(id) => setParam("trace", id)}
             onRunsStarted={() => {
               invalidateActiveRuns();

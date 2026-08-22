@@ -211,3 +211,24 @@ grep пропустить сусідні пакети, що теж імпорт�
 Доказ: server/src/vendor/shared/contracts/trace.ts (`multi_agent_run_id:
 z.string().nullable()`); mcp-server/tsconfig.json:14 (`"@devdigest/shared":
 ["../server/src/vendor/shared/index.ts"]`)
+
+## 2026-08-22 · gotcha
+**Відсутність `Bash` у сесії `implementer` — підтверджено ВЧЕТВЕРТЕ, тепер і для
+Implementer 4 (Client: results views) того самого плану `multi-agent-review.md`,
+що вже дав підтвердження №3 для Implementer 1 того ж плану того ж дня**
+Записи від 2026-08-19 (×2, evals/SPEC-05) і від 2026-08-22 вище (Implementer 1,
+цей самий план) уже показали, що це системна поведінка `implementer`-сесій, не
+особливість однієї теми плану. Ця сесія (Implementer 4 — ColumnsView/
+TabsDetailView/AgentsDisagreeSection/i18n, кроки 15-20 того самого плану)
+підтверджує це ЩЕ РАЗ — і додає новий факт: підтвердження №3 і №4 стались в
+ОДНОМУ Й ТОМУ Ж плані, у двох різних, послідовно запущених implementer-групах
+(Implementer 1 і Implementer 4), тобто це не "одна нетипова сесія" — кожна
+implementer-група в multi-agent workflow цього плану отримала сесію без Bash.
+Наслідок для координатора: `pnpm typecheck`/`pnpm test` в `client/` для T11-T16
+(нові `_components/ColumnsView`, `_components/TabsDetailView`,
+`_components/AgentsDisagreeSection`, промоція `outcomeOf` у `client/src/lib/
+run-outcome.ts`, новий хук `useReviewGroups` у `client/src/lib/hooks/reviews.ts`)
+НЕ були виконані цією сесією — лише Read/Edit/Write-частина готова, координатор
+мусить сам прогнати їх.
+Доказ: system prompt цієї сесії (`<functions>`-блок без `Bash`); попередні
+підтвердження — root INSIGHTS.md, записи 2026-08-19 (×2) і 2026-08-22 вище

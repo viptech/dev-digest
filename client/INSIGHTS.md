@@ -671,3 +671,34 @@ result (they're single-agent runs, out of scope for this tab)" — реаліз�
 continue;`); `.claude/plans/multi-agent-review.md` Constraints, рядок
 "dropping rows with a null multi_agent_run_id..."; `docs/specs/SPEC-07-
 multi-agent-review.md` розділ "Edge cases", перший пункт
+
+## 2026-08-22 · gotcha
+**`GET /pulls/:id/review-groups` (T14, вже закомічено Implementer 2) не має
+`schema.response` і повертає кластери з "наполовину" snake_case — вкладений
+`finding` серіалізується як сирий Drizzle `FindingRow` (camelCase), а не
+через `findingRowToDto`, як УСІ інші findings-шейпи на дроті**
+`server/src/modules/reviews/routes.ts`'s роут для `/pulls/:id/review-groups`
+реєструє лише `querystring: ReviewGroupsQuery` у `schema` — жодного
+`response`, тож `fastify-type-provider-zod` нічого не серіалізує/не звужує.
+`service.reviewGroupsForRunIds` повертає `clusters: FindingCluster[]`
+(`server/src/modules/reviews/findings-cluster.ts:21-26`), де `file`/
+`start_line`/`end_line` — snake_case (визначені так явно в інтерфейсі), але
+кожен `ClusteredFinding.finding` — це сирий `FindingRow` (`typeof
+t.findings.$inferSelect`, camelCase: `startLine`, `endLine`, `reviewId`,
+`trifectaComponents`, ...) і `agentId`/`agentName` — теж camelCase, не
+`agent_id`/`agent_name`. Це порушує "wire contracts are snake_case" (root
+`CLAUDE.md`), і на відміну від dual-copy-контрактної пастки (запис
+2026-07-31) тут проблема не в розсинхроні двох копій — контракту для цієї
+відповіді просто НЕ існує в жодній копії `vendor/shared`. Клієнтський хук
+(`useReviewGroups`, `client/src/lib/hooks/reviews.ts`) типізований під
+СПРАВЖНЮ форму відповіді (camelCase у `finding`), а не під гіпотетичну
+виправлену — задокументовано тут явно для `architecture-reviewer`, не
+виправлено в рамках Implementer 4 (T14 — це вже закомічена робота іншої
+групи, поза обсягом цього завдання).
+Доказ: server/src/modules/reviews/routes.ts (роут `/pulls/:id/review-groups`,
+`schema: { params: IdParams, querystring: ReviewGroupsQuery }` — без
+`response`); server/src/modules/reviews/findings-cluster.ts:15-26
+(`ClusteredFinding`/`FindingCluster`); server/src/db/schema/reviews.ts:28-46
+(`findings` pgTable, camelCase JS-ключі: `startLine`, `endLine`, `reviewId`);
+client/src/lib/hooks/reviews.ts (`ClusteredFindingRow`/`FindingClusterDto`
+типізовані під фактичну camelCase-форму)
