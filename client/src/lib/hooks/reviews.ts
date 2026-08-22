@@ -50,11 +50,24 @@ export function usePrRuns(prId: string | null | undefined) {
 }
 
 // ---- Persisted reviews + findings for a PR ----
-export function usePrReviews(prId: string | null | undefined) {
+/**
+ * Coordinator fix (reported live: findings only showed up after a manual
+ * page refresh once agents had finished running): unlike `usePrRuns` above,
+ * this never had a `refetchInterval` — the run STATUS badge updated live
+ * every 4s while a run was `running`, but the actual findings content
+ * (persisted only once `runOneAgent` completes) stayed frozen at whatever
+ * was fetched on mount. `refetchWhileRunning` mirrors the exact condition
+ * `usePrRuns` itself polls on — the caller (which already has `usePrRuns`'s
+ * data) passes it through, keeping both queries on the same 4s cadence
+ * instead of duplicating the "any run still running" check inside two
+ * unrelated hooks.
+ */
+export function usePrReviews(prId: string | null | undefined, refetchWhileRunning = false) {
   return useQuery({
     queryKey: ["reviews", prId],
     queryFn: () => api.get<ReviewRecord[]>(`/pulls/${prId}/reviews`),
     enabled: !!prId,
+    refetchInterval: refetchWhileRunning ? 4000 : false,
   });
 }
 
@@ -204,7 +217,10 @@ export interface ReviewGroupsResponse {
 /** Reviews + findings-clusters scoped to one multi-agent group's `run_ids`
  *  (SPEC-07 T13/T14) — powers `AgentsDisagreeSection`. Disabled until at
  *  least one run id is known (e.g. the active group hasn't resolved yet). */
-export function useReviewGroups(prId: string | null | undefined, runIds: string[]) {
+// Same live-content gap as `usePrReviews` above (coordinator fix) —
+// "Where agents disagree" clusters are derived from findings, so they froze
+// stale until a manual refresh too without this.
+export function useReviewGroups(prId: string | null | undefined, runIds: string[], refetchWhileRunning = false) {
   const key = runIds.slice().sort().join(",");
   return useQuery({
     queryKey: ["review-groups", prId, key],
@@ -213,6 +229,7 @@ export function useReviewGroups(prId: string | null | undefined, runIds: string[
         `/pulls/${prId}/review-groups?run_ids=${encodeURIComponent(runIds.join(","))}`,
       ),
     enabled: !!prId && runIds.length > 0,
+    refetchInterval: refetchWhileRunning ? 4000 : false,
   });
 }
 

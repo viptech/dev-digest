@@ -33,13 +33,36 @@ export function FindingsTooltip({
   children: React.ReactNode;
 }) {
   const anchorRef = React.useRef<HTMLSpanElement>(null);
-  const [pos, setPos] = React.useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = React.useState<{ top?: number; bottom?: number; left: number } | null>(null);
 
   if (findings.length === 0) return <>{children}</>;
 
+  // Coordinator fix (reported live: the card grows tall with 4+ findings and
+  // was overflowing past the bottom of the viewport, painting over whatever
+  // content happened to sit below it on the page). `CARD_MAX_WIDTH` mirrors
+  // `s.card`'s own `maxWidth: 360` — the actual rendered width is unknown
+  // before paint, but never exceeds this, so it's a safe upper bound to
+  // clamp against without a second measure-then-reposition render pass.
   const show = () => {
     const rect = anchorRef.current?.getBoundingClientRect();
-    if (rect) setPos({ top: rect.bottom + 6, left: rect.left });
+    if (!rect) return;
+    const CARD_MAX_WIDTH = 360;
+    const MARGIN = 8;
+    const left = Math.min(Math.max(MARGIN, rect.left), window.innerWidth - CARD_MAX_WIDTH - MARGIN);
+    // Below the anchor is the default; flip to growing UPWARD from the
+    // anchor's top (anchored via `bottom`, not `top`, so the browser sizes
+    // it without needing to know the content's height up front) whenever
+    // there's markedly less room below than above — covers the common case
+    // (an anchor in a PR's bottom-most row/section) without needing to
+    // measure the card's actual height first.
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const flipUp = spaceBelow < 200 && spaceAbove > spaceBelow;
+    setPos(
+      flipUp
+        ? { bottom: window.innerHeight - rect.top + 6, left }
+        : { top: rect.bottom + 6, left },
+    );
   };
   const hide = () => setPos(null);
 
@@ -52,7 +75,20 @@ export function FindingsTooltip({
           // hidden` (e.g. the PR list's rounded table card) would otherwise
           // clip an absolutely-positioned popover before it ever reaches the
           // viewport edge.
-          <div role="tooltip" style={{ ...s.card, top: pos.top, left: pos.left }}>
+          <div
+            role="tooltip"
+            style={{ ...s.card, top: pos.top, bottom: pos.bottom, left: pos.left }}
+            // The card is portaled to <body>, outside the anchor span's own
+            // DOM subtree — without its own enter/leave handlers, moving the
+            // cursor from the small badge down into the (now-scrollable,
+            // per the viewport-clamp fix above) card crosses the anchor's
+            // boundary and fires ITS onMouseLeave mid-transit, closing the
+            // tooltip before a reader can ever reach it to scroll. Hovering
+            // the card itself now keeps it open; leaving the card (in any
+            // direction) closes it, same as leaving the anchor does.
+            onMouseEnter={show}
+            onMouseLeave={hide}
+          >
             <div style={s.header}>
               {findings.length} finding{findings.length === 1 ? "" : "s"}
             </div>

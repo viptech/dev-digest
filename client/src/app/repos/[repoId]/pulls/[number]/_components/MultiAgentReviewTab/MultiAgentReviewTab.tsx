@@ -99,7 +99,12 @@ export function MultiAgentReviewTab({
     : pendingSingleRunGroup ?? groups[0] ?? null;
 
   const groupRunIds = React.useMemo(() => activeGroup?.runs.map((r) => r.run_id) ?? [], [activeGroup]);
-  const { data: reviewGroups, isLoading: clustersLoading } = useReviewGroups(prId, groupRunIds);
+  // Coordinator fix: same live-content gap as `usePrReviews` — clusters
+  // (findings-derived) never refetched on their own while a sibling agent
+  // in the group was still `running`, so "Where agents disagree" also froze
+  // stale until a manual page refresh.
+  const groupHasRunningRun = (activeGroup?.runs ?? []).some((r) => r.status === "running");
+  const { data: reviewGroups, isLoading: clustersLoading } = useReviewGroups(prId, groupRunIds, groupHasRunningRun);
 
   const handleSubmitted = (runGroupId: string | null, runIds: string[]) => {
     setPendingGroupId(runGroupId);

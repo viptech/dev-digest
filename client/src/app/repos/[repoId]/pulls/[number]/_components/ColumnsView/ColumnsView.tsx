@@ -10,8 +10,10 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Button, CircularScore, Icon, SEV, type Severity } from "@devdigest/ui";
+import { Badge, Button, CircularScore, Icon, SEV } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/run-cost-badge";
+import { FindingsTooltip, SEVERITY_DISPLAY_ORDER } from "@/components/findings-tooltip";
+import { severityCounts } from "@/lib/findings";
 import { outcomeOf } from "@/lib/run-outcome";
 import { s } from "./styles";
 import type { ReviewRecord, RunSummary } from "@devdigest/shared";
@@ -78,21 +80,35 @@ export function ColumnsView({ runs, reviews, onOpenTrace }: ColumnsViewProps) {
                 {findings.length === 0 ? (
                   <span style={s.noFindings}>{t("multiAgentReview.noFindings")}</span>
                 ) : (
-                  findings.map((f) => {
-                    const sev = SEV[f.severity as Severity];
-                    const SevIcon = Icon[sev.icon];
+                  // Coordinator fix (per user feedback on a screenshot): a card
+                  // per finding (title + file:line) made the column tall and
+                  // cluttered with several findings, and the file:line text
+                  // had its own overflow bug (see the immediately-preceding
+                  // fix commit). Replaced with the same compact per-severity
+                  // count badges `RunHistory` already uses (`severityCounts`,
+                  // `SEVERITY_DISPLAY_ORDER`, `FindingsTooltip`) — same data,
+                  // nothing lost: hovering a badge still shows the individual
+                  // findings via the shared tooltip, same as the "Agent runs"
+                  // tab already does.
+                  (() => {
+                    const counts = severityCounts(findings);
                     return (
-                      <div key={f.id} style={s.findingRow}>
-                        <div style={s.findingTitleRow}>
-                          <SevIcon size={12} style={{ color: sev.c, flexShrink: 0, marginTop: 1 }} />
-                          <span style={s.findingTitle}>{f.title}</span>
-                        </div>
-                        <span className="mono" style={s.findingLoc} title={`${f.file}:${f.start_line}`}>
-                          {f.file}:{f.start_line}
-                        </span>
+                      <div style={s.severityBadges}>
+                        {SEVERITY_DISPLAY_ORDER.filter((sev) => (counts[sev] ?? 0) > 0).map((sev) => {
+                          const SevIcon = Icon[SEV[sev].icon];
+                          const sevFindings = findings.filter((f) => f.severity === sev);
+                          return (
+                            <FindingsTooltip key={sev} findings={sevFindings}>
+                              <span data-testid={`severity-badge-${sev}`} style={{ ...s.severityBadge, color: SEV[sev].c }}>
+                                <SevIcon size={12} />
+                                {counts[sev]}
+                              </span>
+                            </FindingsTooltip>
+                          );
+                        })}
                       </div>
                     );
-                  })
+                  })()
                 )}
               </div>
             )}

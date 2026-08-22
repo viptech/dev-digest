@@ -54,42 +54,25 @@ export const s = {
     flexDirection: "column",
     gap: 6,
   } satisfies CSSProperties,
-  findingRow: {
+  // Compact per-severity count badges (replaces an earlier per-finding list
+  // — coordinator fix per user feedback: several findings made the column
+  // tall/cluttered, and the file:line text had its own overflow bug). Same
+  // shape as `RunHistory`'s own severity badges, colocated as its own style
+  // here rather than shared, since the two components' surrounding layout
+  // differs enough that sharing wouldn't simplify either.
+  severityBadges: {
     display: "flex",
-    flexDirection: "column",
-    gap: 2,
-    fontSize: 12.5,
-    color: "var(--text-secondary)",
-    minWidth: 0,
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
   } satisfies CSSProperties,
-  findingTitleRow: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 6,
-    minWidth: 0,
-  } satisfies CSSProperties,
-  findingTitle: {
-    flex: 1,
-    minWidth: 0,
-    wordBreak: "break-word",
-  } satisfies CSSProperties,
-  findingLoc: {
-    fontSize: 11,
-    color: "var(--text-muted)",
-    // On its own row below the title (not competing with it for the same
-    // row's width) — coordinator fix: the previous single-row layout gave
-    // this span `flexShrink: 0` with no width cap, so a long file path
-    // claimed its full unwrapped monospace width, squeezed `findingTitle`
-    // (flex:1, minWidth:0) down to near-zero — wrapping the title one word
-    // per line — AND overflowed past the column's own right edge into the
-    // next column, since nothing clipped it. Truncating in its own
-    // full-width row fixes both: the title always gets the column's full
-    // width, and a long path/line ellipsizes instead of spilling out.
-    marginLeft: 18, // aligns under the title, past the severity icon
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    maxWidth: "100%",
+  severityBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    fontSize: 12,
+    borderBottom: "1px dotted currentColor",
+    paddingBottom: 2,
   } satisfies CSSProperties,
   noFindings: {
     fontSize: 12.5,

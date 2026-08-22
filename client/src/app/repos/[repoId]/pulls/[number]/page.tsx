@@ -39,7 +39,6 @@ export default function PRDetailPage() {
   const { data: pr, isLoading: detailLoading, isError, error, refetch } = usePullDetail(prId);
 
   const isLoading = pullsLoading || (prId != null && detailLoading);
-  const { data: reviews, refetch: refetchReviews } = usePrReviews(prId);
 
   // Live run tracking is SERVER-SOURCED (agent_runs status='running'): survives
   // navigation AND reload, and self-clears via polling when runs finish.
@@ -49,6 +48,12 @@ export default function PRDetailPage() {
   const deleteRun = useDeleteRun(prId);
   const liveRunIds = (activeRuns ?? []).map((r) => r.run_id);
   const reviewRunning = liveRunIds.length > 0;
+  // Coordinator fix: `usePrReviews` never polled on its own (see its own
+  // doc-comment) — findings content froze at whatever was fetched on mount
+  // while `reviewRunning`'s run-status badges kept updating live. Reusing
+  // the same `reviewRunning` signal this file already computes from
+  // server-sourced active runs keeps both on the same cadence.
+  const { data: reviews, refetch: refetchReviews } = usePrReviews(prId, reviewRunning);
   const cancel = useCancelRun();
   const invalidateActiveRuns = () => {
     if (prId) qc.invalidateQueries({ queryKey: ["pr-active-runs", prId] });

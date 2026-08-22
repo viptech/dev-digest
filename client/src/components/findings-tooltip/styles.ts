@@ -7,6 +7,13 @@ export const s = {
     zIndex: 50,
     minWidth: 260,
     maxWidth: 360,
+    // Safety net alongside FindingsTooltip.tsx's `show()` viewport-clamping:
+    // even with the up/down flip, an anchor with limited room on BOTH sides
+    // (e.g. mid-viewport with many sibling cards) could still make a 4+
+    // finding card taller than available space — clip and scroll internally
+    // rather than ever painting past the viewport edge.
+    maxHeight: "80vh",
+    overflowY: "auto",
     background: "var(--bg-elevated)",
     border: "1px solid var(--border)",
     borderRadius: 8,
