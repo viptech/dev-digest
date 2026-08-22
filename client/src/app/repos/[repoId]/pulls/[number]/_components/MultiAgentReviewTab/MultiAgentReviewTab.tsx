@@ -106,6 +106,11 @@ export function MultiAgentReviewTab({
     setPendingRunIds(runGroupId ? null : runIds);
     setConfiguring(false);
     onRunsStarted?.();
+    // AC-9: a fresh submit always shows the Columns view of the new group —
+    // if the viewer had switched to Tabs for a PREVIOUS group and then
+    // starts a new one, they land back on Columns, not wherever the old
+    // `?view=` happened to be left.
+    if (view !== "columns") setView("columns");
   };
 
   if (configuring && prId) {

@@ -65,10 +65,18 @@ export function AgentsDisagreeSection({ runs, clusters, isLoading }: AgentsDisag
                 <div key={row.runId} style={s.row}>
                   <span style={s.agentName}>{row.agentName ?? t("multiAgentReview.unknownAgent")}</span>
                   {row.kind === "flagged" ? (
-                    <>
-                      <SeverityBadge severity={row.severity as Severity} compact />
-                      <span style={s.title}>{row.title}</span>
-                    </>
+                    // AC-20: every one of this agent's findings in the
+                    // cluster, not just the first — usually one, occasionally
+                    // more when two overlapping findings from the same
+                    // review land in the same locus.
+                    <div style={s.matchList}>
+                      {row.matches.map((m, i) => (
+                        <span key={i} style={s.matchItem}>
+                          <SeverityBadge severity={m.severity as Severity} compact />
+                          <span style={s.title}>{m.title}</span>
+                        </span>
+                      ))}
+                    </div>
                   ) : (
                     <span style={s.statusText}>
                       {row.kind === "not_flagged"

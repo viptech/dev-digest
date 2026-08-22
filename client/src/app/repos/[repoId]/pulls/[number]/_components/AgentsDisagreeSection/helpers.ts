@@ -5,48 +5,47 @@ import type { RunSummary } from "@devdigest/shared";
 
 export type ClusterRowKind = "flagged" | "not_flagged" | "pending" | "failed";
 
+export interface ClusterRowMatch {
+  severity: string;
+  title: string;
+}
+
 export interface ClusterRow {
   runId: string;
   agentId: string | null;
   agentName: string | null;
   kind: ClusterRowKind;
-  severity?: string;
-  title?: string;
+  /** Every one of this agent's findings that landed in this cluster
+   *  (AC-20: "показувати ВСІ знахідки кластера... не втрачаючи оригіналів" —
+   *  a `done` agent can have more than one overlapping finding in the same
+   *  small code locus; all of them are kept, not just the first). Empty for
+   *  non-"flagged" kinds. */
+  matches: ClusterRowMatch[];
 }
 
 /**
  * One row per agent (run) in the group, for one cluster (AC-22/AC-23):
  * - `running` → "pending" (not "did not flag" — the agent hasn't finished).
  * - `failed`/`cancelled` → "failed" (same reasoning).
- * - `done` with a matching finding (by `agentId`) in the cluster → "flagged",
- *   carrying that finding's severity + title.
+ * - `done` with matching finding(s) (by `agentId`) in the cluster →
+ *   "flagged", carrying EVERY matching finding's severity + title (AC-20).
  * - `done` with none → "not_flagged" ("did not flag", literally, per AC-22).
- *
- * A `done` agent could in principle have more than one finding of its own
- * inside the same cluster (two overlapping findings from the same review);
- * the first is used for display/conflict purposes, since a cluster is a
- * small code locus and this is a rare, non-adversarial edge case.
  */
 export function rowsForCluster(cluster: FindingClusterDto, runs: RunSummary[]): ClusterRow[] {
   return runs.map((run) => {
     if (run.status === "running") {
-      return { runId: run.run_id, agentId: run.agent_id, agentName: run.agent_name, kind: "pending" };
+      return { runId: run.run_id, agentId: run.agent_id, agentName: run.agent_name, kind: "pending", matches: [] };
     }
     if (run.status === "failed" || run.status === "cancelled") {
-      return { runId: run.run_id, agentId: run.agent_id, agentName: run.agent_name, kind: "failed" };
+      return { runId: run.run_id, agentId: run.agent_id, agentName: run.agent_name, kind: "failed", matches: [] };
     }
-    const match = cluster.findings.find((cf) => cf.agent_id === run.agent_id);
-    if (!match) {
-      return { runId: run.run_id, agentId: run.agent_id, agentName: run.agent_name, kind: "not_flagged" };
+    const matches = cluster.findings
+      .filter((cf) => cf.agent_id === run.agent_id)
+      .map((cf) => ({ severity: cf.finding.severity, title: cf.finding.title }));
+    if (matches.length === 0) {
+      return { runId: run.run_id, agentId: run.agent_id, agentName: run.agent_name, kind: "not_flagged", matches: [] };
     }
-    return {
-      runId: run.run_id,
-      agentId: run.agent_id,
-      agentName: run.agent_name,
-      kind: "flagged",
-      severity: match.finding.severity,
-      title: match.finding.title,
-    };
+    return { runId: run.run_id, agentId: run.agent_id, agentName: run.agent_name, kind: "flagged", matches };
   });
 }
 
@@ -59,6 +58,15 @@ export function rowsForCluster(cluster: FindingClusterDto, runs: RunSummary[]): 
  */
 export function isUnanimous(rows: ClusterRow[]): boolean {
   const settled = rows.filter((r) => r.kind === "flagged" || r.kind === "not_flagged");
-  const signature = new Set(settled.map((r) => (r.kind === "flagged" ? `sev:${r.severity}` : "not_flagged")));
+  const signature = new Set(
+    settled.map((r) =>
+      r.kind === "flagged"
+        ? `sev:${r.matches
+            .map((m) => m.severity)
+            .sort()
+            .join(",")}`
+        : "not_flagged",
+    ),
+  );
   return signature.size <= 1;
 }

@@ -55,4 +55,17 @@ export const s = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   } satisfies CSSProperties,
+  matchList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 3,
+    minWidth: 0,
+    flex: 1,
+  } satisfies CSSProperties,
+  matchItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  } satisfies CSSProperties,
 } as const;
