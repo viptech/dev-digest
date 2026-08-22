@@ -594,3 +594,23 @@ mechanics for historical context, but its "if you ever need order-
 independence, switch to union-find" framing is resolved, not open.
 Доказ: server/src/modules/reviews/findings-cluster.ts:30-89 (current);
 git log --oneline -- server/src/modules/reviews/findings-cluster.ts
+
+## 2026-08-22 · gotcha
+**`test/reviews-project-context.it.test.ts`'s "no attached docs" case flaked
+once under load (full 19-file `.it.test.ts` suite) — reproduced 3 more times
+(2× full suite, 1× isolated) to confirm it's NOT a T5 concurrency regression**
+Full-suite run under this session's SPEC-07 diff failed once with
+`trace.specs_read` `undefined` instead of `[]`; the SAME test passed in
+isolation immediately after, and passed again on a second full-suite run.
+`homework-08` (pre-SPEC-07) ran the full suite twice clean. Traced
+`run-executor.ts`'s trace-building code (`specs_read: projectContext?.specsRead
+?? []`) line-by-line — unchanged by T5's sequential→concurrent rewrite (the
+diff is a pure `for`-loop→`Promise.allSettled(map(...))` mechanical
+transform, no shared mutable state introduced). Conclusion: this is
+environment/load-timing flakiness (same class as the already-documented
+`server/test/helpers/pg.ts` testcontainers-timing gotcha above), not a real
+bug in the T5 rewrite — the trace-building logic itself was never touched.
+If this test fails again in CI, don't assume T5 is the cause without
+re-checking in isolation first.
+Доказ: server/src/modules/reviews/run-executor.ts:374-409 (unchanged trace
+object construction); 4 reproduction runs this session (1 fail / 3 pass)
