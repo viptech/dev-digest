@@ -56,19 +56,40 @@ export const s = {
   } satisfies CSSProperties,
   findingRow: {
     display: "flex",
-    alignItems: "flex-start",
-    gap: 6,
+    flexDirection: "column",
+    gap: 2,
     fontSize: 12.5,
     color: "var(--text-secondary)",
+    minWidth: 0,
+  } satisfies CSSProperties,
+  findingTitleRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 6,
+    minWidth: 0,
   } satisfies CSSProperties,
   findingTitle: {
     flex: 1,
     minWidth: 0,
+    wordBreak: "break-word",
   } satisfies CSSProperties,
   findingLoc: {
     fontSize: 11,
     color: "var(--text-muted)",
-    flexShrink: 0,
+    // On its own row below the title (not competing with it for the same
+    // row's width) — coordinator fix: the previous single-row layout gave
+    // this span `flexShrink: 0` with no width cap, so a long file path
+    // claimed its full unwrapped monospace width, squeezed `findingTitle`
+    // (flex:1, minWidth:0) down to near-zero — wrapping the title one word
+    // per line — AND overflowed past the column's own right edge into the
+    // next column, since nothing clipped it. Truncating in its own
+    // full-width row fixes both: the title always gets the column's full
+    // width, and a long path/line ellipsizes instead of spilling out.
+    marginLeft: 18, // aligns under the title, past the severity icon
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    maxWidth: "100%",
   } satisfies CSSProperties,
   noFindings: {
     fontSize: 12.5,

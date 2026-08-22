@@ -83,9 +83,11 @@ export function ColumnsView({ runs, reviews, onOpenTrace }: ColumnsViewProps) {
                     const SevIcon = Icon[sev.icon];
                     return (
                       <div key={f.id} style={s.findingRow}>
-                        <SevIcon size={12} style={{ color: sev.c, flexShrink: 0, marginTop: 1 }} />
-                        <span style={s.findingTitle}>{f.title}</span>
-                        <span className="mono" style={s.findingLoc}>
+                        <div style={s.findingTitleRow}>
+                          <SevIcon size={12} style={{ color: sev.c, flexShrink: 0, marginTop: 1 }} />
+                          <span style={s.findingTitle}>{f.title}</span>
+                        </div>
+                        <span className="mono" style={s.findingLoc} title={`${f.file}:${f.start_line}`}>
                           {f.file}:{f.start_line}
                         </span>
                       </div>
