@@ -642,3 +642,32 @@ client/src/app/skills/[id]/_components/SkillEditorView/helpers.ts:1-11
 будь-якій зміні контракту, а не лише ту, що в пакеті, який редагуєш.
 Доказ: client/src/vendor/shared/contracts/knowledge.ts:249-274 (блок додано
 цією сесією, портований 1:1 із серверної копії)
+
+## 2026-08-22 · decision
+**SPEC-07's edge case ("1 агент → Multi-Agent tab все одно показує один
+результат") і Development Plan `multi-agent-review.md`'s T8-хелпер
+("dropping rows with a null multi_agent_run_id... out of scope for this
+tab") — прямо суперечать одне одному; реалізовано за планом (biding
+document), не за спекою**
+Спека (`docs/specs/SPEC-07-multi-agent-review.md`, розділ "Edge cases")
+каже: воркспейс з <2 enabled агентами все одно дозволяє запустити 1 агента
+з Configure run screen, і "'Multi-Agent Review' вкладка показує один
+результат" — тобто одноagентний прогін (`multi_agent_run_id: null`, AC-15)
+має бути ВИДИМИЙ на цій вкладці. Але план явно каже про T8's `groupRuns`-
+хелпер: "dropping rows with a null multi_agent_run_id from the 'grouped'
+result (they're single-agent runs, out of scope for this tab)" — реалізація
+за цим текстом означає, що після сабміту Configure run screen з РІВНО 1
+позначеним агентом (`res.run_group_id === null`,
+`ConfigureRunScreen.tsx:64`), `MultiAgentReviewTab` не покаже щойно
+створений run взагалі (він відсутній у жодній групі `groupRuns()`
+повертає) — таб просто лишиться на попередній найновішій групі або на
+порожньому стані, без жодного видимого фідбеку користувачу, що прогін
+стартував. Реалізовано буквально за планом (мій обсяг — T8/T9/T10,
+план — binding document), не за спекою; лишаю це тут явно для
+`architecture-reviewer`/`plan-verifier`, які й вирішать, чи це прийнятний
+компромісний обсяг, чи потрібен фікс (напр. показувати одноagентний run
+окремо, поза `groupRuns`, коли `run_group_id === null`).
+Доказ: client/src/lib/multi-agent-runs.ts:26 (`if (!row.multi_agent_run_id)
+continue;`); `.claude/plans/multi-agent-review.md` Constraints, рядок
+"dropping rows with a null multi_agent_run_id..."; `docs/specs/SPEC-07-
+multi-agent-review.md` розділ "Edge cases", перший пункт

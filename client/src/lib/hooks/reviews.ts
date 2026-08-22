@@ -128,20 +128,26 @@ export function useCreatePrComment(prId: string | null | undefined) {
   });
 }
 
-// ---- Run a review (all enabled agents or a specific agent) ----
+// ---- Run a review (all enabled agents, a specific agent, or an explicit
+// subset for a multi-agent group run — SPEC-07) ----
 export interface RunReviewInput {
   prId: string;
   agentId?: string;
   all?: boolean;
+  /** Explicit subset of agent ids to run together as one multi-agent group
+   *  (SPEC-07 AC-9). Mutually exclusive with `agentId`/`all` at the API
+   *  boundary — the server 400s if none of the three is present. */
+  agentIds?: string[];
 }
 
 export function useRunReview() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ prId, agentId, all }: RunReviewInput) =>
+    mutationFn: ({ prId, agentId, all, agentIds }: RunReviewInput) =>
       api.post<ReviewRunResponse>(`/pulls/${prId}/review`, {
         ...(agentId ? { agentId } : {}),
         ...(all ? { all } : {}),
+        ...(agentIds && agentIds.length > 0 ? { agentIds } : {}),
       }),
     onSuccess: (_d, { prId }) => {
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
